@@ -2,6 +2,10 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- The published exe is PTMonitor.exe, not PTMonitor.App.exe. Scoped here
+         rather than passed as -p:AssemblyName on the command line, which would
+         apply to every project in the graph and make two of them "PTMonitor". -->
+    <AssemblyName>PTMonitor</AssemblyName>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
