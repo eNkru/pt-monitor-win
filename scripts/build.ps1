@@ -40,6 +40,7 @@ dotnet publish src/PTMonitor.App -c Release -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:AssemblyName=PTMonitor `
     -p:Version=$Version `
     -o publish/win-x64
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
