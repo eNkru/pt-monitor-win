@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="using:PTMonitor.App.Views"
+        x:Class="PTMonitor.App.Views.PreferencesWindow"
+        Title="PT Monitor Preferences"
+        Width="560" Height="500"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen">
+
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="12">
+            <TextBlock Text="Servers" FontWeight="SemiBold" x:Name="ServersLabel" />
+
+            <TextBlock x:Name="EmptyHelp" Opacity="0.6" TextWrapping="Wrap"
+                       Text="No servers configured. Add a qBittorrent or Transmission server to start monitoring." />
+
+            <ListBox x:Name="ServerList" MinHeight="140" MaxHeight="220">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="v:ServerRowItem">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,4" ColumnSpacing="10">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" CommandParameter="{Binding}"
+                                      Click="OnToggleServer" ToolTip.Tip="Enable or disable this server" />
+                            <StackPanel Grid.Column="1" Spacing="1">
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="Medium" />
+                                <TextBlock Text="{Binding Endpoint}" FontSize="11" Opacity="0.6" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="Edit" Click="OnEditServer"
+                                    CommandParameter="{Binding}" />
+                            <Button Grid.Column="3" Content="Delete" Classes="danger" Click="OnDeleteServer"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Button Content="Add Server…" HorizontalAlignment="Left" Click="OnAddServer"
+                    x:Name="AddServerButton" />
+
+            <Separator />
+
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="PollLabel" />
+                <NumericUpDown x:Name="PollInterval" Minimum="1" Maximum="60" Increment="1"
+                               ValueChanged="OnPollIntervalChanged" Width="140" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <CheckBox x:Name="ShowSpeedsToggle" Click="OnShowSpeedsToggled" />
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="ListModeLabel" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <RadioButton x:Name="ModeAll" Classes="prefSegment" Click="OnListModeClicked" />
+                    <RadioButton x:Name="ModeDown" Classes="prefSegment" Click="OnListModeClicked" />
+                    <RadioButton x:Name="ModeUp" Classes="prefSegment" Click="OnListModeClicked" />
+                    <RadioButton x:Name="ModeActive" Classes="prefSegment" Click="OnListModeClicked" />
+                </StackPanel>
+            </StackPanel>
+
+            <Separator />
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="LanguageLabel" />
+                <ComboBox x:Name="LanguagePicker" Width="220" HorizontalAlignment="Left"
+                          SelectionChanged="OnLanguageChanged" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

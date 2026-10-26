@@ -1,0 +1,103 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="PTMonitor.App.App"
+             RequestedThemeVariant="Default">
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- Dropdown panel card: dark surface in both themes, rounded, with a
+             hairline border and a soft shadow (the CodexBar look). -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#F0202023" />
+            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BoxShadow" Value="0 12 40 12 #66000000" />
+        </Style>
+
+        <Style Selector="TextBlock.statLabel">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+
+        <Style Selector="TextBlock.statValue">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontFamily" Value="Consolas,Inter,monospace" />
+        </Style>
+
+        <Style Selector="TextBlock.sectionHeader">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+
+        <Style Selector="TextBlock.sectionSpeed">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0.55" />
+            <Setter Property="FontFamily" Value="Consolas,Inter,monospace" />
+        </Style>
+
+        <!-- Segmented mode picker -->
+        <Style Selector="RadioButton.segment">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="#22FFFFFF" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="RadioButton.segment:checked">
+            <Setter Property="Background" Value="#2678787F" />
+        </Style>
+
+        <!-- Torrent progress bar -->
+        <Style Selector="ProgressBar.torrentBar">
+            <Setter Property="Foreground" Value="#5A8FD8" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+
+        <!-- Trailing web-UI affordance -->
+        <Style Selector="Button.link">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.link:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- Footer action rows -->
+        <Style Selector="Button.footerRow">
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Button.footerRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#0F000000" />
+        </Style>
+
+        <Style Selector="Button.accent">
+            <Setter Property="Padding" Value="14,6" />
+        </Style>
+
+        <Style Selector="Button.danger">
+            <Setter Property="Foreground" Value="#E5484D" />
+        </Style>
+
+        <Style Selector="RadioButton.prefSegment">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Application.Styles>
+</Application>
