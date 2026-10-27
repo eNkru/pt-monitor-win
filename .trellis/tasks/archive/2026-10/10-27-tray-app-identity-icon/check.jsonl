@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/prd.md", "reason": "acceptance criteria to verify line by line"}
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/design.md", "reason": "ratios/palette/state matrix to check the implementation against"}
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/research.md", "reason": "reference pixel stats (95% opaque, charcoal ramp) and harness invocation"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray presentation claims must match the new rendering; stale circle/triangle wording must be gone"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "no new binary asset; colours stay hex literals"}
+{"file": ".trellis/spec/index.md", "reason": "three gates must be green"}
+{"file": "src/PTMonitor.App/Services/AppServices.cs", "reason": "confirm UpdateTray and MenuBarState mapping unchanged"}
+{"file": "README.md", "reason": "tray section + porting table must describe the new states truthfully"}

@@ -1,0 +1,11 @@
+{"file": "src/PTMonitor.App/Services/TrayIconFactory.cs", "reason": "file being rewritten; current drawing approach and WindowIcon API"}
+{"file": "src/PTMonitor.App/Services/AppServices.cs", "reason": "UpdateTray switch must stay untouched; confirm API compatibility"}
+{"file": "src/PTMonitor.App/App.axaml", "reason": "panel card colour (#F0202023) and error colour (#E5484D) for palette consistency"}
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/prd.md", "reason": "requirements and acceptance criteria for the tray redesign"}
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/design.md", "reason": "geometry port table (CG→Avalonia y-flip), palette, state matrix, deviation rationale"}
+{"file": ".trellis/tasks/10-27-tray-app-identity-icon/research.md", "reason": "exact macOS constants, verified app.ico pixel stats, working headless harness recipe"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray presentation rules and the drawn-icon anti-pattern that must stay satisfied"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "colour-as-hex-literal convention; the single-binary-asset rule that must not be broken"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "TrayIconFactory ownership and where app.ico lives"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "decision→text boundary: Core returns MenuBarState, App maps it to visuals"}
+{"file": ".trellis/spec/index.md", "reason": "verification gates to re-run"}
