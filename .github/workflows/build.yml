@@ -1,17 +1,22 @@
-# PTMonitor CI — build, test, package (Windows).
+# PTMonitor CI — build, test, package (Windows), x64 + ARM64.
 #
 # Contract (mirrors the macOS original's workflow):
 #   - gate: `dotnet test` + `PTMonitor.Cli --selftest` (exit 0 = pass)
 #   - packaging: scripts/build.ps1 — self-contained single-file PTMonitor.exe
+#     for both win-x64 and win-arm64 (ARM64 is cross-compiled on the x64
+#     runner; its packaged-CLI selftest is skipped because the binary cannot
+#     execute there — the architecture-independent --selftest gate still runs)
 #
-# Two lanes in one workflow:
-#   - push of v* tag -> build + test + zip, plus a GitHub Release with the zip
-#   - workflow_dispatch still allows a manual dev build (artifact, no release)
+# Three lanes in one workflow:
+#   - merge to main      -> build + test + package both archs (artifacts only)
+#   - push of a v* tag   -> the same, plus a GitHub Release with both zips
+#   - workflow_dispatch  -> manual dev build (artifacts, no release)
 
 name: Build & Package
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -36,11 +41,9 @@ jobs:
           if ("$env:GITHUB_REF_TYPE" -eq "tag") {
             $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
             "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
-            "ZIP_NAME=PTMonitor-$version-win-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
           } else {
             $sha = "${env:GITHUB_SHA}".Substring(0, 7)
             "APP_VERSION=1.0.0-dev.$sha" | Out-File -FilePath $env:GITHUB_ENV -Append
-            "ZIP_NAME=PTMonitor-$sha-win-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
       - name: Build (Release)
@@ -52,26 +55,40 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/PTMonitor.Core.Tests -c Release --no-build
 
-      - name: Package
+      # Gates ran above once; each package step publishes one architecture.
+      - name: Package x64
         shell: pwsh
-        run: .\scripts\build.ps1 -Version $env:APP_VERSION
+        run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-x64 -SkipGates
 
-      - name: Upload workflow artifact
+      - name: Package ARM64
+        shell: pwsh
+        run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-arm64 -SkipGates
+
+      - name: Upload workflow artifact (x64)
         uses: actions/upload-artifact@v4
         with:
           name: PTMonitor-win-x64
           path: publish/win-x64/PTMonitor.exe
           if-no-files-found: error
 
-      # Releases are cut by pushing a v* tag; a manual workflow_dispatch run
-      # only produces the artifact above and skips this step.
+      - name: Upload workflow artifact (ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PTMonitor-win-arm64
+          path: publish/win-arm64/PTMonitor.exe
+          if-no-files-found: error
+
+      # Releases are cut by pushing a v* tag. Merges to main and manual runs
+      # only produce the artifacts above and skip this step.
       - name: Create GitHub Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" "artifacts/$env:ZIP_NAME" `
+          gh release create "$env:GITHUB_REF_NAME" `
+            "artifacts/PTMonitor-$env:APP_VERSION-win-x64.zip" `
+            "artifacts/PTMonitor-$env:APP_VERSION-win-arm64.zip" `
             --title "PTMonitor $env:APP_VERSION" `
-            --notes "Self-contained build. Download, unzip, and run PTMonitor.exe — no .NET runtime install needed." `
+            --notes "Self-contained builds for Windows x64 and ARM64. Download the zip for your machine's architecture, unzip, and run PTMonitor.exe — no .NET runtime install needed." `
             --generate-notes

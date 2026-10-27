@@ -91,6 +91,11 @@ enums); the app maps them to words. Putting a formatted English string in
   parser, in one commit.
 - `scripts/build.ps1` and `.github/workflows/build.yml` both encode the same
   gate order (restore → build → selftest → test → publish). Keep them in step.
+- `build.ps1` publishes one RID per invocation (`-Rid`, default `win-x64`); CI
+  runs the gates once and then calls it twice with `-SkipGates` (win-x64 and
+  win-arm64, cross-compiled). The packaged-CLI selftest only runs when the
+  RID matches the runner architecture — the pre-publish `--selftest` is the
+  architecture-independent gate and must always run.
 - `app.manifest` supplies `PerMonitorV2`; the panel divides screen coordinates
   by `RenderScaling`. Changing one without the other breaks positioning on
   scaled displays.

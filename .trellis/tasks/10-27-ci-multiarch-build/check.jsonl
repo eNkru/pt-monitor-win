@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/index.md", "reason": "verification gates to confirm the change keeps them intact"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "check the CI gates match the documented contract"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check build.yml / build.ps1 / README stay in step after the change"}
