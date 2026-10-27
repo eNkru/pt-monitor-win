@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/index.md", "reason": "top-level layer map and non-negotiables for any change"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Core layer rules and route to the backend guides"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "where a change belongs inside Core"}
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "parse-once rule, sentinels and ITorrentClient contract"}
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "poll loop, locking and change-detection rules"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "settings.json shape and DPAPI secret handling"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServerFailure model and the swallow allow-list"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "selftest + xUnit mirror contract"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "App layer split between pure decisions and rendering"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "XAML conventions and style classes"}
+{"file": ".trellis/spec/frontend/viewmodel-guidelines.md", "reason": "rebuild-all view-model model"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "store ownership and write paths"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "L10n key and both-language checklist"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray-only lifecycle, hide/quit rules"}

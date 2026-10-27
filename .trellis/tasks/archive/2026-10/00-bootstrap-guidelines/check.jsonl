@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/index.md", "reason": "non-negotiables to audit the change against"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "required/forbidden patterns and review checklist"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "App-layer manual verification checklist"}
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "check parser purity, sentinels, single retry"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "check failure kinds, cancellation filter, no bare rethrow"}
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "check locking, cancellation and equivalence updates"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "check backward-compatible settings and secret write order"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "check both language tables and x:Name wiring"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "check null semantics and absence of new ! suppressions"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "audit boundary shapes across model, store and UI"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "audit duplicated decisions and re-typed constants"}
