@@ -104,7 +104,9 @@ runs on Windows, and also builds/runs on Linux and macOS for development
    [Releases](https://github.com/eNkru/pt-monitor-win/releases) page — take the
    `win-x64` zip, or the `win-arm64` zip on an ARM64 Windows machine (or the
    `PTMonitor-win-x64` / `PTMonitor-win-arm64` artifacts of the latest CI run).
-2. Put it anywhere you like, e.g. `C:\Tools\PTMonitor\`.
+2. Put it anywhere you like — a conventional spot for a per-user single-file
+   app is `%LOCALAPPDATA%\PTMonitor` (no admin rights needed), e.g.
+   `C:\Tools\PTMonitor\`.
 3. Run it. **Preferences open automatically on first launch.**
 4. Add a server, hit **Test Connection**, then **Save**.
 5. Close Preferences — the app is now in your tray, polling.
@@ -293,6 +295,19 @@ The resulting `publish/win-x64/PTMonitor.exe` runs on Windows. To *run* the GUI
 on Linux for development you additionally need the usual Avalonia natives
 (`libfontconfig`, `libfreetype`, `libice`, X11/Wayland libs, and at least one
 installed font).
+
+**Launching the Windows exe from WSL** (interop) works, but copy the exe to the
+Windows filesystem first and start it detached — a process that inherits WSL's
+stdout/stderr pipes dies when the launching command exits:
+
+```bash
+powershell.exe -Command "Start-Process -FilePath
+  'C:\Users\you\AppData\Local\PTMonitor\PTMonitor.exe'
+  -WorkingDirectory 'C:\Users\you\AppData\Local\PTMonitor'"
+```
+
+The tray icon then lives on the Windows desktop, and settings/secrets are written
+under the Windows `%APPDATA%\PTMonitor\`.
 
 ---
 
