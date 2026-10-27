@@ -507,6 +507,7 @@ src/
     Program.cs                   entry point + AppBuilder
     App.axaml / App.axaml.cs     styles, ShutdownMode=OnExplicitShutdown, bootstrap
     app.manifest                 PerMonitorV2 DPI awareness
+    app.ico                      exe icon, generated from the macOS AppIcon.icns
     Services/
       AppServices.cs             composition root: stores, tray icon, windows
       L10n.cs                    English + zh-Hans string tables
@@ -528,8 +529,9 @@ tests/
   PTMonitor.Core.Tests/          xUnit suite (36 tests, mirrors the selftest)
 scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
+  icns-to-ico.py                regenerate app.ico from the macOS AppIcon.icns
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
-.github/workflows/build.yml      windows-latest CI: tag → release
+.github/workflows/build.yml      windows-latest CI: main → artifacts, tag → release
 ```
 
 ---
@@ -713,8 +715,6 @@ Deliberate scope decisions for the first release:
   deep link — neither upstream web UI supports one. Use the `↗` button.
 - **The exe is unsigned**, so SmartScreen will warn on first run. Signing needs
   a code-signing certificate.
-- **The exe uses the default .NET icon in Explorer**; the tray icon is drawn at
-  runtime, so no binary icon assets are committed.
 
 Plausible next steps, in rough order of value: single-instance guard, start with
 Windows, per-server free-space display, a code-signed release.
@@ -728,6 +728,7 @@ For anyone comparing the two codebases:
 | macOS original | This port |
 |---|---|
 | `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + icons rendered at runtime |
+| `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, regenerated from the same `.icns` by `scripts/icns-to-ico.py` |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |
 | `UserDefaults` | `settings.json` in `%APPDATA%` |

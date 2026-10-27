@@ -11,6 +11,8 @@ src/PTMonitor.App/
   Program.cs                 entry point + AppBuilder (do not reorder)
   App.axaml / App.axaml.cs   style classes, ShutdownMode, AppServices.Initialize()
   app.manifest               PerMonitorV2 DPI awareness
+  app.ico                    exe icon, generated from the macOS AppIcon.icns
+                             (regenerate with scripts/icns-to-ico.py)
   Services/
     AppServices.cs           composition root: stores, tray, windows, quit
     L10n.cs                  en + zh-Hans string tables
