@@ -77,8 +77,9 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   certificate" toggle per server.
 - **Bilingual** — English and Simplified Chinese, switchable in Preferences and
   applied immediately (no restart, unlike the macOS original).
-- **Self-contained build** — a single `PTMonitor.exe`; no .NET runtime install
-  required on the target machine.
+- **Self-contained build** — a single `PTMonitor.exe`, published for both
+  **x64 and ARM64** Windows; no .NET runtime install required on the target
+  machine.
 
 ---
 
@@ -86,7 +87,7 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 
 | | |
 |---|---|
-| **To run** | Windows 10 (1607+) or Windows 11, x64. Nothing else — the published build is self-contained. |
+| **To run** | Windows 10 (1607+) or Windows 11, x64 or ARM64. Nothing else — the published build is self-contained. |
 | **To build** | [.NET SDK 8.0](https://dotnet.microsoft.com/download/dotnet/8.0) (8.0.x is what CI uses). |
 | **To build** (optional) | Node.js 18+ — only for the stub test server. |
 | **IDE** (optional) | Visual Studio 2022 (17.8+) or JetBrains Rider. |
@@ -100,8 +101,9 @@ runs on Windows, and also builds/runs on Linux and macOS for development
 ## Quick start (no build needed)
 
 1. Download `PTMonitor.exe` from the
-   [Releases](https://github.com/eNkru/pt-monitor-win/releases) page (or the
-   `PTMonitor-win-x64` artifact of the latest CI run).
+   [Releases](https://github.com/eNkru/pt-monitor-win/releases) page — take the
+   `win-x64` zip, or the `win-arm64` zip on an ARM64 Windows machine (or the
+   `PTMonitor-win-x64` / `PTMonitor-win-arm64` artifacts of the latest CI run).
 2. Put it anywhere you like, e.g. `C:\Tools\PTMonitor\`.
 3. Run it. **Preferences open automatically on first launch.**
 4. Add a server, hit **Test Connection**, then **Save**.
@@ -233,9 +235,15 @@ artifacts\PTMonitor-1.0.0-win-x64.zip
 Options:
 
 ```powershell
-.\scripts\build.ps1 -Version 1.2.3    # stamp a version
-.\scripts\build.ps1 -SkipZip          # skip the zip step
+.\scripts\build.ps1 -Version 1.2.3        # stamp a version
+.\scripts\build.ps1 -Rid win-arm64        # build the ARM64 exe instead
+.\scripts\build.ps1 -SkipZip              # skip the zip step
+.\scripts\build.ps1 -SkipGates            # publish only (CI reuse)
 ```
+
+The packaged-CLI selftest step runs only when the published exe matches the
+machine running the script (an ARM64 exe cannot run on an x64 host); the
+pre-publish `--selftest` gate is architecture-independent and always runs.
 
 ### Option 2 — plain `dotnet` commands
 
@@ -632,19 +640,22 @@ the ban logic without a real NAS.
 
 ## Continuous integration & releases
 
-`.github/workflows/build.yml` runs on `windows-latest`:
+`.github/workflows/build.yml` runs on `windows-latest` and builds both
+architectures on the same x64 runner (ARM64 is cross-compiled):
 
 ```
 checkout → setup .NET 8 → resolve version → build → selftest → test
-        → scripts/build.ps1 → upload artifact → (tag only) GitHub Release
+        → package x64 → package ARM64 → upload artifacts → (tag only) Release
 ```
 
-- **Every push to a tag `v*`** builds, tests, packages, and creates a GitHub
-  Release with the zip attached. The tag (minus the leading `v`) becomes the
-  app version.
+- **Every merge to `main`** runs the gates and publishes both the
+  `PTMonitor-win-x64` and `PTMonitor-win-arm64` workflow artifacts.
+- **Every push of a tag `v*`** additionally creates a GitHub Release with
+  **both zips** attached. The tag (minus the leading `v`) becomes the app
+  version.
 - **Manual runs** (`workflow_dispatch`, or
-  `gh workflow run build.yml --ref main`) produce the artifact only.
-- Pull requests and pushes to `main` do **not** build — cut a tag to release.
+  `gh workflow run build.yml --ref main`) produce the artifacts only.
+- Pull requests do **not** build.
 
 To cut a release:
 
@@ -691,8 +702,6 @@ PTMonitor.Cli.exe --probe qbittorrent --host 192.168.1.2 --port 8080 --user admi
 
 Deliberate scope decisions for the first release:
 
-- **Windows x64 only** in the published build (the source builds anywhere .NET
-  and Avalonia run). ARM64 would just need another publish RID.
 - **No single-instance guard** — launching twice starts two independent agents.
 - **No "start with Windows" toggle.** Workaround: put a shortcut in
   `shell:startup`.
@@ -708,7 +717,7 @@ Deliberate scope decisions for the first release:
   runtime, so no binary icon assets are committed.
 
 Plausible next steps, in rough order of value: single-instance guard, start with
-Windows, per-server free-space display, ARM64 publish, a code-signed release.
+Windows, per-server free-space display, a code-signed release.
 
 ---
 
