@@ -18,3 +18,7 @@ Thumbs.db
 
 # Local runtime data
 *.log
+
+# Python cache (Trellis helper scripts)
+__pycache__/
+*.pyc
