@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/index.md", "reason": "verification gates to re-run"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "binary-asset anti-pattern claims to audit after adding app.ico"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray icon must remain runtime-drawn; audit for stale claims"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "README/spec/asset set must stay in step"}

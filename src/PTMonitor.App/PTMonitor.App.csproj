@@ -6,6 +6,10 @@
          rather than passed as -p:AssemblyName on the command line, which would
          apply to every project in the graph and make two of them "PTMonitor". -->
     <AssemblyName>PTMonitor</AssemblyName>
+    <!-- The exe icon shown in Explorer / taskbar / window title bars.
+         Generated from the macOS app's AppIcon.icns by scripts/icns-to-ico.py
+         so both platforms share one icon. -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

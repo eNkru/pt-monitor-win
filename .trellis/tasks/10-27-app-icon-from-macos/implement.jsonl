@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/index.md", "reason": "non-negotiables (Core stays asset-free) and verification gates"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "where the app icon asset belongs in PTMonitor.App"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray icon stays runtime-drawn; app icon is a separate concern"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "binary-asset anti-pattern wording must stay accurate"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "packaging/README/spec must describe the same artifact set"}

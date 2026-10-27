@@ -90,8 +90,11 @@ sets `ToolTipText` (`PT Monitor — N servers · M online`, plus speeds when the
 toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
-`TrayIconFactory` renders 32×32 with `RenderTargetBitmap` — idle grey circle,
-active green circle, red warning triangle. No binary assets are committed.
+`TrayIconFactory` renders 32×32 with `RenderTargetBitmap` — idle grey
+circle, active green circle, red warning triangle. Tray icons are always
+drawn, never loaded from files. (The one committed binary asset is the exe
+icon `app.ico` — a different concern, see
+[component guidelines](./component-guidelines.md).)
 
 ---
 
