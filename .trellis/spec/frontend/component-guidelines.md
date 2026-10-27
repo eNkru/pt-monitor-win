@@ -107,7 +107,8 @@ The project has no automated a11y gate. Keep these in force:
 - A binding with no `x:DataType`.
 - A `<Styles>` block inside a window.
 - A resource dictionary or theme file.
-- Binary *tray icon* assets — tray icons are drawn at runtime (see
+- Binary *tray icon* assets — tray icons are drawn at runtime from the same
+  card/arrows/pill geometry as the exe icon (see
   `TrayIconFactory`). The single committed binary asset is the exe icon
   `src/PTMonitor.App/app.ico`, embedded via `<ApplicationIcon>` and
   regenerated from the macOS `AppIcon.icns` with `scripts/icns-to-ico.py`;

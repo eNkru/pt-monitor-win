@@ -90,8 +90,13 @@ sets `ToolTipText` (`PT Monitor — N servers · M online`, plus speeds when the
 toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
-`TrayIconFactory` renders 32×32 with `RenderTargetBitmap` — idle grey
-circle, active green circle, red warning triangle. Tray icons are always
+`TrayIconFactory` renders 32×32 with `RenderTargetBitmap` using one shared
+geometry ported from the macOS app-icon generator (`make-icon.swift`): a
+charcoal rounded card, a down/up arrow pair and a pill progress meter. The
+states differ only in colour — idle dims both arrows and leaves the pill an
+empty track, active draws the solid teal down arrow with a 62 % pill fill
+(the app-icon artwork proper), error swaps teal for red, fills the pill and
+outlines the card in red. Tray icons are always
 drawn, never loaded from files. (The one committed binary asset is the exe
 icon `app.ico` — a different concern, see
 [component guidelines](./component-guidelines.md).)

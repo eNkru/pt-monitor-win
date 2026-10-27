@@ -42,9 +42,10 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - grey circle = idle,
-  - green circle = actively transferring,
-  - red warning triangle = every enabled server is failing.
+  - idle — dimmed arrows on the charcoal card, empty progress pill,
+  - actively transferring — solid teal down arrow, 62 % filled pill (the
+    app-icon artwork proper),
+  - every enabled server failing — red arrows, full pill, red card outline.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
@@ -742,7 +743,7 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + icons rendered at runtime |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + card/arrows/pill artwork ported from `make-icon.swift`, rendered at runtime |
 | `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, regenerated from the same `.icns` by `scripts/icns-to-ico.py` |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |
