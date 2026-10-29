@@ -129,7 +129,10 @@ public sealed class PanelViewModel : INotifyPropertyChanged
     {
         _settings = settings;
         _monitor = monitor;
-        monitor.StatusesChanged += (_, _) => Rebuild();
+        // StatusesChanged is raised from the poll loop's thread-pool thread;
+        // Rebuild mutates the bound Sections collection and must run on the UI
+        // thread. Settings.Changed is always raised on the UI thread already.
+        monitor.StatusesChanged += (_, _) => Dispatcher.UIThread.Post(Rebuild);
         settings.Changed += (_, _) => Rebuild();
         Rebuild();
     }
