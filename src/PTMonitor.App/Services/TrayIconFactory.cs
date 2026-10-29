@@ -8,13 +8,14 @@ namespace PTMonitor.App.Services;
 
 /// <summary>
 /// Renders the tray icons at runtime with vector drawing, so the app ships
-/// without binary icon assets. All three states share one geometry ported
-/// from the macOS app-icon generator: a charcoal rounded card with a
-/// hairline border, a down/up arrow pair and a pill progress meter. The
-/// states differ only in colour: idle dims both arrows and shows only the
-/// pill track; active is the app icon proper (solid teal down arrow, pill
-/// 62% filled); error swaps teal for red, fills the pill and outlines the
-/// card with a red stroke.
+/// without binary tray assets. All three states share one geometry: a flat,
+/// light rounded tile with a hairline ring, a down/up arrow pair and a pill
+/// progress meter — the Windows app-icon artwork drawn by
+/// <c>scripts/make-app-icon.py</c>, which must be edited together with this
+/// file. The states differ only in colour: idle dims both arrows and shows
+/// only the pill track; active is the app icon proper (solid blue down arrow,
+/// pill 62% filled); error swaps blue for red, fills the pill and outlines the
+/// tile in red.
 /// </summary>
 public enum TrayState
 {
@@ -27,112 +28,115 @@ public static class TrayIconFactory
 {
     private const int Size = 32;
 
+    // Flat, light palette — deliberately not the macOS charcoal card. Keep in
+    // sync with the constants at the top of scripts/make-app-icon.py.
+    private static readonly Color Tile = Color.Parse("#F2F6FA");
+    private static readonly Color Border = Color.Parse("#D3DEE9");
+    private static readonly Color Accent = Color.Parse("#0F6CBD");
+    private static readonly Color Danger = Color.Parse("#C42B1C");
+
+    private const double CardRadius = 0.22;
+    private const double CardBorder = 0.030;
+    private const double ErrorBorder = 0.050;
+    private const double Dim = 0.40;
+    private const double TrackAlpha = 0.14;
+    private const double PillFill = 0.62;
+
+    private const double BandTop = 0.32;
+    private const double BandBottom = 0.66;
+    private const double ShaftHalf = 0.043;
+    private const double HeadHalf = 0.105;
+    private const double HeadDepth = 0.105;
+    private const double DownCx = 0.37;
+    private const double UpCx = 0.63;
+    private const double PillWidth = 0.52;
+    private const double PillHeight = 0.042;
+    private const double PillY = 0.785;
+
     public static WindowIcon Idle() => new(Render(TrayState.Idle));
     public static WindowIcon Active() => new(Render(TrayState.Active));
     public static WindowIcon Error() => new(Render(TrayState.Error));
 
-    /// <summary>Renders the shared card/arrows/pill artwork for one state.</summary>
+    /// <summary>Renders the shared tile/arrows/pill artwork for one state.</summary>
     public static RenderTargetBitmap Render(TrayState state)
     {
         var s = (double)Size;
         var bitmap = new RenderTargetBitmap(new PixelSize(Size, Size), new Vector(96, 96));
         using (var context = bitmap.CreateDrawingContext())
         {
-            DrawCard(context, s, isError: state == TrayState.Error);
+            var accent = state == TrayState.Error ? Danger : Accent;
 
-            var teal = state == TrayState.Error;
+            DrawTile(context, s, state == TrayState.Error);
+
             var solid = state != TrayState.Idle;
-            double downAlpha = solid ? 1.0 : 0.38;
+            DrawArrow(context, s, down: true,
+                new ImmutableSolidColorBrush(accent, solid ? 1.0 : Dim));
+            DrawArrow(context, s, down: false,
+                new ImmutableSolidColorBrush(accent, Dim));
 
-            // Down arrow: gradient, lighter colour at the wide (head) end.
-            var downTop = teal ? Color.Parse("#C33C39") : Color.Parse("#3AA7B5");
-            var downHead = teal ? Color.Parse("#E5484D") : Color.Parse("#6FD3DE");
-            var downBrush = Gradient(0.66 * s, 0.32 * s, downHead, downTop, downAlpha);
-            DrawArrow(context, s, down: true, downBrush);
-
-            // Up arrow: solid, dimmed in every state.
-            var upColor = teal ? Color.Parse("#C33C39") : Color.Parse("#4FB6C3");
-            DrawArrow(context, s, down: false, new ImmutableSolidColorBrush(WithAlpha(upColor, 0.38)));
-
-            // Pill fill: none when idle, 62% teal when active, full red on error.
+            // Pill: empty track when idle, 62% blue when active, full red on error.
             double? fill = state switch
             {
-                TrayState.Active => 0.62,
+                TrayState.Active => PillFill,
                 TrayState.Error => 1.0,
                 _ => null,
             };
-            var fillBrush = fill is null ? null
-                : new ImmutableSolidColorBrush(teal ? Color.Parse("#E5484D") : Color.Parse("#4FB6C3"));
-            DrawPill(context, s, fill, fillBrush);
+            DrawPill(context, s, fill, accent);
         }
         return bitmap;
     }
 
-    // MARK: - Card
+    // MARK: - Tile
 
-    private static void DrawCard(DrawingContext context, double s, bool isError)
+    private static void DrawTile(DrawingContext context, double s, bool isError)
     {
-        var radius = 0.225 * s;
         var rect = new Rect(0, 0, s, s);
+        var radius = CardRadius * s;
+        var ring = (isError ? ErrorBorder : CardBorder) * s;
 
-        var card = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(Color.Parse("#2E2E33"), 0),
-                new GradientStop(Color.Parse("#131316"), 1),
-            },
-        }.ToImmutable();
-        context.DrawRectangle(card, null, new RoundedRect(rect, radius));
-
-        // Sheen: white fading out over the top 58% of the card.
-        var sheen = Gradient(0, 0.58 * s, Color.Parse("#FFFFFF"), Color.Parse("#FFFFFF"), 0.07,
-            endAlpha: 0.0);
-        using (context.PushGeometryClip(new RectangleGeometry(rect, radius, radius)))
-        {
-            context.DrawRectangle(sheen, null, new Rect(0, 0, s, 0.58 * s));
-        }
-
-        // Border: hairline white, or a legible red stroke on error.
-        IImmutableBrush border = new ImmutableSolidColorBrush(WithAlpha(Color.Parse("#FFFFFF"), 0.10));
-        double thickness = 0.004 * s;
-        if (isError)
-        {
-            border = new ImmutableSolidColorBrush(WithAlpha(Color.Parse("#E5484D"), 0.55));
-            thickness = 0.05 * s;
-        }
-        context.DrawRectangle(null, new ImmutablePen(border, thickness),
+        // Flat fill: no gradient, no sheen, no shadow.
+        context.DrawRectangle(new ImmutableSolidColorBrush(Tile), null,
             new RoundedRect(rect, radius));
+
+        // Ring as a stroke centred on a path inset by half the pen width, so
+        // the stroke's outer edge lands exactly on the tile edge. The path
+        // corner radius shrinks with the inset too -- leaving it at `radius`
+        // would bulge the stroke past the tile at the four corners. scripts/
+        // make-app-icon.py models the ring the same way.
+        var inset = ring / 2;
+        var path = new Rect(inset, inset, s - ring, s - ring);
+        var pathRadius = Math.Max(radius - inset, 0);
+        var ringColor = isError ? Danger : Border;
+        context.DrawRectangle(null, new ImmutablePen(new ImmutableSolidColorBrush(ringColor), ring),
+            new RoundedRect(path, pathRadius));
     }
 
     // MARK: - Arrows
 
     private static void DrawArrow(DrawingContext context, double s, bool down, IBrush brush)
     {
-        double bandTop = 0.32 * s;
-        double bandBottom = 0.66 * s;
-        double cx = (down ? 0.37 : 0.63) * s;
-        double shaftHalf = 0.043 * s;
-        double headHalf = 0.105 * s;
-        double headDepth = 0.105 * s;
+        var bandTop = BandTop * s;
+        var bandBottom = BandBottom * s;
+        var cx = (down ? DownCx : UpCx) * s;
+        var shaft = ShaftHalf * s;
+        var head = HeadHalf * s;
+        var depth = HeadDepth * s;
 
         // Tip at the arrow's pointing end; the shaft starts at the opposite end.
-        double tipY = down ? bandBottom : bandTop;
-        double baseY = down ? bandBottom - headDepth : bandTop + headDepth;
-        double farY = down ? bandTop : bandBottom;
+        var tipY = down ? bandBottom : bandTop;
+        var baseY = down ? bandBottom - depth : bandTop + depth;
+        var farY = down ? bandTop : bandBottom;
 
         var arrow = new StreamGeometry();
         using (var geometry = arrow.Open())
         {
-            geometry.BeginFigure(new Point(cx - shaftHalf, farY), true);
-            geometry.LineTo(new Point(cx + shaftHalf, farY));
-            geometry.LineTo(new Point(cx + shaftHalf, baseY));
-            geometry.LineTo(new Point(cx + headHalf, baseY));
+            geometry.BeginFigure(new Point(cx - shaft, farY), true);
+            geometry.LineTo(new Point(cx + shaft, farY));
+            geometry.LineTo(new Point(cx + shaft, baseY));
+            geometry.LineTo(new Point(cx + head, baseY));
             geometry.LineTo(new Point(cx, tipY));
-            geometry.LineTo(new Point(cx - headHalf, baseY));
-            geometry.LineTo(new Point(cx - shaftHalf, baseY));
+            geometry.LineTo(new Point(cx - head, baseY));
+            geometry.LineTo(new Point(cx - shaft, baseY));
             geometry.EndFigure(true);
         }
         context.DrawGeometry(brush, null, arrow);
@@ -140,43 +144,21 @@ public static class TrayIconFactory
 
     // MARK: - Pill
 
-    private static void DrawPill(DrawingContext context, double s, double? fill, IBrush? fillBrush)
+    private static void DrawPill(DrawingContext context, double s, double? fill, Color accent)
     {
-        double width = 0.52 * s;
-        double height = 0.032 * s;
-        double x = 0.5 * s - width / 2;
-        double y = 0.79 * s;
+        var width = PillWidth * s;
+        var height = PillHeight * s;
+        var x = 0.5 * s - width / 2;
+        var y = PillY * s;
+        var radius = height / 2;
 
-        var track = new ImmutableSolidColorBrush(WithAlpha(Color.Parse("#4FB6C3"), 0.12));
-        context.DrawRectangle(track, null, new RoundedRect(new Rect(x, y, width, height), height / 2));
+        context.DrawRectangle(new ImmutableSolidColorBrush(accent, TrackAlpha), null,
+            new RoundedRect(new Rect(x, y, width, height), radius));
 
-        if (fill is { } fraction && fillBrush is not null)
+        if (fill is { } fraction)
         {
-            context.DrawRectangle(fillBrush, null,
-                new RoundedRect(new Rect(x, y, width * fraction, height), height / 2));
+            context.DrawRectangle(new ImmutableSolidColorBrush(accent), null,
+                new RoundedRect(new Rect(x, y, width * fraction, height), radius));
         }
-    }
-
-    // MARK: - Colour helpers
-
-    private static Color WithAlpha(Color color, double alpha) =>
-        Color.FromArgb((byte)Math.Round(byte.MaxValue * alpha), color.R, color.G, color.B);
-
-    /// <summary>A vertical absolute-coordinate gradient; both stops share
-    /// <paramref name="alpha"/> unless <paramref name="endAlpha"/> is given.</summary>
-    private static IBrush Gradient(double y0, double y1, Color top, Color bottom,
-        double alpha = 1.0, double? endAlpha = null)
-    {
-        double a1 = endAlpha ?? alpha;
-        return new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, y0, RelativeUnit.Absolute),
-            EndPoint = new RelativePoint(0, y1, RelativeUnit.Absolute),
-            GradientStops =
-            {
-                new GradientStop(WithAlpha(top, alpha), 0),
-                new GradientStop(WithAlpha(bottom, a1), 1),
-            },
-        }.ToImmutable();
     }
 }
