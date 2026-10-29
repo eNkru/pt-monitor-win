@@ -1,7 +1,9 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Threading;
 using PTMonitor.Core.Model;
 using PTMonitor.Core.Store;
 using PTMonitor.App.Views;
@@ -47,7 +49,9 @@ public sealed class AppServices
         };
         TrayIcon.SetIcons(GetApp(), [_trayIcon]);
 
-        Monitor.StatusesChanged += (_, _) => UpdateTray();
+        // Poll loops publish from a thread-pool thread; tray updates must
+        // reach the UI thread (see .trellis/spec/frontend/state-management.md).
+        Monitor.StatusesChanged += (_, _) => Dispatcher.UIThread.Post(UpdateTray);
         UpdateTray();
         Monitor.Start();
 
@@ -133,8 +137,25 @@ public sealed class AppServices
             return;
         }
         _panel ??= new MainPanelWindow();
+        // The cursor is on the tray icon right after the click, so it anchors
+        // the panel to the icon's real position (see MainPanelWindow.PositionNearTray).
+        _panel.TrayAnchor = CursorPosition();
         _panel.Show();
         _panel.Activate();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    /// <summary>The global cursor position in physical screen pixels, or null
+    /// off-Windows (where the panel falls back to edge docking).</summary>
+    private static PixelPoint? CursorPosition()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        return GetCursorPos(out var point) ? new PixelPoint(point.X, point.Y) : null;
     }
 
     public void HidePanel()

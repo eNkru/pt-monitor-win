@@ -19,6 +19,11 @@ public partial class MainPanelWindow : Window
 {
     private const double EdgeGap = 12;
 
+    /// <summary>Set before <see cref="Window.Show"/> by the tray-click handler:
+    /// the tray icon's screen position (physical pixels), used to anchor the
+    /// panel to the actual icon rather than a taskbar corner.</summary>
+    public PixelPoint? TrayAnchor { get; set; }
+
     private PanelViewModel ViewModel { get; }
     private readonly DispatcherTimer _freshnessTimer;
 
@@ -33,7 +38,7 @@ public partial class MainPanelWindow : Window
         _freshnessTimer.Tick += (_, _) => ViewModel.RefreshFreshness();
 
         Deactivated += (_, _) => Hide();
-        Opened += (_, _) => PositionNearTray();
+        Opened += (_, _) => Dispatcher.UIThread.Post(PositionNearTray, DispatcherPriority.Background);
         KeyDown += OnKeyDown;
     }
 
@@ -58,20 +63,62 @@ public partial class MainPanelWindow : Window
 
     private void PositionNearTray()
     {
-        // The tray lives in the taskbar; Avalonia cannot ask the icon where it
-        // is, so the panel docks to the bottom-right corner of the primary
-        // screen's work area — where the Windows tray always is.
-        var screen = Screens?.Primary;
-        var workArea = screen?.WorkingArea
-            ?? new PixelRect(0, 0, (int)(Width * 1.5), (int)(Height + 200));
+        // Avalonia cannot report the tray icon's coordinates, so two sources
+        // are used: the taskbar location (the screen whose WorkingArea is inset
+        // relative to its Bounds carries the taskbar) decides which side of the
+        // taskbar the panel opens on, and TrayAnchor (the cursor at click time)
+        // decides the vertical position, so a top-pinned icon opens the panel
+        // beside the top, not the bottom.
+        var screens = Screens?.All;
+        var taskbarScreen = screens?.FirstOrDefault(screen => screen.WorkingArea != screen.Bounds)
+            ?? Screens?.Primary;
+
+        var bounds = taskbarScreen?.Bounds ?? new PixelRect(0, 0, 1920, 1040);
+        var workArea = taskbarScreen?.WorkingArea ?? bounds;
 
         var scaling = RenderScaling;
-        var width = Width;
-        var height = DesiredSize.Height > 0 ? DesiredSize.Height : Height;
-        if (double.IsNaN(height) || height < 120) height = 360;
+        var gap = EdgeGap;
 
-        var x = workArea.X / scaling + (workArea.Width / scaling) - width - EdgeGap;
-        var y = workArea.Y / scaling + (workArea.Height / scaling) - height - EdgeGap;
+        // SizeToContent="Height" leaves Height as NaN until the first layout
+        // pass, so read the rendered size from Bounds (logical pixels) and
+        // fall back before layout runs. Position is in physical pixels, so
+        // scale the panel size up to match.
+        var panelWidth = (Bounds.Width > 1 ? Bounds.Width : 400) * scaling;
+        var panelHeight = (Bounds.Height > 1 ? Bounds.Height : 360) * scaling;
+
+        var bottom = workArea.Bottom < bounds.Bottom;
+        var top = workArea.Y > bounds.Y;
+        var left = workArea.X > bounds.X;
+        var right = !bottom && !top && !left;
+
+        double x, y;
+        if (TrayAnchor is { } anchor)
+        {
+            // Open on the work-area side of the taskbar, vertically centered on
+            // the icon. Clamping below keeps it on-screen if the icon is at an
+            // extreme edge.
+            if (right) x = anchor.X - panelWidth - gap;
+            else if (left) x = anchor.X + gap;
+            else x = anchor.X - panelWidth / 2;
+            y = anchor.Y - panelHeight / 2;
+        }
+        else
+        {
+            // No anchor (e.g. non-Windows): dock to the tray end of the taskbar.
+            if (bottom) { x = bounds.Right - panelWidth - gap; y = workArea.Bottom - panelHeight - gap; }
+            else if (top) { x = bounds.Right - panelWidth - gap; y = workArea.Y + gap; }
+            else if (left) { x = workArea.X + gap; y = workArea.Bottom - panelHeight - gap; }
+            else { x = workArea.Right - panelWidth - gap; y = workArea.Bottom - panelHeight - gap; }
+        }
+
+        // Keep the panel inside the work area (never over the taskbar or off-screen).
+        var minX = workArea.X + gap;
+        var maxX = Math.Max(minX, workArea.Right - panelWidth - gap);
+        var minY = workArea.Y + gap;
+        var maxY = Math.Max(minY, workArea.Bottom - panelHeight - gap);
+        x = Math.Clamp(x, minX, maxX);
+        y = Math.Clamp(y, minY, maxY);
+
         Position = new PixelPoint((int)x, (int)y);
     }
 
