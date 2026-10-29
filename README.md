@@ -42,10 +42,10 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - idle — dimmed arrows on the charcoal card, empty progress pill,
-  - actively transferring — solid teal down arrow, 62 % filled pill (the
+  - idle — dimmed arrows on the light tile, empty progress pill,
+  - actively transferring — solid blue down arrow, 62 % filled pill (the
     app-icon artwork proper),
-  - every enabled server failing — red arrows, full pill, red card outline.
+  - every enabled server failing — red arrows, full pill, red tile outline.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
@@ -523,7 +523,7 @@ src/
     Program.cs                   entry point + AppBuilder
     App.axaml / App.axaml.cs     styles, ShutdownMode=OnExplicitShutdown, bootstrap
     app.manifest                 PerMonitorV2 DPI awareness
-    app.ico                      exe icon, generated from the macOS AppIcon.icns
+    app.ico                      exe icon, drawn by scripts/make-app-icon.py
     Services/
       AppServices.cs             composition root: stores, tray icon, windows
       L10n.cs                    English + zh-Hans string tables
@@ -545,7 +545,7 @@ tests/
   PTMonitor.Core.Tests/          xUnit suite (36 tests, mirrors the selftest)
 scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
-  icns-to-ico.py                regenerate app.ico from the macOS AppIcon.icns
+  make-app-icon.py               draw + encode app.ico (flat Windows style)
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
 .github/workflows/build.yml      windows-latest CI: main → artifacts, tag → release
 ```
@@ -743,8 +743,8 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + card/arrows/pill artwork ported from `make-icon.swift`, rendered at runtime |
-| `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, regenerated from the same `.icns` by `scripts/icns-to-ico.py` |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + tile/arrows/pill artwork drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
+| `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, drawn from scratch in the Windows flat style by `scripts/make-app-icon.py` — deliberately **not** a port of the macOS artwork |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |
 | `UserDefaults` | `settings.json` in `%APPDATA%` |

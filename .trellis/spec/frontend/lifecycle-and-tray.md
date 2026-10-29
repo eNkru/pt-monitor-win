@@ -91,15 +91,21 @@ toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
 `TrayIconFactory` renders 32×32 with `RenderTargetBitmap` using one shared
-geometry ported from the macOS app-icon generator (`make-icon.swift`): a
-charcoal rounded card, a down/up arrow pair and a pill progress meter. The
-states differ only in colour — idle dims both arrows and leaves the pill an
-empty track, active draws the solid teal down arrow with a 62 % pill fill
-(the app-icon artwork proper), error swaps teal for red, fills the pill and
-outlines the card in red. Tray icons are always
+geometry: a flat, light rounded tile with a hairline ring, a down/up arrow pair
+and a pill progress meter. The states differ only in colour — idle dims both
+arrows and leaves the pill an empty track, active draws the solid blue down
+arrow with a 62 % pill fill (the app-icon artwork proper), error swaps blue for
+red, fills the pill and outlines the tile in red. Tray icons are always
 drawn, never loaded from files. (The one committed binary asset is the exe
 icon `app.ico` — a different concern, see
 [component guidelines](./component-guidelines.md).)
+
+The tray artwork and the exe icon are the **same drawing** described twice:
+`TrayIconFactory.cs` for 32 px and `scripts/make-app-icon.py` for the ICO's
+seven sizes. Change the palette or proportions in both, or the tray and the
+Explorer icon silently drift apart. The script also renders the simplified
+single-arrow variant used below 32 px, which the factory never needs because
+the tray is always 32 px.
 
 ---
 

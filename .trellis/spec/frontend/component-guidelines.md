@@ -108,10 +108,9 @@ The project has no automated a11y gate. Keep these in force:
 - A `<Styles>` block inside a window.
 - A resource dictionary or theme file.
 - Binary *tray icon* assets — tray icons are drawn at runtime from the same
-  card/arrows/pill geometry as the exe icon (see
-  `TrayIconFactory`). The single committed binary asset is the exe icon
-  `src/PTMonitor.App/app.ico`, embedded via `<ApplicationIcon>` and
-  regenerated from the macOS `AppIcon.icns` with `scripts/icns-to-ico.py`;
-  do not add image assets for anything else.
+  tile/arrows/pill geometry as the exe icon (see `TrayIconFactory`). The single
+  committed binary asset is the exe icon `src/PTMonitor.App/app.ico`, embedded
+  via `<ApplicationIcon>` and drawn by `scripts/make-app-icon.py`; do not add
+  image assets for anything else.
 - Hard-coded user-facing text in XAML without an `x:Name` (see
   [localization](./localization.md)).
