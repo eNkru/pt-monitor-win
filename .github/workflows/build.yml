@@ -7,10 +7,19 @@
 #     runner; its packaged-CLI selftest is skipped because the binary cannot
 #     execute there — the architecture-independent --selftest gate still runs)
 #
-# Three lanes in one workflow:
+# Three lanes in one workflow (a fourth, branch prereleases, lives in
+# branch-release.yml):
 #   - merge to main      -> build + test + package both archs (artifacts only)
 #   - push of a v* tag   -> the same, plus a GitHub Release with both zips
 #   - workflow_dispatch  -> manual dev build (artifacts, no release)
+#
+# Tags are the stable-release lane; pushes to other branches produce rolling
+# prereleases from branch-release.yml and never pass through this file.
+#
+# The gate commands, `-SkipGates` packaging calls and artifact names below are
+# duplicated in branch-release.yml on purpose (both lanes must gate identically):
+# keep them in sync when adding a gate. `branch-release.yml` carries the mirror
+# note.
 
 name: Build & Package
 
@@ -78,8 +87,9 @@ jobs:
           path: publish/win-arm64/PTMonitor.exe
           if-no-files-found: error
 
-      # Releases are cut by pushing a v* tag. Merges to main and manual runs
-      # only produce the artifacts above and skip this step.
+      # Releases are cut by pushing a v* tag. Branch pushes are handled by
+      # branch-release.yml; merges to main and manual runs only produce the
+      # artifacts above and skip this step.
       - name: Create GitHub Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh

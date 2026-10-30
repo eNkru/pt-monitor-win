@@ -105,6 +105,8 @@ runs on Windows, and also builds/runs on Linux and macOS for development
    [Releases](https://github.com/eNkru/pt-monitor-win/releases) page — take the
    `win-x64` zip, or the `win-arm64` zip on an ARM64 Windows machine (or the
    `PTMonitor-win-x64` / `PTMonitor-win-arm64` artifacts of the latest CI run).
+   Stable builds are the entries **without** a Pre-release badge; anything
+   named `branch-build/…` is an unreviewed branch snapshot.
 2. Put it anywhere you like — a conventional spot for a per-user single-file
    app is `%LOCALAPPDATA%\PTMonitor` (no admin rights needed), e.g.
    `C:\Tools\PTMonitor\`.
@@ -547,7 +549,8 @@ scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
   make-app-icon.py               draw + encode app.ico (flat Windows style)
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
-.github/workflows/build.yml      windows-latest CI: main → artifacts, tag → release
+.github/workflows/build.yml      windows-latest CI: main → artifacts, tag → stable release
+.github/workflows/branch-release.yml  windows-latest CI: branch → prerelease; ubuntu cleanup
 ```
 
 ---
@@ -658,24 +661,58 @@ the ban logic without a real NAS.
 
 ## Continuous integration & releases
 
-`.github/workflows/build.yml` runs on `windows-latest` and builds both
-architectures on the same x64 runner (ARM64 is cross-compiled):
+Two workflows, both building the two architectures on the same `windows-latest`
+x64 runner (ARM64 is cross-compiled). The branch lane adds an `ubuntu-latest`
+cleanup job.
+
+**`build.yml` — `main` and stable releases:**
 
 ```
 checkout → setup .NET 8 → resolve version → build → selftest → test
         → package x64 → package ARM64 → upload artifacts → (tag only) Release
 ```
 
+`main` merges stay artifact-only; `v*` tags are the stable-release lane. Branch
+pushes are handled by `branch-release.yml` below.
+
 - **Every merge to `main`** runs the gates and publishes both the
   `PTMonitor-win-x64` and `PTMonitor-win-arm64` workflow artifacts.
 - **Every push of a tag `v*`** additionally creates a GitHub Release with
   **both zips** attached. The tag (minus the leading `v`) becomes the app
-  version.
+  version. This is the only lane that produces a stable, non-prerelease
+  release.
 - **Manual runs** (`workflow_dispatch`, or
   `gh workflow run build.yml --ref main`) produce the artifacts only.
-- Pull requests do **not** build.
 
-To cut a release:
+**`branch-release.yml` — try a branch on a real machine:**
+
+```
+checkout → setup .NET 8 → resolve slug/version → build → selftest → test
+        → package x64 → package ARM64 → upload artifacts → upsert prerelease
+```
+
+- **Every push to any branch other than `main`** (a new branch's first push
+  included) runs the same gates and publishes one **rolling prerelease** for
+  that branch, marked `prerelease` and never "Latest".
+- The release uses the tag `branch-build/<branch-slug>-<refhash>` and the
+  version `1.0.0-<branch-slug>-<refhash>.<sha7>`. Branch names are sanitised to
+  lowercase `[a-z0-9-]`, max 33 characters, plus a 6-hex digest of the raw ref
+  so two branches that sanitise alike (`feature/x`, `feature-x`) never share a
+  release; `feature/Tray Panel Fix` becomes
+  `branch-build/feature-tray-panel-fix-<refhash>`. Raw branch names never appear
+  in tags.
+- Repeated pushes update the **same** release, replace its assets and re-point
+  its tag — no release per commit, and the previous commit's zips are deleted
+  after the new ones upload. A newer push cancels the older run, and a failing
+  gate leaves the previous release untouched.
+- **Deleting a branch** deletes its release and its tag.
+- `workflow_dispatch` can run this lane for a chosen ref, including `main` — such
+  a release is never cleaned up automatically, because `main` is never deleted.
+- Re-running an older run rewinds the release to that run's commit.
+- A branch build is a throwaway: nothing is bumped, signed or tagged on `main`.
+- Pull requests do **not** build either lane.
+
+To cut a stable release:
 
 ```powershell
 git tag v1.0.0
