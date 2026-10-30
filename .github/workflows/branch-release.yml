@@ -16,7 +16,9 @@
 #     `feature/x` and `feature-x` both sanitise to `feature-x`, so the digest is
 #     what keeps two different branches off one shared release. Total <= 40 chars,
 #     so the tag is a legal git ref. `--prerelease --latest=false`: these never
-#     become the repository's Latest.
+#     become the repository's Latest. Assets from the previous commit are deleted
+#     after upload — their names embed the version (hence the SHA), so `--clobber`
+#     alone never replaces them and each push would strand another 2 x ~70 MB.
 #   - cleanup: deleting a branch deletes its release and tag. Deleting a `v*` tag
 #     also queues a run, but the cleanup job's `ref_type` guard skips it.
 #
@@ -183,6 +185,20 @@ jobs:
 
           gh release upload "$tag" $x64 $arm64 --clobber
           if ($LASTEXITCODE -ne 0) { throw "release upload failed" }
+
+          # Asset names carry the version, which carries the SHA, so --clobber
+          # alone never overwrites anything: without this, a branch that is
+          # pushed ten times keeps ~20 zips (about 1.4 GB) on its release. Drop
+          # every asset that is not the pair just uploaded.
+          $keep = @($x64, $arm64 | ForEach-Object { Split-Path $_ -Leaf })
+          $stale = gh release view "$tag" --json assets --jq '.assets[].name'
+          foreach ($name in $stale) {
+            if ($name -and $name -notin $keep) {
+              gh release delete-asset "$tag" $name --yes 2>&1 | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "stale asset delete failed: $name" }
+              Write-Host "removed stale asset $name"
+            }
+          }
 
           # `--prerelease` + `--latest=false`: also needs gh >= 2.39.
           & gh release edit $tag `

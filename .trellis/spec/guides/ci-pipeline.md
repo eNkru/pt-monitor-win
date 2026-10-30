@@ -39,6 +39,9 @@ Both run the same gates in the same order and package both architectures through
    re-invented (the cleanup job re-derives the slug with the same three lines).
 8. **`main` stays out of the branch lane** (`branches: ['**', '!main']`) and a
    `tags:` filter must never be added to it, or tag pushes would double-publish.
+9. **Asset names that embed a version are never replaced by `--clobber`** — the
+   name changes with every commit, so a rolling release must delete the previous
+   assets explicitly or it grows by two build zips per push.
 
 ---
 

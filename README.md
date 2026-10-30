@@ -702,8 +702,9 @@ checkout → setup .NET 8 → resolve slug/version → build → selftest → te
   `branch-build/feature-tray-panel-fix-<refhash>`. Raw branch names never appear
   in tags.
 - Repeated pushes update the **same** release, replace its assets and re-point
-  its tag — no release per commit. A newer push cancels the older run, and a
-  failing gate leaves the previous release untouched.
+  its tag — no release per commit, and the previous commit's zips are deleted
+  after the new ones upload. A newer push cancels the older run, and a failing
+  gate leaves the previous release untouched.
 - **Deleting a branch** deletes its release and its tag.
 - `workflow_dispatch` can run this lane for a chosen ref, including `main` — such
   a release is never cleaned up automatically, because `main` is never deleted.

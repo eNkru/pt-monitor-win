@@ -31,6 +31,8 @@
 - [x] Correct the header's atomicity claim and the `v*`-tag wording
 - [x] Move the tag on both release paths, before publishing (a surviving stale
       tag made the create path attach to the wrong commit)
+- [x] Prune the previous commit's assets after upload (names embed the version,
+      so `--clobber` never replaced them; a live two-push test left 4 zips)
 - [x] Concurrency group: `github.ref_name` is the default branch on `delete`
       events, so every cleanup shared one group and parallel deletions cancelled
       each other
@@ -62,6 +64,13 @@
     instead of falling into create
   - cleanup: correct tag from a `feature/x` ref, `$`/backtick ref, 404 tolerated
     (exit 0), 403 propagates (exit 1)
+  - asset pruning: only assets other than the uploaded pair are deleted, a clean
+    release issues no deletes, `delete-asset` failure throws
+- [x] **Live run on `origin`**: push to `ci/branch-release` produced
+      `branch-build/ci-branch-release-084336` (prerelease, both zips, gates
+      green, `Build & Package` not triggered, `/releases/latest` still 404); a
+      second push moved the tag and updated the notes in place — and exposed the
+      asset-accumulation defect fixed above
 
 ## Not run here
 

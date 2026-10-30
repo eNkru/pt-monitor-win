@@ -23,7 +23,8 @@ their current behaviour.
 
 - R5. One **rolling** prerelease per branch: repeated pushes to the same branch
   update that release and replace its assets instead of creating a new release
-  per commit.
+  per commit. Nothing from the previous commit is left behind — the release holds
+  two zips, not two per push.
 - R6. The release is marked `prerelease` and never becomes the repository's
   "Latest" release.
 - R7. Version string is `1.0.0-<slug>-<refhash>.<sha7>`; the tag is
@@ -63,7 +64,7 @@ their current behaviour.
 - [ ] A push to a feature branch runs build + selftest + tests for both archs and
       ends with a prerelease whose name/tag carry the sanitised branch slug.
 - [ ] A second push to the same branch updates the same release: still one
-      release, two freshly built zips, new short SHA in the notes.
+      release, exactly two zips from the new commit, new short SHA in the notes.
 - [ ] A push to `main` creates no branch release.
 - [ ] `v*` tag still produces a non-prerelease release via `build.yml`.
 - [ ] Deleting the branch removes its release and its `branch-build/<slug>-<refhash>`

@@ -64,8 +64,15 @@ on:
    mask the cause.
 3. Missing → `gh release create "$tag" <zip-x64> <zip-arm64> --target <sha>
    --prerelease --latest=false --title … --notes-file …`.
-4. Present → `gh release upload "$tag" <zips> --clobber`, then
+4. Present → `gh release upload "$tag" <zips> --clobber`, delete every asset that
+   is not one of the two just uploaded, then
    `gh release edit --title … --notes-file … --prerelease --latest=false`.
+
+The stale-asset sweep is not housekeeping cosiness: asset names embed the
+version, the version embeds the SHA, so `--clobber` never collides with anything
+and every push would strand another 2 × ~70 MB on the release (a ten-push branch
+= ~1.4 GB). Deletion runs *after* the upload, so a failed upload leaves the
+previous pair downloadable.
 
 Step 1 comes first because the update API ignores `target_commitish` for a tag
 that already exists, so `--target` alone cannot be trusted: the tag would stay on
