@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/index.md", "reason": "repo-wide non-negotiables and verification contract"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "its trigger list explicitly covers build/CI pipeline changes"}

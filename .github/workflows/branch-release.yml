@@ -1,0 +1,231 @@
+# PTMonitor branch CI — rolling prerelease per branch (Windows), x64 + ARM64.
+#
+# Contract:
+#   - trigger: any push to a branch other than `main` (a new branch's first push
+#     included), plus workflow_dispatch. `main` stays artifact-only in build.yml;
+#     `v*` tags stay on build.yml's stable-release lane and never reach here.
+#   - gate: `dotnet build -c Release` + `PTMonitor.Cli --selftest` + `dotnet test`
+#     (exit 0 = pass). A failing gate leaves the previous release untouched.
+#   - packaging: scripts/build.ps1 — self-contained single-file PTMonitor.exe for
+#     both win-x64 and win-arm64 (ARM64 is cross-compiled on the x64 runner; its
+#     packaged-CLI selftest is skipped because the binary cannot execute there —
+#     the architecture-independent --selftest gate still runs).
+#   - release: ONE rolling prerelease per branch, tag `branch-build/<slug>-<refhash>`,
+#     version `1.0.0-<slug>-<refhash>.<sha7>`, assets replaced on every push.
+#     Slugs are lowercase `[a-z0-9-]` with a 6-hex digest of the raw ref appended:
+#     `feature/x` and `feature-x` both sanitise to `feature-x`, so the digest is
+#     what keeps two different branches off one shared release. Total <= 40 chars,
+#     so the tag is a legal git ref. `--prerelease --latest=false`: these never
+#     become the repository's Latest.
+#   - cleanup: deleting a branch deletes its release and tag. Deleting a `v*` tag
+#     also queues a run, but the cleanup job's `ref_type` guard skips it.
+#
+# Ordering matters: both architectures are built and zipped BEFORE the release is
+# touched, so a failed gate leaves the previous release untouched. A run cancelled
+# mid-build or mid-upload is corrected by the next push, which re-uploads both
+# assets and re-points the tag.
+#
+# The gate commands, `-SkipGates` packaging calls and artifact names are copied
+# from build.yml on purpose (the lanes must gate identically): keep them in sync.
+# `build.yml` carries the mirror-image note.
+
+name: Branch prerelease
+
+on:
+  push:
+    branches: ['**', '!main']
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: write # release create/upload/edit, tag move, release+tag delete
+
+# One rolling release per branch: a newer push cancels the older run so two runs
+# cannot interleave --clobber uploads for the same tag. Safe — the next run
+# rebuilds and re-uploads everything.
+#
+# The delete arm is load-bearing: on `delete` events `github.ref_name` is the
+# DEFAULT branch, not the deleted ref, so using it alone would put every cleanup
+# in one group — parallel branch deletions would cancel each other and leave
+# releases behind. `&&` binds tighter than `||`.
+concurrency:
+  group: branch-release-${{ github.event_name == 'delete' && github.event.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test, package, publish prerelease
+    if: github.event_name != 'delete'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Git refs reject spaces and the characters in ~^:?*[\ , so the slug is
+      # mandatory, not cosmetic: `feature/Tray Panel Fix` -> feature-tray-panel-fix.
+      # Different branches can sanitise to the same slug (`feature/x` vs
+      # `feature-x`), so a digest of the raw ref is appended to keep tags injective.
+      # The cleanup job repeats this exact derivation — keep both copies identical.
+      - name: Resolve slug, tag and version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $slug = ("$env:GITHUB_REF_NAME".ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim([char]'-')
+          if ($slug.Length -gt 33) { $slug = $slug.Substring(0, 33).TrimEnd([char]'-') }
+          if (-not $slug) { $slug = 'branch' }
+          $refHash = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData(
+              [Text.Encoding]::UTF8.GetBytes($env:GITHUB_REF_NAME))).ToLowerInvariant().Substring(0, 6)
+          $slug = "$slug-$refHash"
+
+          $sha = "${env:GITHUB_SHA}".Substring(0, 7)
+          "BRANCH_SLUG=$slug" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BRANCH_TAG=branch-build/$slug" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "APP_VERSION=1.0.0-$slug.$sha" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build (Release)
+        run: dotnet build -c Release
+
+      - name: Self-test
+        run: dotnet run --project src/PTMonitor.Cli -c Release --no-build -- --selftest
+
+      - name: Unit tests
+        run: dotnet test tests/PTMonitor.Core.Tests -c Release --no-build
+
+      # Gates ran above once; each package step publishes one architecture. Both
+      # zips must exist before the release step uploads anything.
+      - name: Package x64
+        shell: pwsh
+        run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-x64 -SkipGates
+
+      - name: Package ARM64
+        shell: pwsh
+        run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-arm64 -SkipGates
+
+      - name: Upload workflow artifact (x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PTMonitor-win-x64
+          path: publish/win-x64/PTMonitor.exe
+          if-no-files-found: error
+
+      - name: Upload workflow artifact (ARM64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PTMonitor-win-arm64
+          path: publish/win-arm64/PTMonitor.exe
+          if-no-files-found: error
+
+      - name: Upsert rolling prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:BRANCH_TAG
+          $sha = $env:GITHUB_SHA
+          $x64 = "artifacts/PTMonitor-$env:APP_VERSION-win-x64.zip"
+          $arm64 = "artifacts/PTMonitor-$env:APP_VERSION-win-arm64.zip"
+          $title = "PTMonitor $env:APP_VERSION (branch build)"
+          $notes = Join-Path $env:RUNNER_TEMP 'branch-release-notes.md'
+          $subject = (git log -1 --pretty=%s | Out-String).Trim()
+
+          @(
+            "Automatic prerelease build of ``$env:BRANCH_SLUG``."
+            ""
+            "- Ref: ``$env:GITHUB_REF_NAME``"
+            "- Commit: ``$($sha.Substring(0, 7))``"
+            "- Subject: $subject"
+            ""
+            "Download the zip for your architecture (``win-x64`` or ``win-arm64``), unzip it, and run ``PTMonitor.exe`` — no .NET runtime install needed."
+            ""
+            "Rolling release: the next push to this branch replaces these assets."
+          ) | Set-Content -Path $notes -Encoding utf8
+
+          # The tag is re-pointed to this commit on BOTH paths, before anything is
+          # published. GitHub ignores `target_commitish` for a tag that already
+          # exists, so relying on create alone would leave the ref on the branch's
+          # first commit whenever a release was deleted by hand (tag surviving) —
+          # notes and assets would then advertise a SHA the tag does not have.
+          # Force-pushing also recreates a tag deleted out-of-band.
+          git tag -f "$tag" $sha
+          if ($LASTEXITCODE -ne 0) { throw "tag move failed" }
+          git push --force origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "tag push failed" }
+
+          # Only a real "not found" means absent: auth/network/rate-limit failures
+          # must not silently fall through to a create that masks the real cause.
+          $view = gh release view "$tag" --json tagName 2>&1 | Out-String
+          if ($LASTEXITCODE -eq 0) {
+            $exists = $true
+          } elseif ($view -match 'not found|404') {
+            $exists = $false
+          } else {
+            throw "release view failed:`n$view"
+          }
+
+          if (-not $exists) {
+            # `--prerelease` carries R6; `--latest=false` is belt-and-braces and,
+            # like the one on `release edit` below, needs gh >= 2.39.
+            gh release create "$tag" $x64 $arm64 `
+              --target "$sha" `
+              --prerelease `
+              --latest=false `
+              --title "$title" `
+              --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { throw "release create failed" }
+            exit 0
+          }
+
+          gh release upload "$tag" $x64 $arm64 --clobber
+          if ($LASTEXITCODE -ne 0) { throw "release upload failed" }
+
+          # `--prerelease` + `--latest=false`: also needs gh >= 2.39.
+          & gh release edit $tag `
+            --prerelease `
+            --latest=false `
+            --title "$title" `
+            --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { throw "release edit failed" }
+
+  # R12: deleting a branch must not leak its rolling release or tag forever.
+  # Tag deletions reuse this workflow; only branch deletions do work.
+  # Needs no Windows runner: gh plus string handling only (pwsh ships on Linux).
+  cleanup:
+    name: Delete branch release
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      # Passed through the environment rather than interpolated into the script:
+      # a branch name can legally contain `$`, backtick or `"`, which pwsh would
+      # otherwise expand/mis-parse inside a double-quoted string.
+      DELETED_REF: ${{ github.event.ref }}
+    steps:
+      - name: Delete rolling release and tag
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Identical derivation to the build job's slug step (plus the ref digest).
+          $slug = ("$env:DELETED_REF".ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim([char]'-')
+          if ($slug.Length -gt 33) { $slug = $slug.Substring(0, 33).TrimEnd([char]'-') }
+          if (-not $slug) { $slug = 'branch' }
+          $refHash = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData(
+              [Text.Encoding]::UTF8.GetBytes($env:DELETED_REF))).ToLowerInvariant().Substring(0, 6)
+          $tag = "branch-build/$slug-$refHash"
+
+          $output = gh release delete "$tag" --cleanup-tag --yes 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            # Tolerated: the branch was deleted before it was ever built.
+            if ($output -match 'not found|404') {
+              Write-Host "No release for $tag — nothing to clean up."
+              exit 0
+            }
+            throw "release delete failed:`n$output"
+          }

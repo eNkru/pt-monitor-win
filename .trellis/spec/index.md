@@ -22,7 +22,7 @@ code here**, not what the app does.
 |---|---|---|
 | [`backend/`](./backend/index.md) | `src/PTMonitor.Core`, `src/PTMonitor.Cli`, `tests/` | Domain model, API clients, stores, formatting, diagnostics. No UI types. |
 | [`frontend/`](./frontend/index.md) | `src/PTMonitor.App` | Avalonia views, view-models, tray icon, localization, app lifecycle. |
-| [`guides/`](./guides/index.md) | all | Cross-cutting thinking guides (reuse, cross-layer data flow). |
+| [`guides/`](./guides/index.md) | all | Cross-cutting thinking guides (reuse, cross-layer data flow, CI/release pipeline). |
 
 `backend`/`frontend` are Trellis layer names, not a web split. "Backend" =
 everything that must stay UI-free and headlessly testable.
@@ -67,5 +67,7 @@ dotnet run --project src/PTMonitor.Cli -c Release -- --selftest
 dotnet test tests/PTMonitor.Core.Tests -c Release
 ```
 
-All three must be green. `dotnet build` alone is not verification: the app
-compiles fine with a broken parser table.
+All three must be green. Workflow changes also get `actionlint` plus a diff
+against the other lane — see [`guides/ci-pipeline.md`](./guides/ci-pipeline.md).
+`dotnet build` alone is not verification: the app compiles fine with a broken
+parser table.

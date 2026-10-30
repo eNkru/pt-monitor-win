@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/index.md", "reason": "verification checklist before calling the change done"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "gate contract (build + selftest + tests) the pipeline must keep enforcing"}
