@@ -47,9 +47,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
     app-icon artwork proper),
   - every enabled server failing — red arrows, full pill, red tile outline.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
-- **Floating speed chip (opt-in)** — a small always-on-top `↓ / ↑` readout that
-  can be dragged anywhere; the position is remembered across restarts. Click it
-  to open the panel. Off by default; enable it from the tray menu or Preferences.
+- **Floating speed chip (opt-in)** — a small always-on-top readout, either
+  numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
+  upload). It can be dragged anywhere and the position is remembered across
+  restarts; click it to open the panel. Off by default; enable it from the tray
+  menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -181,14 +183,21 @@ To uninstall: quit from the tray menu and delete the exe plus that folder.
 
 ### Floating speed chip
 
-A compact `↓ 1.2M  ↑ 340K` chip that stays on top of other windows. It shows the
-same aggregate rates as the panel and `—` when no server is online.
+A 56×56 opaque square that stays on top of other windows. It shows the same
+aggregate rates as the panel and `—` when no server is online.
 
+- **Two display modes**, chosen in Preferences:
+  - **Numbers** — `↓ 1.2M` over `↑ 340K`.
+  - **Graph** — a rolling one-minute plot: download in green, upload in orange,
+    both overlaid on one axes and scaled to the peak of the visible window.
 - **Click** — opens the panel (the chip stays visible).
 - **Drag** — moves the chip; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed.
 - **Toggle** — tray menu → *Show floating speed window*, or the matching
   Preferences checkbox. Off by default.
+
+The window is deliberately opaque, square and shadow-free: no transparency
+layer is composited, which keeps a permanently-on-top 56 px window cheap.
 
 ### Preferences
 
@@ -199,6 +208,7 @@ same aggregate rates as the panel and `—` when no server is online.
 | **Poll every N seconds** | 1–60 s, default 2 s. Global; one loop per server. |
 | **Show speeds in the tray tooltip** | Icon state is always shown regardless |
 | **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, click to open the panel |
+| **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s) |
 | **Torrents shown in the panel** | All / ↓ Down / ↑ Up / Active (also settable from the panel) |
 | **Language** | Follow System / English / 简体中文 — applies immediately |
 
@@ -550,6 +560,7 @@ src/
     Views/
       MainPanelWindow.axaml(.cs)     the dropdown panel
       FloatingSpeedWindow.axaml(.cs) optional floating speed chip
+      SpeedGraph.cs                  rolling two-colour graph, drawn at runtime
       PreferencesWindow.axaml(.cs)   server list + preferences + language
       ServerEditorWindow.axaml(.cs)  add/edit + Test Connection
   PTMonitor.Core/                all reusable logic (no UI references)

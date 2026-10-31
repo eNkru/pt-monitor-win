@@ -15,16 +15,17 @@
             <Setter Property="BoxShadow" Value="0 12 40 12 #66000000" />
         </Style>
 
-        <!-- Floating speed chip: card surface with a compact radius/padding. -->
-        <Style Selector="Border.floatingChip">
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="10,5" />
-        </Style>
-
+        <!-- Floating speed chip: small, opaque, no rounded corners, so the
+             window needs no transparency/compositing layer. -->
         <Style Selector="TextBlock.floatingRate">
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontFamily" Value="Consolas,Inter,monospace" />
+        </Style>
+
+        <Style Selector="TextBlock.floatingArrow">
+            <Setter Property="FontSize" Value="8.5" />
+            <Setter Property="Opacity" Value="0.5" />
         </Style>
 
         <Style Selector="TextBlock.statLabel">

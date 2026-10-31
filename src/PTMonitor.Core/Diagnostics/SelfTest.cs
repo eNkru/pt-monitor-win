@@ -470,6 +470,7 @@ public static class SelfTest
             c.Expect("settings: default interval", settings.PollInterval, 2.0);
             c.True("settings: default speeds", settings.ShowSpeedsInMenuBar);
             c.True("settings: floating off", !settings.ShowFloatingSpeeds);
+            c.Expect("settings: default floating display", settings.FloatingDisplay, FloatingDisplayMode.Numbers);
             c.True("settings: no floating position", settings.FloatingPositionX is null && settings.FloatingPositionY is null);
             c.Expect("settings: default mode", settings.TorrentListMode, TorrentListMode.All);
 
@@ -490,6 +491,7 @@ public static class SelfTest
             settings.SetTorrentListMode(TorrentListMode.Uploading);
             settings.SetAppLanguage(AppLanguage.Chinese);
             settings.SetShowFloatingSpeeds(true);
+            settings.SetFloatingDisplayMode(FloatingDisplayMode.Graph);
             settings.SetFloatingPosition(320, 240);
 
             var reloaded = new SettingsStore(settings.FilePath);
@@ -499,6 +501,7 @@ public static class SelfTest
             c.Expect("settings: reload mode", reloaded.TorrentListMode, TorrentListMode.Uploading);
             c.Expect("settings: reload language", reloaded.AppLanguage, AppLanguage.Chinese);
             c.True("settings: reload floating", reloaded.ShowFloatingSpeeds);
+            c.Expect("settings: reload floating display", reloaded.FloatingDisplay, FloatingDisplayMode.Graph);
             c.True("settings: reload floating position",
                 reloaded.FloatingPositionX == 320 && reloaded.FloatingPositionY == 240);
             reloaded.Delete(server.Id);

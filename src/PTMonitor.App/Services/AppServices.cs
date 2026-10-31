@@ -24,6 +24,7 @@ public sealed class AppServices
     public MonitorStore Monitor { get; }
 
     private readonly TrayIcon _trayIcon;
+    private readonly DispatcherTimer _floatingTicker;
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
@@ -41,6 +42,11 @@ public sealed class AppServices
 
         L10n.SetLanguage(Settings.AppLanguage);
         Settings.Changed += OnSettingsChanged;
+
+        // Graph mode samples once a second so the line rolls even while the
+        // rates are steady (StatusesChanged only fires on a real change).
+        _floatingTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _floatingTicker.Tick += (_, _) => PushFloatingSample();
 
         _trayIcon = new TrayIcon
         {
@@ -146,12 +152,28 @@ public sealed class AppServices
         if (!Settings.ShowFloatingSpeeds)
         {
             if (_floating is { IsVisible: true } visible) visible.Hide();
+            _floatingTicker.Stop();
             return;
         }
 
         if (_floating is null) _floating = new FloatingSpeedWindow();
         if (!_floating.IsVisible) _floating.Show();
         else _floating.RefreshLocalization();
+
+        _floating.SetDisplayMode(Settings.FloatingDisplay);
+        if (Settings.FloatingDisplay == FloatingDisplayMode.Graph)
+        {
+            if (!_floatingTicker.IsEnabled)
+            {
+                PushFloatingSample();
+                _floatingTicker.Start();
+            }
+        }
+        else
+        {
+            _floatingTicker.Stop();
+        }
+
         UpdateFloatingRates();
     }
 
@@ -160,6 +182,14 @@ public sealed class AppServices
         if (_floating is not { IsVisible: true } floating) return;
         var aggregate = Monitor.Aggregate;
         floating.ShowRates(aggregate.DownSpeed, aggregate.UpSpeed, aggregate.OnlineServers > 0);
+    }
+
+    private void PushFloatingSample()
+    {
+        if (_floating is not { IsVisible: true } floating) return;
+        if (Settings.FloatingDisplay != FloatingDisplayMode.Graph) return;
+        var aggregate = Monitor.Aggregate;
+        floating.PushSample(aggregate.DownSpeed, aggregate.UpSpeed);
     }
 
     private static string ByteRateFormatterSpeedText(MonitorAggregate aggregate) =>
@@ -232,6 +262,7 @@ public sealed class AppServices
     public void Quit()
     {
         _quitRequested = true;
+        _floatingTicker.Stop();
         Monitor.StopAsync();
         if (GetApp().ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

@@ -8,7 +8,7 @@
 
 | State | Owner | Read via |
 |---|---|---|
-| Servers, poll interval, list mode, language, tray toggle, floating-chip toggle + position | `SettingsStore` (`AppServices.Settings`) | `Settings.Servers`, `Settings.PollInterval`, … |
+| Servers, poll interval, list mode, language, tray toggle, floating-chip toggle/display mode/position | `SettingsStore` (`AppServices.Settings`) | `Settings.Servers`, `Settings.PollInterval`, … |
 | Live per-server status | `MonitorStore` (`AppServices.Monitor`) | `Monitor.Statuses` (copy), `Monitor.Aggregate` |
 | Passwords | `ISecretStore` (`AppServices.Secrets`) | `Secrets.Get(id)` |
 | Expanded row, freshness text, section list | `PanelViewModel` | view-model properties |

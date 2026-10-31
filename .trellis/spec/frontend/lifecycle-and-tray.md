@@ -89,22 +89,41 @@ alive.
 
 ## Floating speed chip
 
-`FloatingSpeedWindow` is the optional always-on-top `↓ / ↑` chip
+`FloatingSpeedWindow` is the optional always-on-top square chip
 (`Topmost`, `ShowActivated=False`, `SystemDecorations=None`,
-`ShowInTaskbar=False`, `SizeToContent`), created and cached by `AppServices`:
+`ShowInTaskbar=False`, `SizeToContent`), created and cached by `AppServices`.
+It is **opaque** (fixed `Background`, no `TransparencyLevelHint`, no
+`CornerRadius`, no `BoxShadow`): a transparent/topmost window costs an alpha
+composition layer every frame, which is not worth it for a 56 px widget. Keep it
+that way unless the design genuinely needs transparency.
 
 - `SyncFloatingWindow()` (called from the constructor and every
-  `Settings.Changed`) shows/hides it to match
-  `Settings.ShowFloatingSpeeds`; `UpdateTray()` refreshes its rates on every
-  poll, so it needs no timer.
-- Offline (`Aggregate.OnlineServers == 0`) renders `—` for both rates.
+  `Settings.Changed`) shows/hides it to match `Settings.ShowFloatingSpeeds`,
+  applies `Settings.FloatingDisplay`, and starts/stops the 1 s graph ticker.
+- `UpdateTray()` refreshes the numeric rates on every poll. The ticker is only
+  needed for graph mode, because `StatusesChanged` is suppressed when the rates
+  are unchanged — without sampling the line would stop rolling.
+- Display modes (`FloatingDisplayMode`): `Numbers` — `↓ rate` / `↑ rate` with
+  `—` when `Aggregate.OnlineServers == 0`; `Graph` — `SpeedGraph`, a custom
+  control that draws two overlaid series (download green `#35C46F`, upload
+  orange `#F2994A`) over the last 60 one-second samples, scaled to the peak of
+  the visible window. No assets, no chart library.
 - Gesture: a press+release under the 4 px threshold opens the panel; crossing
-  the threshold calls `BeginMoveDrag` instead, so a drag never clicks.
+  the threshold calls `BeginMoveDrag` instead, so a drag never clicks. The chip
+  `Border` sets `Background="Transparent"` purely as a hit-test surface — a
+  `Border`/`Grid` with a null background does not receive pointer events in its
+  empty areas, so without it only the digits would be draggable.
+- Cursor: `Services/CursorFactory.OpenHand()` draws a 32 px open-hand cursor at
+  runtime — the macOS grab-hand look (white body, dark outline, fanned fingers,
+  slight lean, rounded wrist, hot spot on the index fingertip) — and the window
+  assigns it. Windows/Avalonia's `StandardCursorType.Hand` is the pointing
+  finger, not an open hand, and there is no standard open-hand cursor to ask
+  for, so it is drawn like the tray icons, with no binary asset.
 - `Place()` restores `FloatingPositionX/Y` when the point still lands on a
   screen's work area, otherwise docks to the primary work area's bottom-right
   (±12 px gap), then clamps. The position is written back once per drag.
 - Enabling/disabling never closes the window — it is hidden, so the rates and
-  the saved position survive a toggle.
+  the saved position survive a toggle. The ticker is stopped while hidden.
 
 ## Tray presentation
 

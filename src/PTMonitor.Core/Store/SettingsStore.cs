@@ -27,6 +27,7 @@ public sealed class SettingsStore
     private double _pollInterval = DefaultPollInterval;
     private bool _showSpeedsInMenuBar = true;
     private bool _showFloatingSpeeds;
+    private FloatingDisplayMode _floatingDisplayMode = FloatingDisplayMode.Numbers;
     private int? _floatingPositionX;
     private int? _floatingPositionY;
     private TorrentListMode _torrentListMode = TorrentListMode.All;
@@ -60,6 +61,11 @@ public sealed class SettingsStore
     public bool ShowFloatingSpeeds
     {
         get { lock (_gate) return _showFloatingSpeeds; }
+    }
+
+    public FloatingDisplayMode FloatingDisplay
+    {
+        get { lock (_gate) return _floatingDisplayMode; }
     }
 
     public int? FloatingPositionX
@@ -169,6 +175,16 @@ public sealed class SettingsStore
         PersistAndNotify();
     }
 
+    public void SetFloatingDisplayMode(FloatingDisplayMode mode)
+    {
+        lock (_gate)
+        {
+            if (_floatingDisplayMode == mode) return;
+            _floatingDisplayMode = mode;
+        }
+        PersistAndNotify();
+    }
+
     public void SetFloatingPosition(int x, int y)
     {
         lock (_gate)
@@ -222,6 +238,7 @@ public sealed class SettingsStore
                     PollInterval = _pollInterval,
                     ShowSpeedsInMenuBar = _showSpeedsInMenuBar,
                     ShowFloatingSpeeds = _showFloatingSpeeds,
+                    FloatingDisplay = _floatingDisplayMode,
                     FloatingPositionX = _floatingPositionX,
                     FloatingPositionY = _floatingPositionY,
                     TorrentListMode = _torrentListMode,
@@ -251,6 +268,7 @@ public sealed class SettingsStore
             _pollInterval = Clamp(file.PollInterval ?? DefaultPollInterval);
             _showSpeedsInMenuBar = file.ShowSpeedsInMenuBar ?? true;
             _showFloatingSpeeds = file.ShowFloatingSpeeds ?? false;
+            _floatingDisplayMode = file.FloatingDisplay ?? FloatingDisplayMode.Numbers;
             _floatingPositionX = file.FloatingPositionX;
             _floatingPositionY = file.FloatingPositionY;
             _torrentListMode = file.TorrentListMode ?? TorrentListMode.All;
@@ -262,6 +280,7 @@ public sealed class SettingsStore
             _pollInterval = DefaultPollInterval;
             _showSpeedsInMenuBar = true;
             _showFloatingSpeeds = false;
+            _floatingDisplayMode = FloatingDisplayMode.Numbers;
             _floatingPositionX = null;
             _floatingPositionY = null;
             _torrentListMode = TorrentListMode.All;
@@ -275,6 +294,7 @@ public sealed class SettingsStore
         public double? PollInterval { get; set; }
         public bool? ShowSpeedsInMenuBar { get; set; }
         public bool? ShowFloatingSpeeds { get; set; }
+        public FloatingDisplayMode? FloatingDisplay { get; set; }
         public int? FloatingPositionX { get; set; }
         public int? FloatingPositionY { get; set; }
         public TorrentListMode? TorrentListMode { get; set; }

@@ -17,11 +17,13 @@ src/PTMonitor.App/
     AppServices.cs           composition root: stores, tray, windows, quit
     L10n.cs                  en + zh-Hans string tables
     TrayIconFactory.cs       tray icons drawn as vectors at runtime
+    CursorFactory.cs         open-hand cursor drawn at runtime
   ViewModels/
     PanelViewModel.cs        sections, rows, expansion, aggregate, filters
   Views/
     MainPanelWindow.axaml(.cs)
     FloatingSpeedWindow.axaml(.cs)
+    SpeedGraph.cs                 rolling graph control, drawn at runtime
     PreferencesWindow.axaml(.cs)
     ServerEditorWindow.axaml(.cs)
 ```

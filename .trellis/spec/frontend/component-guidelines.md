@@ -37,8 +37,8 @@ Reusable looks are class selectors in `App.axaml`; XAML applies them with
 <Style Selector="Button.footerRow">…</Style>
 ```
 
-Existing classes: `card`, `floatingChip`, `statLabel`, `statValue`,
-`floatingRate`, `sectionHeader`, `sectionSpeed`, `segment`, `prefSegment`,
+Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
+`floatingArrow`, `sectionHeader`, `sectionSpeed`, `segment`, `prefSegment`,
 `torrentBar`, `link`, `footerRow`, `accent`, `danger`.
 
 - One-off values (a margin, a font size one notch smaller) stay inline.
@@ -62,8 +62,8 @@ Existing classes: `card`, `floatingChip`, `statLabel`, `statValue`,
   `TransparencyLevelHint="Transparent"`, `Background="Transparent"`,
   `SizeToContent="Height"`, `WindowStartupLocation="Manual"`.
 - Floating chip: `Topmost="True"`, `ShowActivated="False"`, `CanResize="False"`,
-  the panel's transparency/decoration set, and `SizeToContent="WidthAndHeight"`
-  so the `card floatingChip` border is the whole window.
+  an **opaque** `Background`, no transparency hint / corner radius / shadow, and
+  `SizeToContent="WidthAndHeight"` so the 56 px border is the whole window.
 - Dialogs: `CanResize="False"`, `CenterOwner`/`CenterScreen`, fixed `Width`.
 - Root content is a `StackPanel`/`Grid` with `Margin="16"` in dialogs; the panel
   uses the `card` border with `CornerRadius="14"` and `Padding="14"`.

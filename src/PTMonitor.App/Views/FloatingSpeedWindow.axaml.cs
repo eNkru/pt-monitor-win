@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using PTMonitor.App.Services;
 using PTMonitor.Core.Format;
+using PTMonitor.Core.Model;
 
 namespace PTMonitor.App.Views;
 
@@ -23,6 +24,9 @@ public partial class FloatingSpeedWindow : Window
     public FloatingSpeedWindow()
     {
         InitializeComponent();
+        // Open-hand cursor across the whole square: Avalonia's standard "Hand"
+        // is a pointing finger, which reads as a link rather than "grab me".
+        Cursor = CursorFactory.OpenHand();
     }
 
     protected override void OnOpened(EventArgs e)
@@ -38,9 +42,20 @@ public partial class FloatingSpeedWindow : Window
     /// <summary>Writes the aggregate rates; an offline aggregate renders a dash.</summary>
     public void ShowRates(long down, long up, bool online)
     {
-        DownText.Text = online ? $"{ByteRateFormatter.DownArrow} {ByteRateFormatter.Rate(down)}" : "—";
-        UpText.Text = online ? $"{ByteRateFormatter.UpArrow} {ByteRateFormatter.Rate(up)}" : "—";
+        DownText.Text = online ? ByteRateFormatter.Rate(down) : "—";
+        UpText.Text = online ? ByteRateFormatter.Rate(up) : "—";
     }
+
+    /// <summary>Switches between the numeric readout and the rolling graph.</summary>
+    public void SetDisplayMode(FloatingDisplayMode mode)
+    {
+        var graph = mode == FloatingDisplayMode.Graph;
+        NumbersView.IsVisible = !graph;
+        Graph.IsVisible = graph;
+    }
+
+    /// <summary>Appends one sample to the rolling graph.</summary>
+    public void PushSample(long down, long up) => Graph.Push(down, up);
 
     // MARK: - Gesture
 
@@ -51,6 +66,9 @@ public partial class FloatingSpeedWindow : Window
         _dragged = false;
         _pressPoint = e.GetPosition(this);
         _pressArgs = e;
+        // Capture on the chip so moves still arrive if the press landed on a
+        // child (a digit or the graph) or the cursor leaves the square.
+        e.Pointer.Capture(Chip);
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
@@ -76,6 +94,7 @@ public partial class FloatingSpeedWindow : Window
         _pressed = false;
         _dragged = false;
         _pressArgs = null;
+        e.Pointer.Capture(null);
         if (wasClick) AppServices.Instance.ShowPanel();
     }
 
@@ -98,8 +117,8 @@ public partial class FloatingSpeedWindow : Window
 
         // SizeToContent leaves Bounds empty until the first layout pass, so use
         // a fallback and scale the logical size to physical pixels.
-        var width = (Bounds.Width > 1 ? Bounds.Width : 140) * scaling;
-        var height = (Bounds.Height > 1 ? Bounds.Height : 34) * scaling;
+        var width = (Bounds.Width > 1 ? Bounds.Width : 56) * scaling;
+        var height = (Bounds.Height > 1 ? Bounds.Height : 56) * scaling;
 
         double x, y;
         if (settings.FloatingPositionX is { } savedX && settings.FloatingPositionY is { } savedY
@@ -128,5 +147,9 @@ public partial class FloatingSpeedWindow : Window
     {
         Title = L10n.S("PT Monitor speeds");
         ToolTip.SetTip(Chip, L10n.S("Open PT Monitor"));
+        // Glyphs, not words — taken from the formatter so they cannot drift
+        // from the panel's arrows.
+        DownArrow.Text = ByteRateFormatter.DownArrow;
+        UpArrow.Text = ByteRateFormatter.UpArrow;
     }
 }
