@@ -26,6 +26,7 @@ public sealed class AppServices
     private readonly TrayIcon _trayIcon;
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
+    private FloatingSpeedWindow? _floating;
     private bool _quitRequested;
 
     private AppServices()
@@ -59,6 +60,8 @@ public sealed class AppServices
         // opens the native menu above).
         _trayIcon.Clicked += (_, _) => TogglePanel();
 
+        SyncFloatingWindow();
+
         if (Settings.Servers.Count == 0)
         {
             // First run: open the preferences directly (AC4).
@@ -80,6 +83,18 @@ public sealed class AppServices
         var menu = new NativeMenu();
         menu.Items.Add(NewItem("PT Monitor", () => TogglePanel(), isEnabled: false));
         menu.Items.Add(NewItem(L10n.S("Refresh Now"), RefreshNow));
+        var floatingItem = new NativeMenuItem
+        {
+            Header = L10n.S("Show floating speed window"),
+            ToggleType = NativeMenuItemToggleType.CheckBox,
+            IsChecked = Settings.ShowFloatingSpeeds,
+        };
+        // Posted, not called inline: the settings write rebuilds this native
+        // menu, and doing that while the popup is still dispatching its click
+        // is not safe.
+        floatingItem.Click += (_, _) => Dispatcher.UIThread.Post(
+            () => Settings.SetShowFloatingSpeeds(!Settings.ShowFloatingSpeeds));
+        menu.Items.Add(floatingItem);
         menu.Items.Add(NewItem(L10n.S("Preferences…"), ShowPreferences));
         menu.Items.Add(NewMenuItemSeparator());
         menu.Items.Add(NewItem(L10n.S("Quit PT Monitor"), Quit));
@@ -102,6 +117,7 @@ public sealed class AppServices
         // Rebuild the menu so its titles follow the language.
         _trayIcon.Menu = BuildMenu();
         UpdateTray();
+        SyncFloatingWindow();
     }
 
     private void UpdateTray()
@@ -122,6 +138,28 @@ public sealed class AppServices
             text = $"PT Monitor {speed} — {L10n.ServerCount(Settings.Servers.Count, aggregate.OnlineServers)}";
         }
         _trayIcon.ToolTipText = text;
+        UpdateFloatingRates();
+    }
+
+    private void SyncFloatingWindow()
+    {
+        if (!Settings.ShowFloatingSpeeds)
+        {
+            if (_floating is { IsVisible: true } visible) visible.Hide();
+            return;
+        }
+
+        if (_floating is null) _floating = new FloatingSpeedWindow();
+        if (!_floating.IsVisible) _floating.Show();
+        else _floating.RefreshLocalization();
+        UpdateFloatingRates();
+    }
+
+    private void UpdateFloatingRates()
+    {
+        if (_floating is not { IsVisible: true } floating) return;
+        var aggregate = Monitor.Aggregate;
+        floating.ShowRates(aggregate.DownSpeed, aggregate.UpSpeed, aggregate.OnlineServers > 0);
     }
 
     private static string ByteRateFormatterSpeedText(MonitorAggregate aggregate) =>
@@ -134,6 +172,17 @@ public sealed class AppServices
         if (_panel is { IsVisible: true } visible)
         {
             visible.Hide();
+            return;
+        }
+        ShowPanel();
+    }
+
+    /// <summary>Shows and activates the panel (the floating chip always opens it).</summary>
+    public void ShowPanel()
+    {
+        if (_panel is { IsVisible: true } visible)
+        {
+            visible.Activate();
             return;
         }
         _panel ??= new MainPanelWindow();

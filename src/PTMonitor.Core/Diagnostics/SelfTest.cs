@@ -469,6 +469,8 @@ public static class SelfTest
             c.Expect("settings: empty", settings.Servers.Count, 0);
             c.Expect("settings: default interval", settings.PollInterval, 2.0);
             c.True("settings: default speeds", settings.ShowSpeedsInMenuBar);
+            c.True("settings: floating off", !settings.ShowFloatingSpeeds);
+            c.True("settings: no floating position", settings.FloatingPositionX is null && settings.FloatingPositionY is null);
             c.Expect("settings: default mode", settings.TorrentListMode, TorrentListMode.All);
 
             var server = new ServerConfig(ServerKind.Qbittorrent, "192.168.1.2", 8080) { Name = "NAS" };
@@ -487,6 +489,8 @@ public static class SelfTest
             settings.SetShowSpeedsInMenuBar(false);
             settings.SetTorrentListMode(TorrentListMode.Uploading);
             settings.SetAppLanguage(AppLanguage.Chinese);
+            settings.SetShowFloatingSpeeds(true);
+            settings.SetFloatingPosition(320, 240);
 
             var reloaded = new SettingsStore(settings.FilePath);
             c.Expect("settings: reload count", reloaded.Servers.Count, 1);
@@ -494,6 +498,9 @@ public static class SelfTest
             c.True("settings: reload speeds", !reloaded.ShowSpeedsInMenuBar);
             c.Expect("settings: reload mode", reloaded.TorrentListMode, TorrentListMode.Uploading);
             c.Expect("settings: reload language", reloaded.AppLanguage, AppLanguage.Chinese);
+            c.True("settings: reload floating", reloaded.ShowFloatingSpeeds);
+            c.True("settings: reload floating position",
+                reloaded.FloatingPositionX == 320 && reloaded.FloatingPositionY == 240);
             reloaded.Delete(server.Id);
             c.Expect("settings: delete", reloaded.Servers.Count, 0);
 

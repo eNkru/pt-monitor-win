@@ -8,7 +8,7 @@
 
 | State | Owner | Read via |
 |---|---|---|
-| Servers, poll interval, list mode, language, tray toggle | `SettingsStore` (`AppServices.Settings`) | `Settings.Servers`, `Settings.PollInterval`, … |
+| Servers, poll interval, list mode, language, tray toggle, floating-chip toggle + position | `SettingsStore` (`AppServices.Settings`) | `Settings.Servers`, `Settings.PollInterval`, … |
 | Live per-server status | `MonitorStore` (`AppServices.Monitor`) | `Monitor.Statuses` (copy), `Monitor.Aggregate` |
 | Passwords | `ISecretStore` (`AppServices.Secrets`) | `Secrets.Get(id)` |
 | Expanded row, freshness text, section list | `PanelViewModel` | view-model properties |
@@ -80,4 +80,7 @@ come from `Monitor.Aggregate` / `Monitor.MenuBarState` / `Snapshot` at
 - Copying a status snapshot into a field and reading it later across a poll.
 - Storing the password on `ServerConfig` or in the editor beyond the save call.
 - Any second source of truth for the poll interval or list mode.
-- Persisting UI-only state (expanded row, window position).
+- Persisting UI-only state (expanded row, transient window state). The one
+  deliberate exception is the floating speed chip's position
+  (`FloatingPositionX/Y`), which the user expects to survive a restart; the
+  main panel's position is still not persisted.

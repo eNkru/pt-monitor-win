@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PTMonitor.App.Views.FloatingSpeedWindow"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <Border x:Name="Chip" Classes="card floatingChip" Cursor="Hand"
+            PointerPressed="OnPointerPressed"
+            PointerMoved="OnPointerMoved"
+            PointerReleased="OnPointerReleased">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock x:Name="DownText" Classes="floatingRate" />
+            <TextBlock x:Name="UpText" Classes="floatingRate" />
+        </StackPanel>
+    </Border>
+</Window>

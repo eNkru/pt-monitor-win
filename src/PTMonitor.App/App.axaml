@@ -15,6 +15,18 @@
             <Setter Property="BoxShadow" Value="0 12 40 12 #66000000" />
         </Style>
 
+        <!-- Floating speed chip: card surface with a compact radius/padding. -->
+        <Style Selector="Border.floatingChip">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="10,5" />
+        </Style>
+
+        <Style Selector="TextBlock.floatingRate">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontFamily" Value="Consolas,Inter,monospace" />
+        </Style>
+
         <Style Selector="TextBlock.statLabel">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />

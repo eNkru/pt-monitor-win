@@ -21,12 +21,14 @@ src/PTMonitor.App/
     PanelViewModel.cs        sections, rows, expansion, aggregate, filters
   Views/
     MainPanelWindow.axaml(.cs)
+    FloatingSpeedWindow.axaml(.cs)
     PreferencesWindow.axaml(.cs)
     ServerEditorWindow.axaml(.cs)
 ```
 
-Three views, one view-model file. That is the whole UI — resist adding a folder
-per feature until there is a second view-model.
+Four views, one view-model file. That is the whole UI — resist adding a folder
+per feature until there is a second view-model. `FloatingSpeedWindow` has no
+bindings, so it uses code-behind like the dialogs.
 
 ---
 
@@ -56,6 +58,7 @@ per feature until there is a second view-model.
 | New window | `Views/`, opened and cached by `AppServices` |
 | New tray state | `TrayIconFactory` + `Monitor.MenuBarState` switch in `AppServices.UpdateTray` |
 | New preference control | `PreferencesWindow.axaml` + `OnOpened`/`Reload` wiring |
+| New always-on-top overlay | `Views/`, cached and shown by `AppServices` (see `FloatingSpeedWindow`) |
 
 ---
 

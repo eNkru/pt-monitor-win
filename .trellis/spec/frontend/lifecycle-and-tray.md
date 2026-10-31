@@ -29,10 +29,14 @@ AppServices.Initialize();
 | Left-click tray icon | `TogglePanel()` |
 | `Deactivated` on the panel | `Hide()` |
 | `Escape` / `Cancel` | `Hide()` |
+| Click on the floating chip | `ShowPanel()` (show + activate) |
 | X / `Close()` on a window | the window closes; the process stays in the tray (`OnExplicitShutdown`). `PreferencesWindow` clears its cached reference via its `Closed` handler. The panel has no close button (borderless) — it hides on deactivate/Esc. |
 | Tray menu → Quit | `Quit()` |
 
-Windows are cached in `AppServices` (`_panel`, `_preferences`) and reused. Only
+`TogglePanel()` answers the tray click; `ShowPanel()` is the always-show variant
+the floating chip calls, so a click there never *hides* an already-open panel.
+
+Windows are cached in `AppServices` (`_panel`, `_preferences`, `_floating`) and reused. Only
 `ServerEditorWindow` is created per open, because it is a modal dialog owned by
 Preferences.
 
@@ -82,6 +86,25 @@ so a hidden panel does no work. Keep the stop — a leaked timer keeps the panel
 alive.
 
 ---
+
+## Floating speed chip
+
+`FloatingSpeedWindow` is the optional always-on-top `↓ / ↑` chip
+(`Topmost`, `ShowActivated=False`, `SystemDecorations=None`,
+`ShowInTaskbar=False`, `SizeToContent`), created and cached by `AppServices`:
+
+- `SyncFloatingWindow()` (called from the constructor and every
+  `Settings.Changed`) shows/hides it to match
+  `Settings.ShowFloatingSpeeds`; `UpdateTray()` refreshes its rates on every
+  poll, so it needs no timer.
+- Offline (`Aggregate.OnlineServers == 0`) renders `—` for both rates.
+- Gesture: a press+release under the 4 px threshold opens the panel; crossing
+  the threshold calls `BeginMoveDrag` instead, so a drag never clicks.
+- `Place()` restores `FloatingPositionX/Y` when the point still lands on a
+  screen's work area, otherwise docks to the primary work area's bottom-right
+  (±12 px gap), then clamps. The position is written back once per drag.
+- Enabling/disabling never closes the window — it is hidden, so the rates and
+  the saved position survive a toggle.
 
 ## Tray presentation
 

@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "App layer golden split and composition root"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "window conventions, compiled bindings, style classes"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray-only lifecycle, panel show/hide and positioning rules"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "SettingsStore is the only source of truth"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "both string tables and x:Name wiring"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "where views and new window wiring belong"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "null semantics for absent rates and persisted position"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "required/forbidden App patterns and validation commands"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "settings.json field and round-trip rules"}
+{"file": ".trellis/tasks/10-31-floating-speed-widget/design.md", "reason": "agreed design for this task"}

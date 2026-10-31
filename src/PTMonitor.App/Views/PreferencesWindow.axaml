@@ -45,6 +45,7 @@
             </StackPanel>
 
             <CheckBox x:Name="ShowSpeedsToggle" Click="OnShowSpeedsToggled" />
+            <CheckBox x:Name="FloatingSpeedsToggle" Click="OnFloatingSpeedsToggled" />
 
             <StackPanel Spacing="4">
                 <TextBlock x:Name="ListModeLabel" />
