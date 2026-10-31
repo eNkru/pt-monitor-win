@@ -228,17 +228,34 @@ public class SettingsStoreTests
             settings.SetPollInterval(30);
             settings.SetTorrentListMode(TorrentListMode.Active);
             settings.SetAppLanguage(AppLanguage.Chinese);
+            settings.SetShowFloatingSpeeds(true);
+            settings.SetFloatingDisplayMode(FloatingDisplayMode.Graph);
+            settings.SetFloatingPosition(640, 480);
 
             var reloaded = new SettingsStore(path);
             Assert.Single(reloaded.Servers);
             Assert.Equal(30, reloaded.PollInterval);
             Assert.Equal(TorrentListMode.Active, reloaded.TorrentListMode);
             Assert.Equal(AppLanguage.Chinese, reloaded.AppLanguage);
+            Assert.True(reloaded.ShowFloatingSpeeds);
+            Assert.Equal(FloatingDisplayMode.Graph, reloaded.FloatingDisplay);
+            Assert.Equal(640, reloaded.FloatingPositionX);
+            Assert.Equal(480, reloaded.FloatingPositionY);
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void FloatingSpeedsAreOffWithoutAFile()
+    {
+        var settings = new SettingsStore(TempFile());
+        Assert.False(settings.ShowFloatingSpeeds);
+        Assert.Equal(FloatingDisplayMode.Numbers, settings.FloatingDisplay);
+        Assert.Null(settings.FloatingPositionX);
+        Assert.Null(settings.FloatingPositionY);
     }
 
     [Fact]

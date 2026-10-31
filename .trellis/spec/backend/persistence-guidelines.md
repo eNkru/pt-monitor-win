@@ -30,6 +30,10 @@ private sealed class SettingsFile
     public List<ServerConfig>? Servers { get; set; }
     public double? PollInterval { get; set; }        // all nullable → old payloads load
     public bool? ShowSpeedsInMenuBar { get; set; }
+    public bool? ShowFloatingSpeeds { get; set; }
+    public FloatingDisplayMode? FloatingDisplay { get; set; }   // numbers (default) | graph
+    public int? FloatingPositionX { get; set; }      // physical pixels, null = never moved
+    public int? FloatingPositionY { get; set; }
     public TorrentListMode? TorrentListMode { get; set; }
     public AppLanguage? AppLanguage { get; set; }
 }
@@ -72,7 +76,8 @@ File.Move(temp, _path, true);
 ### SettingsStore API shape
 
 Mutators, not a public setter: `Add`, `Update`, `Delete`, `ReplaceServers`,
-`SetEnabled`, `SetPollInterval`, `SetShowSpeedsInMenuBar`, `SetTorrentListMode`,
+`SetEnabled`, `SetPollInterval`, `SetShowSpeedsInMenuBar`,
+`SetShowFloatingSpeeds`, `SetFloatingDisplayMode`, `SetFloatingPosition`, `SetTorrentListMode`,
 `SetAppLanguage`. `Clamp` is public static for the selftest.
 
 ---

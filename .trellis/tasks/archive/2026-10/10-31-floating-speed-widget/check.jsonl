@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "review checklist and validation commands"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "both languages for every new string"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "no shutdown/main-window regressions"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "no duplicated state outside the stores"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "absent values render as a dash, not zero"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "x:DataType and style-class compliance"}

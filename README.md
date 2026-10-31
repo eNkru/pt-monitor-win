@@ -47,6 +47,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
     app-icon artwork proper),
   - every enabled server failing — red arrows, full pill, red tile outline.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
+- **Floating speed chip (opt-in)** — a small always-on-top readout, either
+  numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
+  upload). It can be dragged anywhere and the position is remembered across
+  restarts; click it to open the panel. Off by default; enable it from the tray
+  menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -130,7 +135,7 @@ To uninstall: quit from the tray menu and delete the exe plus that folder.
 | Action | Result |
 |---|---|
 | **Left click** | Toggle the dropdown panel |
-| **Right click** | Native menu: Refresh Now / Preferences… / Quit PT Monitor |
+| **Right click** | Native menu: Refresh Now / Show floating speed window / Preferences… / Quit PT Monitor |
 | **Hover** | Tooltip with server count and live speeds |
 
 ### The dropdown panel
@@ -176,6 +181,24 @@ To uninstall: quit from the tray menu and delete the exe plus that folder.
 - **Dismissal** — `Esc`, or clicking anywhere outside the panel. Closing it does
   **not** quit the app.
 
+### Floating speed chip
+
+A 56×56 opaque square that stays on top of other windows. It shows the same
+aggregate rates as the panel and `—` when no server is online.
+
+- **Two display modes**, chosen in Preferences:
+  - **Numbers** — `↓ 1.2M` over `↑ 340K`.
+  - **Graph** — a rolling one-minute plot: download in green, upload in orange,
+    both overlaid on one axes and scaled to the peak of the visible window.
+- **Click** — opens the panel (the chip stays visible).
+- **Drag** — moves the chip; the position is saved and restored on the next
+  launch, clamped back on-screen if the display layout changed.
+- **Toggle** — tray menu → *Show floating speed window*, or the matching
+  Preferences checkbox. Off by default.
+
+The window is deliberately opaque, square and shadow-free: no transparency
+layer is composited, which keeps a permanently-on-top 56 px window cheap.
+
 ### Preferences
 
 | Setting | Notes |
@@ -184,6 +207,8 @@ To uninstall: quit from the tray menu and delete the exe plus that folder.
 | **Add Server…** | Opens the server editor |
 | **Poll every N seconds** | 1–60 s, default 2 s. Global; one loop per server. |
 | **Show speeds in the tray tooltip** | Icon state is always shown regardless |
+| **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, click to open the panel |
+| **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s) |
 | **Torrents shown in the panel** | All / ↓ Down / ↑ Up / Active (also settable from the panel) |
 | **Language** | Follow System / English / 简体中文 — applies immediately |
 
@@ -224,7 +249,7 @@ problem:
 1. `dotnet restore`
 2. `dotnet build -c Release`
 3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (204 checks)
-4. `dotnet test tests/PTMonitor.Core.Tests` (36 tests)
+4. `dotnet test tests/PTMonitor.Core.Tests` (37 tests)
 5. `dotnet publish src/PTMonitor.App -r win-x64 --self-contained -p:PublishSingleFile=true`
 6. Re-runs `--selftest` **on the packaged CLI exe**, not just the build output
 7. Zips everything into `artifacts\PTMonitor-<version>-win-x64.zip`
@@ -420,7 +445,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 
 | File | Contents | Protection |
 |---|---|---|
-| `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, list mode, language | plain text — **never contains passwords** |
+| `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
 
 - The settings file is written atomically (temp file + move), so a crash cannot
@@ -534,6 +559,8 @@ src/
       PanelViewModel.cs          sections, rows, expansion, aggregate, filters
     Views/
       MainPanelWindow.axaml(.cs)     the dropdown panel
+      FloatingSpeedWindow.axaml(.cs) optional floating speed chip
+      SpeedGraph.cs                  rolling two-colour graph, drawn at runtime
       PreferencesWindow.axaml(.cs)   server list + preferences + language
       ServerEditorWindow.axaml(.cs)  add/edit + Test Connection
   PTMonitor.Core/                all reusable logic (no UI references)
@@ -544,7 +571,7 @@ src/
     Diagnostics/                 SelfTest, ProbeRunner
   PTMonitor.Cli/                 headless --selftest / --probe entry point
 tests/
-  PTMonitor.Core.Tests/          xUnit suite (36 tests, mirrors the selftest)
+  PTMonitor.Core.Tests/          xUnit suite (37 tests, mirrors the selftest)
 scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
   make-app-icon.py               draw + encode app.ico (flat Windows style)
@@ -643,7 +670,7 @@ instead of relying only on unit tests.
 
 ### 2. xUnit suite
 
-36 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
+37 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
 `SelfTest` suite, so the two can never drift apart.
 
 ```powershell

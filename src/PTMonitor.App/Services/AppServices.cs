@@ -24,8 +24,10 @@ public sealed class AppServices
     public MonitorStore Monitor { get; }
 
     private readonly TrayIcon _trayIcon;
+    private readonly DispatcherTimer _floatingTicker;
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
+    private FloatingSpeedWindow? _floating;
     private bool _quitRequested;
 
     private AppServices()
@@ -40,6 +42,11 @@ public sealed class AppServices
 
         L10n.SetLanguage(Settings.AppLanguage);
         Settings.Changed += OnSettingsChanged;
+
+        // Graph mode samples once a second so the line rolls even while the
+        // rates are steady (StatusesChanged only fires on a real change).
+        _floatingTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _floatingTicker.Tick += (_, _) => PushFloatingSample();
 
         _trayIcon = new TrayIcon
         {
@@ -58,6 +65,8 @@ public sealed class AppServices
         // Left-click the tray icon to toggle the dropdown panel (right click
         // opens the native menu above).
         _trayIcon.Clicked += (_, _) => TogglePanel();
+
+        SyncFloatingWindow();
 
         if (Settings.Servers.Count == 0)
         {
@@ -80,6 +89,18 @@ public sealed class AppServices
         var menu = new NativeMenu();
         menu.Items.Add(NewItem("PT Monitor", () => TogglePanel(), isEnabled: false));
         menu.Items.Add(NewItem(L10n.S("Refresh Now"), RefreshNow));
+        var floatingItem = new NativeMenuItem
+        {
+            Header = L10n.S("Show floating speed window"),
+            ToggleType = NativeMenuItemToggleType.CheckBox,
+            IsChecked = Settings.ShowFloatingSpeeds,
+        };
+        // Posted, not called inline: the settings write rebuilds this native
+        // menu, and doing that while the popup is still dispatching its click
+        // is not safe.
+        floatingItem.Click += (_, _) => Dispatcher.UIThread.Post(
+            () => Settings.SetShowFloatingSpeeds(!Settings.ShowFloatingSpeeds));
+        menu.Items.Add(floatingItem);
         menu.Items.Add(NewItem(L10n.S("Preferences…"), ShowPreferences));
         menu.Items.Add(NewMenuItemSeparator());
         menu.Items.Add(NewItem(L10n.S("Quit PT Monitor"), Quit));
@@ -102,6 +123,7 @@ public sealed class AppServices
         // Rebuild the menu so its titles follow the language.
         _trayIcon.Menu = BuildMenu();
         UpdateTray();
+        SyncFloatingWindow();
     }
 
     private void UpdateTray()
@@ -122,6 +144,52 @@ public sealed class AppServices
             text = $"PT Monitor {speed} — {L10n.ServerCount(Settings.Servers.Count, aggregate.OnlineServers)}";
         }
         _trayIcon.ToolTipText = text;
+        UpdateFloatingRates();
+    }
+
+    private void SyncFloatingWindow()
+    {
+        if (!Settings.ShowFloatingSpeeds)
+        {
+            if (_floating is { IsVisible: true } visible) visible.Hide();
+            _floatingTicker.Stop();
+            return;
+        }
+
+        if (_floating is null) _floating = new FloatingSpeedWindow();
+        if (!_floating.IsVisible) _floating.Show();
+        else _floating.RefreshLocalization();
+
+        _floating.SetDisplayMode(Settings.FloatingDisplay);
+        if (Settings.FloatingDisplay == FloatingDisplayMode.Graph)
+        {
+            if (!_floatingTicker.IsEnabled)
+            {
+                PushFloatingSample();
+                _floatingTicker.Start();
+            }
+        }
+        else
+        {
+            _floatingTicker.Stop();
+        }
+
+        UpdateFloatingRates();
+    }
+
+    private void UpdateFloatingRates()
+    {
+        if (_floating is not { IsVisible: true } floating) return;
+        var aggregate = Monitor.Aggregate;
+        floating.ShowRates(aggregate.DownSpeed, aggregate.UpSpeed, aggregate.OnlineServers > 0);
+    }
+
+    private void PushFloatingSample()
+    {
+        if (_floating is not { IsVisible: true } floating) return;
+        if (Settings.FloatingDisplay != FloatingDisplayMode.Graph) return;
+        var aggregate = Monitor.Aggregate;
+        floating.PushSample(aggregate.DownSpeed, aggregate.UpSpeed);
     }
 
     private static string ByteRateFormatterSpeedText(MonitorAggregate aggregate) =>
@@ -134,6 +202,17 @@ public sealed class AppServices
         if (_panel is { IsVisible: true } visible)
         {
             visible.Hide();
+            return;
+        }
+        ShowPanel();
+    }
+
+    /// <summary>Shows and activates the panel (the floating chip always opens it).</summary>
+    public void ShowPanel()
+    {
+        if (_panel is { IsVisible: true } visible)
+        {
+            visible.Activate();
             return;
         }
         _panel ??= new MainPanelWindow();
@@ -183,6 +262,7 @@ public sealed class AppServices
     public void Quit()
     {
         _quitRequested = true;
+        _floatingTicker.Stop();
         Monitor.StopAsync();
         if (GetApp().ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

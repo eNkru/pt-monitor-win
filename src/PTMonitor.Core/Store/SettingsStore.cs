@@ -26,6 +26,10 @@ public sealed class SettingsStore
     private List<ServerConfig> _servers = [];
     private double _pollInterval = DefaultPollInterval;
     private bool _showSpeedsInMenuBar = true;
+    private bool _showFloatingSpeeds;
+    private FloatingDisplayMode _floatingDisplayMode = FloatingDisplayMode.Numbers;
+    private int? _floatingPositionX;
+    private int? _floatingPositionY;
     private TorrentListMode _torrentListMode = TorrentListMode.All;
     private AppLanguage _appLanguage = AppLanguage.System;
 
@@ -52,6 +56,26 @@ public sealed class SettingsStore
     public bool ShowSpeedsInMenuBar
     {
         get { lock (_gate) return _showSpeedsInMenuBar; }
+    }
+
+    public bool ShowFloatingSpeeds
+    {
+        get { lock (_gate) return _showFloatingSpeeds; }
+    }
+
+    public FloatingDisplayMode FloatingDisplay
+    {
+        get { lock (_gate) return _floatingDisplayMode; }
+    }
+
+    public int? FloatingPositionX
+    {
+        get { lock (_gate) return _floatingPositionX; }
+    }
+
+    public int? FloatingPositionY
+    {
+        get { lock (_gate) return _floatingPositionY; }
     }
 
     public TorrentListMode TorrentListMode
@@ -141,6 +165,37 @@ public sealed class SettingsStore
         PersistAndNotify();
     }
 
+    public void SetShowFloatingSpeeds(bool enabled)
+    {
+        lock (_gate)
+        {
+            if (_showFloatingSpeeds == enabled) return;
+            _showFloatingSpeeds = enabled;
+        }
+        PersistAndNotify();
+    }
+
+    public void SetFloatingDisplayMode(FloatingDisplayMode mode)
+    {
+        lock (_gate)
+        {
+            if (_floatingDisplayMode == mode) return;
+            _floatingDisplayMode = mode;
+        }
+        PersistAndNotify();
+    }
+
+    public void SetFloatingPosition(int x, int y)
+    {
+        lock (_gate)
+        {
+            if (_floatingPositionX == x && _floatingPositionY == y) return;
+            _floatingPositionX = x;
+            _floatingPositionY = y;
+        }
+        PersistAndNotify();
+    }
+
     public void SetTorrentListMode(TorrentListMode mode)
     {
         lock (_gate)
@@ -182,6 +237,10 @@ public sealed class SettingsStore
                     Servers = _servers,
                     PollInterval = _pollInterval,
                     ShowSpeedsInMenuBar = _showSpeedsInMenuBar,
+                    ShowFloatingSpeeds = _showFloatingSpeeds,
+                    FloatingDisplay = _floatingDisplayMode,
+                    FloatingPositionX = _floatingPositionX,
+                    FloatingPositionY = _floatingPositionY,
                     TorrentListMode = _torrentListMode,
                     AppLanguage = _appLanguage,
                 };
@@ -208,6 +267,10 @@ public sealed class SettingsStore
             _servers = file.Servers ?? [];
             _pollInterval = Clamp(file.PollInterval ?? DefaultPollInterval);
             _showSpeedsInMenuBar = file.ShowSpeedsInMenuBar ?? true;
+            _showFloatingSpeeds = file.ShowFloatingSpeeds ?? false;
+            _floatingDisplayMode = file.FloatingDisplay ?? FloatingDisplayMode.Numbers;
+            _floatingPositionX = file.FloatingPositionX;
+            _floatingPositionY = file.FloatingPositionY;
             _torrentListMode = file.TorrentListMode ?? TorrentListMode.All;
             _appLanguage = file.AppLanguage ?? AppLanguage.System;
         }
@@ -216,6 +279,10 @@ public sealed class SettingsStore
             _servers = [];
             _pollInterval = DefaultPollInterval;
             _showSpeedsInMenuBar = true;
+            _showFloatingSpeeds = false;
+            _floatingDisplayMode = FloatingDisplayMode.Numbers;
+            _floatingPositionX = null;
+            _floatingPositionY = null;
             _torrentListMode = TorrentListMode.All;
             _appLanguage = AppLanguage.System;
         }
@@ -226,6 +293,10 @@ public sealed class SettingsStore
         public List<ServerConfig>? Servers { get; set; }
         public double? PollInterval { get; set; }
         public bool? ShowSpeedsInMenuBar { get; set; }
+        public bool? ShowFloatingSpeeds { get; set; }
+        public FloatingDisplayMode? FloatingDisplay { get; set; }
+        public int? FloatingPositionX { get; set; }
+        public int? FloatingPositionY { get; set; }
         public TorrentListMode? TorrentListMode { get; set; }
         public AppLanguage? AppLanguage { get; set; }
     }

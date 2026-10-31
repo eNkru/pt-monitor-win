@@ -45,6 +45,15 @@
             </StackPanel>
 
             <CheckBox x:Name="ShowSpeedsToggle" Click="OnShowSpeedsToggled" />
+            <CheckBox x:Name="FloatingSpeedsToggle" Click="OnFloatingSpeedsToggled" />
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="FloatingDisplayLabel" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <RadioButton x:Name="FloatingNumbers" Classes="prefSegment" Click="OnFloatingDisplayClicked" />
+                    <RadioButton x:Name="FloatingGraph" Classes="prefSegment" Click="OnFloatingDisplayClicked" />
+                </StackPanel>
+            </StackPanel>
 
             <StackPanel Spacing="4">
                 <TextBlock x:Name="ListModeLabel" />

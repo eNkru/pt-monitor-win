@@ -44,6 +44,10 @@ public partial class PreferencesWindow : Window
             EmptyHelp.Text = L10n.S("No servers configured. Add a qBittorrent or Transmission server to start monitoring.");
             AddServerButton.Content = L10n.S("Add Server…");
             ShowSpeedsToggle.Content = L10n.S("Show speeds in the tray tooltip");
+            FloatingSpeedsToggle.Content = L10n.S("Show floating speed window");
+            FloatingDisplayLabel.Text = L10n.S("Floating display");
+            FloatingNumbers.Content = L10n.S("Numbers");
+            FloatingGraph.Content = L10n.S("Graph");
             ListModeLabel.Text = L10n.S("Torrents shown in the panel");
             ModeAll.Content = L10n.ListMode(TorrentListMode.All);
             ModeDown.Content = L10n.ListMode(TorrentListMode.Downloading);
@@ -88,6 +92,10 @@ public partial class PreferencesWindow : Window
             (int)services.Settings.PollInterval);
         PollInterval.Value = (int)services.Settings.PollInterval;
         ShowSpeedsToggle.IsChecked = services.Settings.ShowSpeedsInMenuBar;
+        FloatingSpeedsToggle.IsChecked = services.Settings.ShowFloatingSpeeds;
+        var display = services.Settings.FloatingDisplay;
+        FloatingNumbers.IsChecked = display == FloatingDisplayMode.Numbers;
+        FloatingGraph.IsChecked = display == FloatingDisplayMode.Graph;
         var mode = services.Settings.TorrentListMode;
         ModeAll.IsChecked = mode == TorrentListMode.All;
         ModeDown.IsChecked = mode == TorrentListMode.Downloading;
@@ -139,6 +147,17 @@ public partial class PreferencesWindow : Window
     private void OnShowSpeedsToggled(object? sender, RoutedEventArgs e)
     {
         AppServices.Instance.Settings.SetShowSpeedsInMenuBar(ShowSpeedsToggle.IsChecked == true);
+    }
+
+    private void OnFloatingSpeedsToggled(object? sender, RoutedEventArgs e)
+    {
+        AppServices.Instance.Settings.SetShowFloatingSpeeds(FloatingSpeedsToggle.IsChecked == true);
+    }
+
+    private void OnFloatingDisplayClicked(object? sender, RoutedEventArgs e)
+    {
+        var mode = sender == FloatingGraph ? FloatingDisplayMode.Graph : FloatingDisplayMode.Numbers;
+        AppServices.Instance.Settings.SetFloatingDisplayMode(mode);
     }
 
     private void OnListModeClicked(object? sender, RoutedEventArgs e)
