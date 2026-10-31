@@ -41,3 +41,25 @@ Added .github/workflows/branch-release.yml: pushing any non-main branch builds b
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: Floating desktop speed widget
+<!-- trellis-session: v=2 fp=5340a12d7fbe64bc -->
+
+**Date**: 2026-10-31
+**Task**: Floating desktop speed widget
+**Branch**: `tray/floating-speed-widget`
+
+### Summary
+
+Added optional always-on-top floating speed chip: persisted off-by-default setting, drag position saved in settings.json, click opens the panel, tray-menu and Preferences toggles, L10n, README, specs and tests.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7410e99` | Add an optional floating desktop speed widget |
+
+### Status
+
+[OK] **Completed**
