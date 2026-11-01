@@ -53,7 +53,10 @@ process. The tray icon simply vanished.
       failure is swallowed.
 - [x] `dotnet build -c Release`, `--selftest`, and `dotnet test` pass.
 - [ ] Confirm on Windows that a long session no longer logs event 1026 (needs
-      the user; the UI cannot run on this Linux box).
+      the user; the UI cannot run on this Linux box). Carried by the follow-up
+      task `11-02-tray-fix-deploy-verify`, which deploys the fix and collects
+      that evidence — not by this task, whose code work is merged
+      (PR #9, `e6064d6`).
 
 ## Notes
 
