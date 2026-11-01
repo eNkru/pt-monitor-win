@@ -599,9 +599,28 @@ public static class SelfTest
             c.Expect("notice: plaintext text", warns[0], EditorNotices.PlaintextWarning);
             c.Expect("notice: https silences it", EditorNotices.Compose(null, useTls: true, password: "hunter2").Count, 0);
             c.Expect("notice: empty password silences it", EditorNotices.Compose(null, useTls: false, password: "").Count, 0);
-            var both = EditorNotices.Compose("Used port 8080 from the host field.", useTls: false, password: "hunter2");
+            var both = EditorNotices.Compose(["Used port 8080 from the host field."], useTls: false, password: "hunter2");
             c.Expect("notice: validator first", both.Count, 2);
             c.Expect("notice: validator kept", both[0], "Used port 8080 from the host field.");
+            var three = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "http://bob:hunter2@nas:8080/path"), "8080");
+            c.Expect("userinfo: host stripped", three.Config.Host, "nas");
+            c.Expect("userinfo: port", three.Config.Port, 8080);
+            c.Expect("userinfo: user name", three.Config.Username, "bob");
+            c.Expect("userinfo: password", three.PasswordFromHost, "hunter2");
+            c.Expect("userinfo: tls forced off", three.Config.UseTls, false);
+            c.Expect("userinfo: notices", three.Notices.Count, 2);
+            var escaped = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "u%40x:p%3Aw@nas"), "");
+            c.Expect("userinfo: unescaped user", escaped.Config.Username, "u@x");
+            c.Expect("userinfo: unescaped password", escaped.PasswordFromHost, "p:w");
+            var typedWins = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "bob@nas") { Username = "alice" }, "");
+            c.Expect("userinfo: typed user wins", typedWins.Config.Username, "alice");
+            c.True("userinfo: no password means none", typedWins.PasswordFromHost is null);
+            var plainHost = ServerConfigValidator.Validate(new ServerConfig(ServerKind.Qbittorrent, "nas"), "");
+            c.Expect("userinfo: plain host has no notices", plainHost.Notices.Count, 0);
+            c.True("userinfo: plain host has no password", plainHost.PasswordFromHost is null);
             c.Expect("notice: thumbprint shown when insecure", EditorNotices.AcceptedCertificate(true, "ab12"), "AB12");
             c.True("notice: thumbprint hidden when strict", EditorNotices.AcceptedCertificate(false, "ab12") is null);
             c.True("notice: no thumbprint without a certificate", EditorNotices.AcceptedCertificate(true, null) is null);

@@ -22,10 +22,11 @@ public static class EditorNotices
     /// The validator's notice first, then the plaintext warning. The warning is
     /// independent of validation: it appears while the form is still invalid.
     /// </summary>
-    public static IReadOnlyList<string> Compose(string? validatorNotice, bool useTls, string? password)
+    public static IReadOnlyList<string> Compose(IReadOnlyList<string>? validatorNotices, bool useTls, string? password)
     {
-        var parts = new List<string>(2);
-        if (!string.IsNullOrEmpty(validatorNotice)) parts.Add(validatorNotice);
+        var parts = new List<string>((validatorNotices?.Count ?? 0) + 1);
+        if (validatorNotices is not null)
+            parts.AddRange(validatorNotices.Where(notice => !string.IsNullOrEmpty(notice)));
         if (!useTls && !string.IsNullOrEmpty(password)) parts.Add(PlaintextWarning);
         return parts;
     }

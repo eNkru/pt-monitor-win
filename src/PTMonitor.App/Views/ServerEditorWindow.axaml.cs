@@ -110,7 +110,7 @@ public partial class ServerEditorWindow : Window
         try
         {
             var result = ServerConfigValidator.Validate(ProvisionalConfig(), PortField.Text ?? "");
-            ShowNotice(result.Notice);
+            RefreshNotices(result.Notices);
             HideMessage();
             return result;
         }
@@ -121,13 +121,11 @@ public partial class ServerEditorWindow : Window
         }
     }
 
-    private void ShowNotice(string? notice) => RefreshNotices(notice);
-
-    /// <summary>Rebuilds the notice line: validator notice plus the plaintext warning.</summary>
-    private void RefreshNotices(string? validatorNotice = null)
+    /// <summary>Rebuilds the notice line: validator notices plus the plaintext warning.</summary>
+    private void RefreshNotices(IReadOnlyList<string>? validatorNotices = null)
     {
         var parts = EditorNotices
-            .Compose(validatorNotice, TlsToggle.IsChecked == true, PasswordField.Text)
+            .Compose(validatorNotices, TlsToggle.IsChecked == true, PasswordField.Text)
             .Select(L10n.S)
             .ToList();
         NoticeText.IsVisible = parts.Count > 0;
@@ -173,7 +171,11 @@ public partial class ServerEditorWindow : Window
         {
             var config = validated.Config;
             var insecure = validated.Config.AllowInsecureTls;
-            var password = PasswordField.Text ?? "";
+            // A password typed into the host field (user:pass@host) is only used
+            // when the password box is empty — an explicit entry always wins.
+            var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
+                ? typed
+                : validated.PasswordFromHost ?? "";
             ITorrentClient client = config.Kind == ServerKind.Qbittorrent
                 ? new QBittorrentClient(config, password, Observe)
                 : new TransmissionClient(config, password, Observe);
@@ -206,7 +208,11 @@ public partial class ServerEditorWindow : Window
     {
         if (Validate() is not { } validated) return;
         var config = validated.Config;
-        var password = PasswordField.Text ?? "";
+        // Same rule as Test Connection: an explicit password wins over the one
+        // parsed out of the host field.
+        var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
+            ? typed
+            : validated.PasswordFromHost ?? "";
 
         var services = AppServices.Instance;
         try

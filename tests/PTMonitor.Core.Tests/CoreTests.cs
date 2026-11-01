@@ -25,7 +25,8 @@ public class HostFieldParserTests
     [InlineData("nas.local:9091", 8080, "nas.local", 9091)]
     [InlineData("https://nas.local:8443/path", 8080, "nas.local", 8443)]
     [InlineData("[2001:db8::1]:9091", 8080, "2001:db8::1", 9091)]
-    [InlineData("user@nas.local", 8080, "user@nas.local", 8080)]
+    [InlineData("user@nas.local", 8080, "nas.local", 8080)]
+    [InlineData("bob:hunter2@nas.local:9091", 8080, "nas.local", 9091)]
     public void ParsesExpectedShapes(string raw, int defaultPort, string expectedHost, int expectedPort)
     {
         var parsed = HostFieldParser.Parse(raw, defaultPort);
@@ -45,6 +46,28 @@ public class HostFieldParserTests
     public void RejectsNonHttpSchemes()
     {
         Assert.Throws<ServerFailureException>(() => HostFieldParser.Parse("ws://nas.local:8080", 8080));
+    }
+
+    [Theory]
+    [InlineData("bob:hunter2@nas:8080", "bob", "hunter2")]
+    [InlineData("http://bob:hunter2@nas:8080/path", "bob", "hunter2")]
+    [InlineData("u%40x:p%3Aw@nas", "u@x", "p:w")]
+    [InlineData("nas", null, null)]
+    public void ParsesUserinfoOutOfTheHostField(string raw, string? expectedUser, string? expectedPassword)
+    {
+        var parsed = HostFieldParser.Parse(raw, 8080);
+        Assert.Equal(expectedUser, parsed.Username);
+        Assert.Equal(expectedPassword, parsed.Password);
+    }
+
+    [Fact]
+    public void ValidatorPrefersATypedUserNameOverTheHostField()
+    {
+        var validated = ServerConfigValidator.Validate(
+            new ServerConfig(ServerKind.Qbittorrent, "bob:hunter2@nas") { Username = "alice" }, "");
+        Assert.Equal("alice", validated.Config.Username);
+        Assert.Equal("hunter2", validated.PasswordFromHost);
+        Assert.Contains("Used the user name and password from the host field.", validated.Notices);
     }
 }
 
@@ -206,7 +229,7 @@ public class EditorNoticesTests
     [Fact]
     public void ValidatorNoticeComesFirstAndCoexists()
     {
-        var parts = EditorNotices.Compose("Used port 8080 from the host field.", false, "hunter2");
+        var parts = EditorNotices.Compose(["Used port 8080 from the host field."], false, "hunter2");
         Assert.Equal(["Used port 8080 from the host field.", EditorNotices.PlaintextWarning], parts);
     }
     [Fact]
