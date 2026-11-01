@@ -39,7 +39,8 @@ Reusable looks are class selectors in `App.axaml`; XAML applies them with
 
 Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
 `floatingArrow`, `sectionHeader`, `sectionSpeed`, `segment`, `prefSegment`,
-`torrentBar`, `link`, `footerRow`, `accent`, `danger`.
+`torrentBar`, `link`, `footerRow`, `accent`, `danger`, `graphRate`,
+`graphArrow`.
 
 - One-off values (a margin, a font size one notch smaller) stay inline.
 - A new look used twice becomes a class.
@@ -102,6 +103,22 @@ The project has no automated a11y gate. Keep these in force:
 - Text sizes stay ≥ 9.5 px and `TextWrapping` is used on detail/error text.
 - DPI awareness is declared in `app.manifest`; do not remove it or hard-code
   pixel sizes that assume 100 %.
+
+---
+
+## Text on top of a busy background
+
+A label drawn over the rolling speed graph must stay readable *without*
+covering the graph behind it. `Views/OutlinedText` draws a text run with a
+hard outline around the glyphs (offset copies of the text, then the fill on
+top) — no opaque plate, so the background shows through everywhere else.
+
+```xml
+<views:OutlinedText x:Name="GraphDownText" Classes="graphRate" />
+```
+
+Use it instead of a `TextBlock` plus a backing `Border` whenever the label
+sits on top of live data.
 
 ---
 

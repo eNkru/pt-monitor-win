@@ -45,6 +45,23 @@
 
             <!-- Graph mode: down green + up orange overlaid, newest at the right -->
             <views:SpeedGraph x:Name="Graph" Margin="4" IsVisible="False" />
+
+            <!-- Graph mode: the current rates pinned to the top-left corner,
+                 drawn on top of the plot so the numbers are readable without
+                 switching back to Numbers mode. The background stays
+                 transparent — only the glyphs carry a dark outline, so the
+                 graph behind them is still visible. -->
+            <StackPanel x:Name="GraphRates" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Margin="3" Spacing="1" IsVisible="False">
+                <StackPanel Orientation="Horizontal" Spacing="3">
+                    <views:OutlinedText x:Name="GraphDownArrow" Classes="graphArrow" />
+                    <views:OutlinedText x:Name="GraphDownText" Classes="graphRate" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="3">
+                    <views:OutlinedText x:Name="GraphUpArrow" Classes="graphArrow" />
+                    <views:OutlinedText x:Name="GraphUpText" Classes="graphRate" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
     </Border>
 </Window>
