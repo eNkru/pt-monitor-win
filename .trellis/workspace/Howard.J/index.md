@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-11-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~176 | Active |
+| `journal-1.md` | ~210 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-11-02 | Housekeeping: retire the merged security/release-chain-hardening branch | - | `main` |
 | 4 | 2026-11-02 | Floating chip: show the aggregate rates over the speed graph | `88ab12e`, `9d7a41c` | `main` |
 | 2 | 2026-10-31 | Floating desktop speed widget | `7410e99` | `tray/floating-speed-widget` |
 | 1 | 2026-10-30 | Branch prerelease pipeline | `024134a`, `e21929e`, `f785b6a` | `ci/branch-release` |

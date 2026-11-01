@@ -174,3 +174,37 @@ The floating speed chip's graph mode now shows the aggregate down/up rates in th
 
 - Windows confirmation of the corner readout (needs the user on the target machine)
 - The 4 open Trellis tasks (tray-icon-crash, tray-fix-deploy-verify, credential-tls-hardening, security-hardening) stay open — tray-icon-crash still needs the on-Windows event-1026 confirmation
+
+
+## Session 5: Housekeeping: retire the merged security/release-chain-hardening branch
+<!-- trellis-session: v=2 fp=efcf953a6abc6066 -->
+
+**Date**: 2026-11-02
+**Task**: Housekeeping: retire the merged security/release-chain-hardening branch
+**Branch**: `main`
+
+### Summary
+
+Deleted the remote branch security/release-chain-hardening. Its work was already merged (PR #10) and its task archived, so the branch only kept alive a rolling branch prerelease built 14 commits behind main. The delete event fired the Branch prerelease cleanup job, which removed that prerelease and its tag. The release/1.0.0 branch and its Latest release were deliberately left in place: they are the entry the README points users to, so they must not be dropped before a stable v* release exists.
+
+### Main Changes
+
+- Deleted remote branch security/release-chain-hardening (was fully merged into main; PR #10)
+- Branch prerelease cleanup job removed PTMonitor 1.0.0-security-release-chain-hardening-8e21b5.a057bcc and tag branch-build/security-release-chain-hardening-8e21b5
+- Kept release/1.0.0 and its Latest, non-prerelease release — it is the download the README documents
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Verified after the delete: remote branches are main + release/1.0.0; the only remaining release is latest=true, prerelease=false; the stale tag is gone
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Cut a stable v1.0.0 tag from main (build.yml's v* lane) so the Releases page has a real stable entry, then release/1.0.0 can go too
