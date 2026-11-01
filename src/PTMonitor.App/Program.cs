@@ -4,7 +4,6 @@ using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Store;
 using System;
 using System.Runtime.InteropServices;
-
 namespace PTMonitor.App;
 
 class Program
@@ -20,7 +19,12 @@ class Program
         // cost stays bounded (see Core/Diagnostics/Log.cs).
         Log.Initialize(AppPaths.LogFile);
         AppDomain.CurrentDomain.UnhandledException += (_, e) => LogCrash("appdomain", e.ExceptionObject as Exception);
-        Dispatcher.UIThread.UnhandledException += (_, e) => LogCrash("ui", e.Exception);
+        // NOT Dispatcher.UIThread here: touching it before the platform is
+        // initialised creates the dispatcher with the default (unsupported)
+        // implementation, and Dispatcher.MainLoop then throws
+        // PlatformNotSupportedException at startup. It does not throw on
+        // access, which is what makes this trap invisible. The UI-thread
+        // handler is subscribed in App.OnFrameworkInitializationCompleted.
         Log.Info("startup",
             $"PTMonitor {Version()}, {RuntimeInformation.OSDescription}, data {AppPaths.DataDirectory}");
 
@@ -36,7 +40,7 @@ class Program
     /// than <c>Message</c>: the cause of a crash is almost always the inner
     /// exception, and the whole chain is flattened onto one line by the sink.
     /// </summary>
-    private static void LogCrash(string area, Exception? exception) =>
+    internal static void LogCrash(string area, Exception? exception) =>
         Log.Error(area, exception?.ToString() ?? "unhandled exception");
 
     private static string Version() => typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";

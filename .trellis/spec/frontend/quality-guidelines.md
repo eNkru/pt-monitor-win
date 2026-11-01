@@ -14,7 +14,10 @@ dotnet run --project src/PTMonitor.App
 ```
 
 The first three catch `Core` regressions; the app itself barely compiles-fail.
-Then exercise the change by hand:
+**A change to `Program.cs` or `App.axaml.cs` has no automated gate at all** — the
+suite never starts a window. If you touch startup, launch the exe and confirm a
+process survives 30 seconds with a clean `ptmonitor.log`, not just that it
+builds. Then exercise the change by hand:
 
 - [ ] Tray icon appears, left-click toggles the panel, right-click opens the menu
 - [ ] Panel opens bottom-right, closes on Escape, click-away and deactivation,
@@ -45,6 +48,15 @@ Then exercise the change by hand:
 
 ## Forbidden patterns
 
+- **Any Avalonia API in `Program.Main` before `BuildAvaloniaApp()` runs.** The
+  platform has not installed its dispatcher yet, and `Dispatcher.UIThread`
+  silently constructs one with the *default* (unsupported) implementation:
+  accessing it does **not** throw, so a "does this throw?" check passes, and then
+  `Dispatcher.MainLoop` throws `PlatformNotSupportedException` before the first
+  frame — an instant exit on every launch with no window and no tray icon.
+  Subscribe `Dispatcher.UIThread.UnhandledException` in
+  `App.OnFrameworkInitializationCompleted` instead. This cost a broken release on
+  2026-11-02; the comment at the top of `Program.cs` said it already.
 - Domain logic in code-behind or XAML.
 - A hardcoded user-visible string (English included).
 - `async void` handlers without a `try`/`finally` re-enable of the button.
