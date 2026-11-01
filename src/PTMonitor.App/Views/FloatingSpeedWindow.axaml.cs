@@ -42,8 +42,13 @@ public partial class FloatingSpeedWindow : Window
     /// <summary>Writes the aggregate rates; an offline aggregate renders a dash.</summary>
     public void ShowRates(long down, long up, bool online)
     {
-        DownText.Text = online ? ByteRateFormatter.Rate(down) : "—";
-        UpText.Text = online ? ByteRateFormatter.Rate(up) : "—";
+        var downText = online ? ByteRateFormatter.Rate(down) : "—";
+        var upText = online ? ByteRateFormatter.Rate(up) : "—";
+        DownText.Text = downText;
+        UpText.Text = upText;
+        // The graph-mode corner readout mirrors the numbers-mode readout.
+        GraphDownText.Text = downText;
+        GraphUpText.Text = upText;
     }
 
     /// <summary>Switches between the numeric readout and the rolling graph.</summary>
@@ -52,6 +57,7 @@ public partial class FloatingSpeedWindow : Window
         var graph = mode == FloatingDisplayMode.Graph;
         NumbersView.IsVisible = !graph;
         Graph.IsVisible = graph;
+        GraphRates.IsVisible = graph;
     }
 
     /// <summary>Appends one sample to the rolling graph.</summary>
@@ -151,5 +157,7 @@ public partial class FloatingSpeedWindow : Window
         // from the panel's arrows.
         DownArrow.Text = ByteRateFormatter.DownArrow;
         UpArrow.Text = ByteRateFormatter.UpArrow;
+        GraphDownArrow.Text = ByteRateFormatter.DownArrow;
+        GraphUpArrow.Text = ByteRateFormatter.UpArrow;
     }
 }
