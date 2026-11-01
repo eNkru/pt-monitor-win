@@ -18,7 +18,7 @@ pure function.
 
 ## Checklist
 
-- [ ] **1. Secret write failure propagates** (finding 3)
+- [x] **1. Secret write failure propagates** (finding 3)
   - `Core/Store/SecretStore.cs`: add `SecretStoreState`, `ISecretStore.State`;
     split `PersistUnsafe` into throwing `Persist()` and `PersistOrIgnore()`;
     `Set` → `Persist()`, `Delete`/`DeleteAll` → `PersistOrIgnore()`;
@@ -28,21 +28,21 @@ pure function.
   - Selftest: target path whose parent is a file → `Set` throws, `State` stays
     `Absent`.
   - Gate.
-- [ ] **2. HTTPS on by default** (finding 1)
+- [x] **2. HTTPS on by default** (finding 1)
   - `App/Views/ServerEditorWindow.Load()`: new-server branch sets
     `TlsToggle.IsChecked = true`.
   - `Core/Client/HttpTransport.Describe`: add the "or uncheck Use HTTPS" hint for
     TLS failures over an `http` base.
   - Gate. Manual check: `http://` in the host field still forces `useTls: false`
     with the existing notice.
-- [ ] **3. Plaintext warning** (finding 1)
+- [x] **3. Plaintext warning** (finding 1)
   - `ShowNotice` → `RefreshNotices` per `design.md` §3; wire to
     `TlsToggle.IsCheckedChanged`, `PasswordField.TextChanged`, `Validate`, `Load`.
   - `App/Services/L10n.cs`: English + Simplified Chinese for the warning.
   - Selftest: warning-composition helper (extract it as a pure `Core` function
     taking `useTls` and `hasPassword` so the selftest can reach it).
   - Gate.
-- [ ] **4. Certificate thumbprint** (finding 2)
+- [x] **4. Certificate thumbprint** (finding 2)
   - `HttpTransport`: `_onCertificateAccepted` ctor arg, own validation callback
     per `design.md` §4, SHA-256 thumbprint via
     `GetCertHashString(HashAlgorithmName.SHA256)`.
@@ -50,7 +50,7 @@ pure function.
   - `ServerEditorWindow.OnTest`: append ` · cert SHA-256 <thumbprint>` when the
     toggle was on.
   - Gate.
-- [ ] **5. Userinfo in the host field** (finding 5)
+- [x] **5. Userinfo in the host field** (finding 5)
   - `HostFieldParser`: `ParsedHostField` + `Username`/`Password`, unescape both.
   - `ServerConfigValidator`: `Notice` → `Notices` list, credential notice,
     typed-user-wins rule, `PasswordFromHost` on `ValidatedServerConfig`.
@@ -59,7 +59,7 @@ pure function.
   - Selftest + `CoreTests`: `user:pass@host`, `http://u:p@host:1234/path`,
     `u%40x:p%3Aw@host`, IPv6 with and without userinfo.
   - Gate.
-- [ ] **6. Corrupt secret file** (finding 4)
+- [x] **6. Corrupt secret file** (finding 4)
   - `DpapiSecretStore.Load`: `Absent` vs `Unreadable`; preserve the unreadable
     bytes as `secrets.dat.corrupt` inside the write path, so the first persist of
     *any* kind (including a `Delete` from Preferences) keeps the only recovery
@@ -74,11 +74,11 @@ pure function.
     `Unreadable` stays Online; `Delete` on an unreadable store leaves
     `secrets.dat.corrupt`; `Set` clears `State`.
   - Gate.
-- [ ] **7. Response cap** (finding 6)
+- [x] **7. Response cap** (finding 6)
   - `HttpTransport`: `MaxResponseContentBufferSize = 32 MiB`, map the limit
     breach to `ProtocolViolation`.
   - Gate.
-- [ ] **8. Redirect credentials** (finding 7)
+- [x] **8. Redirect credentials** (finding 7)
   - `HttpTransport`: `AllowAutoRedirect = false` plus `SendFollowingRedirects`
     per `design.md` §7; pure helpers `SameOrigin`, `TryGetRedirect`,
     `BuildRedirectRequest` for the selftest.
@@ -88,7 +88,7 @@ pure function.
     origins at all.
   - Verified end to end against loopback listeners (same-origin keeps the
     header, cross-origin does not).
-- [ ] **9. Docs + final verification**
+- [x] **9. Docs + final verification**
   - `README.md` "Data, settings and secrets": HTTPS default, plaintext warning,
     unreadable-secret behaviour.
   - `.trellis/spec/backend/persistence-guidelines.md`: throwing `Set` vs
