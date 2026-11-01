@@ -90,6 +90,24 @@ Relevant config: `pollInterval=2`, 2 servers, floating window on — so
 - [ ] `11-01-tray-icon-crash`'s last open criterion can then be ticked and the
       task archived.
 
+## Added mid-task: startup regression (2026-11-02)
+
+Deploying surfaced a bug that this task did not predict: the first build with the
+log sink exited instantly on launch with `PlatformNotSupportedException` from
+`Dispatcher.MainLoop`, because `Program.Main` subscribed
+`Dispatcher.UIThread.UnhandledException` before the platform existed. Fixed in
+`68f2839` by moving the subscription to `App.OnFrameworkInitializationCompleted`.
+Full analysis in `incident-2026-11-02-startup.md`.
+
+Two requirements came out of it:
+
+8. A build must be **launched and observed to survive**, not just built. The
+   selftest and xUnit suite pass on a build that cannot start — nothing in the
+   pipeline runs `Program.Main`.
+9. `frontend/quality-guidelines.md` records the trap: no Avalonia API in `Main`
+   before `BuildAvaloniaApp()`, and accessing `Dispatcher.UIThread` early fails
+   *silently* at the access and fatally at the loop.
+
 ## Non-goals
 
 - Changing the tray implementation again. The fix is merged; this task deploys and
