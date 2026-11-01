@@ -1,0 +1,28 @@
+{
+  "id": "tray-icon-crash",
+  "name": "tray-icon-crash",
+  "title": "Fix tray-icon churn that crashes the app",
+  "description": "UpdateTray creates a new RenderTargetBitmap and native HICON on every status change (~1800/hour at the default 2s poll). The native CreateIcon eventually fails and, with no unhandled-exception handler, the Win32Exception propagates out of the UI dispatcher and kills PTMonitor.exe. Crash confirmed in the Windows Application event log (5x .NET Runtime 1026). Fix: cache the three state icons and only reassign on a real transition.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-01",
+  "completedAt": null,
+  "branch": "bugfix/tray-icon-crash",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/9"
+  }
+}

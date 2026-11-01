@@ -28,6 +28,7 @@ public sealed class AppServices
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
+    private MenuBarState? _trayState;
     private bool _quitRequested;
 
     private AppServices()
@@ -129,12 +130,28 @@ public sealed class AppServices
     private void UpdateTray()
     {
         var state = Monitor.MenuBarState;
-        _trayIcon.Icon = state switch
+        // Only touch Icon on a real transition. Reassigning it every poll drew a
+        // new bitmap (never disposed) and rebuilt the native icon each time --
+        // ~1800/hour at the default 2 s interval -- until CreateIcon failed and
+        // the exception took the process down (event log 1026).
+        if (state != _trayState)
         {
-            MenuBarState.Error => TrayIconFactory.Error(),
-            MenuBarState.Active => TrayIconFactory.Active(),
-            _ => TrayIconFactory.Idle(),
-        };
+            _trayState = state;
+            try
+            {
+                _trayIcon.Icon = state switch
+                {
+                    MenuBarState.Error => TrayIconFactory.Error(),
+                    MenuBarState.Active => TrayIconFactory.Active(),
+                    _ => TrayIconFactory.Idle(),
+                };
+            }
+            catch (Exception)
+            {
+                // The icon is cosmetic: keep the previous one and stay alive.
+                // A failure here must never terminate the agent.
+            }
+        }
 
         var aggregate = Monitor.Aggregate;
         var text = $"PT Monitor — {L10n.ServerCount(Settings.Servers.Count, aggregate.OnlineServers)}";

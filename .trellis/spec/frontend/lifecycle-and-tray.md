@@ -132,6 +132,18 @@ sets `ToolTipText` (`PT Monitor — N servers · M online`, plus speeds when the
 toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
+**Assign `TrayIcon.Icon` only when the state changes.** `TrayIconFactory` caches
+one `WindowIcon` per state, and `UpdateTray` skips the assignment while
+`MenuBarState` is unchanged. Reassigning the icon on every status change builds a
+new bitmap plus a new native icon per poll; at the default 2 s interval that
+exhausted the native icon path after a few hours and crashed the process with an
+unhandled `Win32Exception` (`AppServices.UpdateTray`, event log 1026) — see
+`.trellis/tasks/11-01-tray-icon-crash`. The assignment is also wrapped in a
+scoped `catch`: a cosmetic icon failure must never take the agent down.
+
+Do not create a `WindowIcon` (or call `Render`) outside the factory. `Render` is
+public for tests/artwork but the tray must use the cached accessors.
+
 `TrayIconFactory` renders 32×32 with `RenderTargetBitmap` using one shared
 geometry: a flat, light rounded tile with a hairline ring, a down/up arrow pair
 and a pill progress meter. The states differ only in colour — idle dims both
