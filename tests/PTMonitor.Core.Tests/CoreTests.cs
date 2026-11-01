@@ -307,6 +307,57 @@ public class SecretStoreTests
         }
     }
 
+    [Fact]
+    public void CorruptFileIsUnreadableAndPreserved()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            File.WriteAllText(path, "{ not json");
+            var store = new DpapiSecretStore(path);
+            var id = Guid.NewGuid();
+
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+            Assert.Null(store.Get(id));
+
+            store.Delete(Guid.NewGuid());
+            Assert.True(File.Exists(path + ".corrupt"));
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+
+            Assert.True(store.Set("hunter2", id));
+            Assert.Equal(SecretStoreState.Ok, store.State);
+            Assert.Equal("hunter2", store.Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void UnreadableSecretsRelabelOnlyAuthFailures()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            File.WriteAllText(path, "{ not json");
+            var store = new DpapiSecretStore(path);
+
+            Assert.Equal("stored password could not be read",
+                MonitorStore.Classify(null, store, ServerFailure.Auth("invalid username or password")).Message);
+            Assert.Equal("refused",
+                MonitorStore.Classify(null, store, ServerFailure.Unreachable("refused")).Message);
+            Assert.Equal("x",
+                MonitorStore.Classify("hunter2", store, ServerFailure.Auth("x")).Message);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
     private static string TempDirectory()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-tests-" + Guid.NewGuid().ToString("N"));

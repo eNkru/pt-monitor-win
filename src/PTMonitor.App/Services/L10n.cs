@@ -78,6 +78,8 @@ public static class L10n
             "密码将以明文发送——除非服务器位于你信任的网络，否则请启用“使用 HTTPS”。",
         ["cert SHA-256 %@"] = "证书 SHA-256 %@",
         ["Used the user name and password from the host field."] = "已使用主机字段中的用户名和密码。",
+        ["Stored passwords could not be read (secrets.dat is damaged). Re-enter each password; the old file is kept as secrets.dat.corrupt."] =
+            "无法读取已存储的密码（secrets.dat 已损坏）。请重新输入每个密码；原文件会保留为 secrets.dat.corrupt。",
         ["Enable or disable this server"] = "启用或禁用此服务器",
         ["Poll every %lld seconds"] = "每 %lld 秒轮询一次",
         ["Show speeds in the tray tooltip"] = "在托盘提示中显示速度",

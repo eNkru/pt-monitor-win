@@ -14,6 +14,11 @@
             <TextBlock x:Name="EmptyHelp" Opacity="0.6" TextWrapping="Wrap"
                        Text="No servers configured. Add a qBittorrent or Transmission server to start monitoring." />
 
+            <Border x:Name="SecretsWarning" IsVisible="False" Background="#FFF4E5"
+                    BorderBrush="#E0A030" BorderThickness="1" CornerRadius="4" Padding="10,8">
+                <TextBlock x:Name="SecretsWarningText" TextWrapping="Wrap" Foreground="#7A4E00" />
+            </Border>
+
             <ListBox x:Name="ServerList" MinHeight="140" MaxHeight="220">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="v:ServerRowItem">

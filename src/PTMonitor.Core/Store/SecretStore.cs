@@ -166,11 +166,30 @@ public sealed class DpapiSecretStore : ISecretStore
     /// <summary>Writes the current items atomically. Throws when the write fails.</summary>
     private void Persist()
     {
+        PreserveUnreadableCopy();
         var directory = Path.GetDirectoryName(_path);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
         var temp = _path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(_items));
         File.Move(temp, _path, true);
+    }
+
+    /// <summary>
+    /// Before overwriting a file that could not be read, keep its bytes as
+    /// <c>secrets.dat.corrupt</c>. This runs for every persist (a <c>Delete</c>
+    /// rewrites the file too), so the only recovery copy is never destroyed.
+    /// </summary>
+    private void PreserveUnreadableCopy()
+    {
+        if (_state != SecretStoreState.Unreadable) return;
+        try
+        {
+            File.Move(_path, _path + ".corrupt", true);
+        }
+        catch (Exception)
+        {
+            // Best effort: a preserved copy is not worth failing the user's write.
+        }
     }
 
     /// <summary>Best-effort write for the delete paths, which must never raise.</summary>

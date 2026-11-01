@@ -624,6 +624,26 @@ public static class SelfTest
             c.Expect("notice: thumbprint shown when insecure", EditorNotices.AcceptedCertificate(true, "ab12"), "AB12");
             c.True("notice: thumbprint hidden when strict", EditorNotices.AcceptedCertificate(false, "ab12") is null);
             c.True("notice: no thumbprint without a certificate", EditorNotices.AcceptedCertificate(true, null) is null);
+
+            // Corrupt store: unreadable, distinguishable, and preserved.
+            var corruptPath = Path.Combine(directory, "corrupt.dat");
+            File.WriteAllText(corruptPath, "{ this is not json");
+            var corrupt = new DpapiSecretStore(corruptPath);
+            var corruptId = Guid.NewGuid();
+            c.Expect("corrupt: reported unreadable", corrupt.State, SecretStoreState.Unreadable);
+            c.True("corrupt: nothing readable", corrupt.Get(corruptId) is null);
+            var relabelled = MonitorStore.Classify(null, corrupt, ServerFailure.Auth("invalid username or password"));
+            c.Expect("corrupt: auth failure renamed", relabelled.Message, "stored password could not be read");
+            c.Expect("corrupt: kind is still auth", relabelled.Kind, FailureKind.Auth);
+            c.Expect("corrupt: unrelated failure untouched",
+                MonitorStore.Classify(null, corrupt, ServerFailure.Unreachable("refused")).Message, "refused");
+            c.Expect("corrupt: password present means no rename",
+                MonitorStore.Classify("hunter2", corrupt, ServerFailure.Auth("x")).Message, "x");
+            corrupt.Delete(Guid.NewGuid());   // any persist preserves the bytes
+            c.True("corrupt: copy kept on the first persist", File.Exists(corruptPath + ".corrupt"));
+            c.True("corrupt: rewrite clears the state",
+                corrupt.Set("hunter2", corruptId) && corrupt.State == SecretStoreState.Ok);
+            c.Expect("corrupt: new value readable", corrupt.Get(corruptId), "hunter2");
         }
         finally
         {
