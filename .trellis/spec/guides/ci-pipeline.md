@@ -97,8 +97,16 @@ Both run the same gates in the same order and package both architectures through
 11. **`permissions:` is `contents: read` at workflow level.** `contents: write`
     exists only on the job that creates, edits or deletes a release or tag; an
     attesting job additionally gets `id-token: write` and `attestations: write`
-    and nothing else. A job that compiles, tests or packages must not hold write
-    access — that is the whole point of the `gate`/`package` split.
+    and nothing else. A job that only compiles, tests or packages must not hold
+    write access — that is the whole point of the `gate`/`package` split in
+    `build.yml`.
+
+    One deliberate exception: `branch-release.yml`'s `publish` job both packages
+    and publishes, because the tag move (`git tag -f` + `git push --force`) needs
+    a checkout carrying that job's write token (rule 6). Splitting it further
+    would mean moving the tag from a job with no workspace. A new lane should
+    prefer the `build.yml` shape: package read-only, publish from a downloaded
+    artifact.
 12. **The `pull_request` gate runs the contract and stops.** `build.yml` on a
     `pull_request` event runs `gate` only: `package` is guarded with
     `github.event_name != 'pull_request'` and `release` additionally with
@@ -113,7 +121,7 @@ Both run the same gates in the same order and package both architectures through
     | Producer | Why |
     |---|---|
     | `scripts/build.ps1` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` it can see, so running it once per `-Rid` converges instead of appending |
-    | the `release`/`publish` job | guarantees the published sums describe the bytes actually shipped, not a workspace leftover |
+    | the `release`/`publish` job | re-derives the sums from the bytes that job is about to ship, so a format slip or a workspace leftover cannot reach the release. In `build.yml` the zips arrive through the `PTMonitor-release` artifact, so the round-trip is a real re-verification; in `branch-release.yml` they are the files just built in the same job, so the block catches format slips and a stale third zip rather than a corrupted transfer |
 
     The workflow block re-derives every line with `Get-FileHash` and fails on a
     count mismatch, a malformed line, uppercase hex, a missing zip or a hash

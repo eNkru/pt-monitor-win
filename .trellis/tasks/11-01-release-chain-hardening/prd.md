@@ -41,7 +41,11 @@ Findings 1–7 are closed by `11-01-credential-tls-hardening` (PR #8).
    write` exists only on the job that creates or edits a release; the
    attestation jobs additionally get `id-token: write` and `attestations: write`
    and nothing else.
-7. No job that compiles, tests or packages has repository write access.
+7. No job that only compiles, tests or packages has repository write access. The
+   one deliberate exception is `branch-release.yml`'s `publish`, which packages
+   and publishes in one job because the tag move needs a checkout carrying that
+   job's write token; `build.yml` shows the preferred shape (read-only package,
+   publish from a downloaded artifact).
 8. `build.yml` gains a `pull_request` trigger that runs build + `--selftest` +
    `dotnet test` and nothing else — no packaging, no release, no artifact
    upload that needs write scope.

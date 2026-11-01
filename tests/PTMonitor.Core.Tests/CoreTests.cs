@@ -58,12 +58,81 @@ public class LogTests
         var directory = TempDirectory();
         try
         {
+            var path = Path.Combine(directory, "ptmonitor.log");
             Log.Shutdown();
             Log.Info("test", "before initialize");
-            Assert.False(File.Exists(Path.Combine(directory, "ptmonitor.log")));
+            Assert.False(File.Exists(path));
         }
         finally
         {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ShutdownSilencesTheSink()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "shutdown.log");
+            Log.Initialize(path);
+            Log.Info("test", "while initialized");
+            Log.Shutdown();
+            Log.Info("test", "after shutdown");
+
+            var lines = File.ReadAllLines(path);
+            Assert.Single(lines);
+            Assert.Contains("while initialized", lines[0]);
+        }
+        finally
+        {
+            Log.Shutdown();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task TheLoopLogsASteadyFailureOnce()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "loop.log");
+            Log.Initialize(path);
+
+            var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            settings.SetPollInterval(SettingsStore.MinPollInterval);
+            var config = new ServerConfig(ServerKind.Qbittorrent, "nas.invalid") { IsEnabled = true };
+            settings.Add(config);
+
+            // Counted at the client, not via StatusesChanged: an identical repeat is
+            // deliberately not published (IsEquivalent), so the second failure is
+            // only observable as a second poll. Wait for the THIRD poll to start:
+            // the log write happens after the fetch throws, so a second-poll signal
+            // could be read before the line is on disk.
+            var polls = 0;
+            var settled = new TaskCompletionSource();
+            using var monitor = new MonitorStore(
+                settings,
+                new InMemorySecretStore(),
+                (_, _) => new CountingClient(() =>
+                {
+                    if (Interlocked.Increment(ref polls) >= 3) settled.TrySetResult();
+                }));
+
+            monitor.Start();
+            // Two polls at the minimum interval; the timeout only guards a hang.
+            await Task.WhenAny(settled.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+            await monitor.StopAsync();
+            Log.Shutdown();
+
+            Assert.True(polls >= 3, $"expected three failed polls, saw {polls}");
+            Assert.Single(File.ReadAllLines(path));
+        }
+        finally
+        {
+            Log.Shutdown();
             Directory.Delete(directory, true);
         }
     }
@@ -144,31 +213,20 @@ public class LogTests
         }
     }
 
-    [Fact]
-    public void ASteadyFailureIsLoggedOnce()
+    /// <summary>Fails every poll and reports each attempt, so a test can count ticks.</summary>
+    private sealed class CountingClient(Action onPoll) : ITorrentClient
     {
-        var directory = TempDirectory();
-        try
+        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
         {
-            var path = Path.Combine(directory, "steady.log");
-            Log.Initialize(path);
-            FailureKind? logged = null;
-            for (var index = 0; index < 5; index++)
-            {
-                var status = new ServerStatus.Failed(ServerFailure.Auth("invalid username or password"));
-                if (!MonitorStore.ShouldLogFailure(logged, status)) continue;
-                Log.Warn("poll", $"nas: {status.Failure!.KindLabel}: {status.Failure.Message}");
-                logged = status.Failure.Kind;
-            }
-            Log.Shutdown();
+            onPoll();
+            return Task.FromException<TransferSnapshot>(
+                new ServerFailureException(ServerFailure.Unreachable("connection refused")));
+        }
 
-            Assert.Single(File.ReadAllLines(path));
-        }
-        finally
-        {
-            Log.Shutdown();
-            Directory.Delete(directory, true);
-        }
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) =>
+            Task.FromResult("stub");
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static string TempDirectory()

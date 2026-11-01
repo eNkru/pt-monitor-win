@@ -105,7 +105,7 @@ public static class SelfTest
             FormatChecks(checks);
             await StoreChecks(checks);
             await ClientChecks(checks);
-            LogChecks(checks);
+            await LogChecks(checks);
         }
         catch (Exception exception)
         {
@@ -697,7 +697,7 @@ public static class SelfTest
         }
     }
 
-    private static void LogChecks(Checks c)
+    private static async Task LogChecks(Checks c)
     {
         // Redaction contract (see .trellis/spec/backend/logging-guidelines.md).
         // The net, not the design: call sites still must not pass secrets.
@@ -730,6 +730,19 @@ public static class SelfTest
             Log.Shutdown();
             Log.Info("test", "before initialize");
             c.True("log: silent before initialize", !File.Exists(path));
+
+            // Shutdown really stops the sink: initialize, write, shut down, write
+            // again — the second event must not land. Asserting only "no file at
+            // a path nobody initialised" would pass with the whole module deleted.
+            Log.Initialize(path);
+            Log.Info("test", "while initialized");
+            Log.Shutdown();
+            Log.Info("test", "after shutdown");
+            var shutdownLines = File.ReadAllLines(path);
+            c.Expect("log: shutdown silences the sink", shutdownLines.Length, 1);
+            c.True("log: shutdown keeps the earlier event",
+                shutdownLines[0].Contains("while initialized", StringComparison.Ordinal));
+            File.Delete(path);
 
             // Line shape: UTC timestamp, level, area, redacted message, one line.
             Log.Initialize(path);
@@ -778,18 +791,15 @@ public static class SelfTest
             Log.Shutdown();
 
             // A steady failure logs once, not once per tick.
-            var steady = Path.Combine(directory, "steady.log");
-            Log.Initialize(steady);
-            FailureKind? logged = null;
-            for (var index = 0; index < 5; index++)
-            {
-                var status = new ServerStatus.Failed(ServerFailure.Auth("invalid username or password"));
-                if (!MonitorStore.ShouldLogFailure(logged, status)) continue;
-                Log.Warn("poll", $"nas: {status.Failure!.KindLabel}: {status.Failure.Message}");
-                logged = status.Failure.Kind;
-            }
+            // A steady failure logs once, not once per tick. Driven through the
+            // real loop: two consecutive failing polls must leave one line, which
+            // is what proves the loop resets the memo only on success.
+            var looped = Path.Combine(directory, "loop.log");
+            Log.Initialize(looped);
+            c.Expect("log: loop logs a steady failure once", await LoopFailureLines(looped), 1);
             Log.Shutdown();
-            c.Expect("log: steady failure logs once", File.ReadAllLines(steady).Length, 1);
+
+            // The pure rule the loop uses, pinned on its own.
             c.True("log: same kind again is quiet", !MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Auth("x"))));
             c.True("log: a kind change logs again", MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Unreachable("refused"))));
             c.True("log: success clears the memo", MonitorStore.ShouldLogFailure(null, new ServerStatus.Failed(ServerFailure.Auth("x"))));
@@ -800,6 +810,43 @@ public static class SelfTest
             Log.Shutdown();
             try { Directory.Delete(directory, true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Drives a real <see cref="MonitorStore"/> loop until two polls have failed
+    /// and reports how many lines the loop wrote. Two identical failures must
+    /// leave one line: that is the loop's memo, not a re-implementation of it.
+    /// </summary>
+    private static async Task<int> LoopFailureLines(string logPath)
+    {
+        var settingsDir = Path.Combine(Path.GetDirectoryName(logPath)!, "settings");
+        Directory.CreateDirectory(settingsDir);
+        var settings = new SettingsStore(Path.Combine(settingsDir, "settings.json"));
+        settings.SetPollInterval(SettingsStore.MinPollInterval);
+        var config = new ServerConfig(ServerKind.Qbittorrent, "nas.invalid") { IsEnabled = true };
+        settings.Add(config);
+
+        // Counted at the client, not via StatusesChanged: an identical repeat is
+        // deliberately not published (IsEquivalent), so the second failure is only
+        // observable as a second poll. Wait for the THIRD poll to start: the log
+        // write happens after the fetch throws, so a second-poll signal could be
+        // read before the line is on disk.
+        var polls = 0;
+        var settled = new TaskCompletionSource();
+        using var monitor = new MonitorStore(
+            settings,
+            new InMemorySecretStore(),
+            (_, _) => new CountingClient(() =>
+            {
+                if (Interlocked.Increment(ref polls) >= 3) settled.TrySetResult();
+            }));
+
+        monitor.Start();
+        // Two polls at the minimum interval; the timeout only guards a hang.
+        await Task.WhenAny(settled.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        await monitor.StopAsync();
+
+        return File.Exists(logPath) ? File.ReadAllLines(logPath).Length : 0;
     }
 
     private static async Task ClientChecks(Checks c)
@@ -837,6 +884,22 @@ public static class SelfTest
             }
             return (response, decision.SessionId ?? sessionId);
         }
+    }
+
+    /// <summary>Fails every poll and reports each attempt, so a test can count ticks.</summary>
+    private sealed class CountingClient(Action onPoll) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+        {
+            onPoll();
+            return Task.FromException<TransferSnapshot>(
+                new ServerFailureException(ServerFailure.Unreachable("connection refused")));
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) =>
+            Task.FromResult("stub");
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class StubClient : ITorrentClient

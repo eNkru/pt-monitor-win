@@ -32,12 +32,12 @@ class Program
     /// <summary>
     /// Records a crash and lets it terminate the process: <c>Handled</c> is
     /// deliberately never set, so the only change is that the failure is now on
-    /// disk instead of only in the Windows event log.
+    /// disk instead of only in the Windows event log. <c>ToString()</c> rather
+    /// than <c>Message</c>: the cause of a crash is almost always the inner
+    /// exception, and the whole chain is flattened onto one line by the sink.
     /// </summary>
     private static void LogCrash(string area, Exception? exception) =>
-        Log.Error(area, exception is null
-            ? "unhandled exception"
-            : $"{exception.GetType().Name}: {exception.Message} | {exception.StackTrace}");
+        Log.Error(area, exception?.ToString() ?? "unhandled exception");
 
     private static string Version() => typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
 

@@ -101,7 +101,7 @@ cannot leak. The table is the contract; the xUnit suite and `--selftest` pin it.
 | Pattern | Becomes |
 |---|---|
 | `password=…`, `passwd=`, `pwd=`, `pass=` (form or query, `&`-delimited) | `password=***` |
-| `Authorization: Basic/Bearer <token>` | `Authorization: Basic ***` |
+| `Authorization: Basic/Bearer <token>` | `Authorization: <scheme> ***` |
 | `Set-Cookie:` / `Cookie:` values, `SID=…` | `Set-Cookie: ***`, `SID=***` |
 | `scheme://user:pass@host` userinfo | `scheme://***@host` |
 | bare `user:pass@host` userinfo | `user:***@host` |
