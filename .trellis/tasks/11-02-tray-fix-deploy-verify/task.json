@@ -12,7 +12,7 @@
   "assignee": "Howard.J",
   "createdAt": "2026-11-02",
   "completedAt": null,
-  "branch": "main",
+  "branch": "bugfix/startup-dispatcher-regression",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
