@@ -64,7 +64,7 @@ public partial class ServerEditorWindow : Window
             NameField.Text = "";
             HostField.Text = "";
             PortField.Text = ServerKind.Qbittorrent.DefaultPort().ToString();
-            TlsToggle.IsChecked = false;
+            TlsToggle.IsChecked = true;
             InsecureToggle.IsChecked = false;
             EnabledToggle.IsChecked = true;
             UserField.Text = "";

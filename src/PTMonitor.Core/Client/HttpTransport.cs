@@ -99,7 +99,14 @@ public sealed class HttpTransport : IDisposable
         }
         catch (HttpRequestException exception)
         {
-            throw new ServerFailureException(FailureKind.Unreachable, Describe(exception));
+            var message = Describe(exception);
+            // With HTTPS on by default, a plain-HTTP server fails here with a TLS
+            // error whose stock hint ("allow self-signed certificate") is wrong.
+            // Point at the toggle that actually fixes it.
+            if (BaseUri.Scheme == Uri.UriSchemeHttp
+                && message.StartsWith("TLS handshake failed", StringComparison.Ordinal))
+                message += "; or uncheck \"Use HTTPS\" if the server speaks plain HTTP";
+            throw new ServerFailureException(FailureKind.Unreachable, message);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
