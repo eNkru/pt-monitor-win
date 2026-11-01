@@ -591,6 +591,17 @@ public static class SelfTest
             c.True("secrets: failed write stores nothing", broken.Get(brokenId) is null);
             broken.Delete(brokenId);   // must not raise, even on a broken path
             c.True("secrets: delete after failure is silent", broken.Get(brokenId) is null);
+
+            // Notice line: the validator notice leads, the plaintext warning is
+            // independent of it, and an empty password warns about nothing.
+            var warns = EditorNotices.Compose(null, useTls: false, password: "hunter2");
+            c.Expect("notice: plaintext warning", warns.Count, 1);
+            c.Expect("notice: plaintext text", warns[0], EditorNotices.PlaintextWarning);
+            c.Expect("notice: https silences it", EditorNotices.Compose(null, useTls: true, password: "hunter2").Count, 0);
+            c.Expect("notice: empty password silences it", EditorNotices.Compose(null, useTls: false, password: "").Count, 0);
+            var both = EditorNotices.Compose("Used port 8080 from the host field.", useTls: false, password: "hunter2");
+            c.Expect("notice: validator first", both.Count, 2);
+            c.Expect("notice: validator kept", both[0], "Used port 8080 from the host field.");
         }
         finally
         {

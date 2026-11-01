@@ -192,6 +192,25 @@ public class MonitorStoreTests
     }
 }
 
+public class EditorNoticesTests
+{
+    [Fact]
+    public void PlaintextWarningIsShownOnlyWithoutTlsAndWithAPassword()
+    {
+        Assert.Equal([EditorNotices.PlaintextWarning], EditorNotices.Compose(null, false, "hunter2"));
+        Assert.Empty(EditorNotices.Compose(null, true, "hunter2"));
+        Assert.Empty(EditorNotices.Compose(null, false, ""));
+        Assert.Empty(EditorNotices.Compose(null, false, null));
+    }
+
+    [Fact]
+    public void ValidatorNoticeComesFirstAndCoexists()
+    {
+        var parts = EditorNotices.Compose("Used port 8080 from the host field.", false, "hunter2");
+        Assert.Equal(["Used port 8080 from the host field.", EditorNotices.PlaintextWarning], parts);
+    }
+}
+
 public class SecretStoreTests
 {
     [Fact]

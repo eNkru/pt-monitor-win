@@ -31,6 +31,8 @@ public partial class ServerEditorWindow : Window
     {
         base.OnOpened(e);
         ApplyLocalization();
+        TlsToggle.IsCheckedChanged += OnNoticeInputChanged;
+        PasswordField.TextChanged += OnNoticeInputChanged;
         Load();
     }
 
@@ -82,6 +84,8 @@ public partial class ServerEditorWindow : Window
             UserField.Text = _existing.Username;
             PasswordField.Text = AppServices.Instance.Secrets.Get(_existing.Id) ?? "";
         }
+
+        RefreshNotices();
     }
 
     private ServerKind CurrentKind =>
@@ -117,11 +121,20 @@ public partial class ServerEditorWindow : Window
         }
     }
 
-    private void ShowNotice(string? notice)
+    private void ShowNotice(string? notice) => RefreshNotices(notice);
+
+    /// <summary>Rebuilds the notice line: validator notice plus the plaintext warning.</summary>
+    private void RefreshNotices(string? validatorNotice = null)
     {
-        NoticeText.IsVisible = notice is not null;
-        NoticeText.Text = notice ?? "";
+        var parts = EditorNotices
+            .Compose(validatorNotice, TlsToggle.IsChecked == true, PasswordField.Text)
+            .Select(L10n.S)
+            .ToList();
+        NoticeText.IsVisible = parts.Count > 0;
+        NoticeText.Text = string.Join("\n", parts);
     }
+
+    private void OnNoticeInputChanged(object? sender, EventArgs e) => RefreshNotices();
 
     private void ShowMessage(string text, bool isError)
     {
