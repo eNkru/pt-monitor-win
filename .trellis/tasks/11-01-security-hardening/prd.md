@@ -58,15 +58,17 @@ its `implement.md`).
 
 ## Cross-child acceptance criteria
 
-- [ ] All ten findings are addressed or re-scoped with a written reason.
-- [ ] `.trellis/spec/backend/persistence-guidelines.md` describes what the code
+- [x] All ten findings are addressed or re-scoped with a written reason.
+- [x] `.trellis/spec/backend/persistence-guidelines.md` describes what the code
       actually does for secret writes, corruption, and the DPAPI fallback.
-- [ ] `.trellis/spec/backend/client-and-parser-rules.md` documents the TLS and
+- [x] `.trellis/spec/backend/client-and-parser-rules.md` documents the TLS and
       userinfo rules.
 - [x] `.trellis/spec/guides/ci-pipeline.md` documents the pinning, permissions
       and provenance rules.
 - [ ] A user with a working HTTPS setup sees no change in behaviour.
-- [ ] Full verification (build, selftest, tests) passes on the final state.
+- [x] Full verification (build, selftest, tests) passes on the final state.
+      Verified on merged `main` (`2d04a89`): build clean, 298 selftest checks,
+      85 xUnit tests.
 
 ## Non-goals
 

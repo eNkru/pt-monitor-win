@@ -21,7 +21,7 @@ gate on the YAML parse plus a line-by-line read of every changed block.
 
 ### Logging (finding 10)
 
-- [ ] **1. `Log` module**
+- [x] **1. `Log` module**
   - New `src/PTMonitor.Core/Diagnostics/Log.cs` per `design.md` §4: `Initialize`,
     `Info`/`Warn`/`Error`, `Redact`, `Shutdown`; no-op before `Initialize`;
     append-flush-close under a lock; `maxBytes` rotation to `ptmonitor.log.1`;
@@ -32,7 +32,7 @@ gate on the YAML parse plus a line-by-line read of every changed block.
     before `Initialize` are no-ops. Temp dir per case, deleted in `finally`.
   - xUnit mirror in `CoreTests.cs`, same table.
   - Gate.
-- [ ] **2. Wire the call sites** (`design.md` §4 table)
+- [x] **2. Wire the call sites** (`design.md` §4 table)
   - `App/Program.cs`: `Log.Initialize(AppPaths.LogFile)` before the builder; one
     startup line; `AppDomain` + `Dispatcher.UIThread` unhandled handlers that log
     redacted and do **not** set `Handled`.
@@ -44,7 +44,7 @@ gate on the YAML parse plus a line-by-line read of every changed block.
     `SettingsStore` (write failure), `AppServices` cert callback (thumbprint),
     `ServerEditorWindow.OnSave` (aborted save).
   - Gate.
-- [ ] **3. Docs for the log**
+- [x] **3. Docs for the log**
   - `README.md`: `ptmonitor.log` row in "Data, settings and secrets" (contents,
     512 KiB ×2 cap, no secrets); replace "the app writes nothing by default" in
     troubleshooting.

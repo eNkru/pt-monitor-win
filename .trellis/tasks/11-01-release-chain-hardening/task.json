@@ -22,5 +22,7 @@
   "parent": "11-01-security-hardening",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/10"
+  }
 }

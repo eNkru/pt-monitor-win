@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "poll loop, change detection and the transition-only logging rule the soak is verifying"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "what ptmonitor.log must contain after a real session, and what it must never contain"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "the gates to run on the tree the soak build came from"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "what lives in %APPDATA%\\PTMonitor and why the data directory is backed up before the soak"}
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "how to obtain and fingerprint a CI artifact for the soak build"}
