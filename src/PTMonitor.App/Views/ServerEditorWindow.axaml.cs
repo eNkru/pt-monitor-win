@@ -167,17 +167,23 @@ public partial class ServerEditorWindow : Window
         _isTesting = true;
         TestButton.Content = L10n.S("Testing…");
         TestButton.IsEnabled = false;
+        string? acceptedThumbprint = null;
+        void Observe(string thumbprint) => acceptedThumbprint = thumbprint;
         try
         {
             var config = validated.Config;
+            var insecure = validated.Config.AllowInsecureTls;
             var password = PasswordField.Text ?? "";
             ITorrentClient client = config.Kind == ServerKind.Qbittorrent
-                ? new QBittorrentClient(config, password)
-                : new TransmissionClient(config, password);
+                ? new QBittorrentClient(config, password, Observe)
+                : new TransmissionClient(config, password, Observe);
             await using (client)
             {
                 var version = await client.TestConnectionAsync(CancellationToken.None);
-                ShowMessage(L10n.Connected(version), isError: false);
+                var message = L10n.Connected(version);
+                if (EditorNotices.AcceptedCertificate(insecure, acceptedThumbprint) is { } thumbprint)
+                    message += $" · {L10n.Format("cert SHA-256 %@", thumbprint)}";
+                ShowMessage(message, isError: false);
             }
         }
         catch (ServerFailureException failure)

@@ -76,6 +76,7 @@ public static class L10n
         ["Enabled"] = "启用",
         ["The password is sent unencrypted — enable \"Use HTTPS\" unless the server is on a network you trust."] =
             "密码将以明文发送——除非服务器位于你信任的网络，否则请启用“使用 HTTPS”。",
+        ["cert SHA-256 %@"] = "证书 SHA-256 %@",
         ["Enable or disable this server"] = "启用或禁用此服务器",
         ["Poll every %lld seconds"] = "每 %lld 秒轮询一次",
         ["Show speeds in the tray tooltip"] = "在托盘提示中显示速度",

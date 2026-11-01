@@ -11,6 +11,14 @@ public static class EditorNotices
         "The password is sent unencrypted — enable \"Use HTTPS\" unless the server is on a network you trust.";
 
     /// <summary>
+    /// The thumbprint to show after a successful Test Connection, or null.
+    /// Only insecure mode records one: in strict mode the certificate either
+    /// validates or the connection never succeeds.
+    /// </summary>
+    public static string? AcceptedCertificate(bool allowInsecureTls, string? thumbprint) =>
+        allowInsecureTls && !string.IsNullOrWhiteSpace(thumbprint) ? thumbprint.ToUpperInvariant() : null;
+
+    /// <summary>
     /// The validator's notice first, then the plaintext warning. The warning is
     /// independent of validation: it appears while the form is still invalid.
     /// </summary>

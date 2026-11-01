@@ -209,6 +209,14 @@ public class EditorNoticesTests
         var parts = EditorNotices.Compose("Used port 8080 from the host field.", false, "hunter2");
         Assert.Equal(["Used port 8080 from the host field.", EditorNotices.PlaintextWarning], parts);
     }
+    [Fact]
+    public void ThumbprintIsReportedOnlyForAcceptedInsecureCertificates()
+    {
+        Assert.Equal("AB12", EditorNotices.AcceptedCertificate(true, "ab12"));
+        Assert.Null(EditorNotices.AcceptedCertificate(false, "ab12"));
+        Assert.Null(EditorNotices.AcceptedCertificate(true, " "));
+        Assert.Null(EditorNotices.AcceptedCertificate(true, null));
+    }
 }
 
 public class SecretStoreTests

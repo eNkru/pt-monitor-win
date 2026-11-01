@@ -602,6 +602,9 @@ public static class SelfTest
             var both = EditorNotices.Compose("Used port 8080 from the host field.", useTls: false, password: "hunter2");
             c.Expect("notice: validator first", both.Count, 2);
             c.Expect("notice: validator kept", both[0], "Used port 8080 from the host field.");
+            c.Expect("notice: thumbprint shown when insecure", EditorNotices.AcceptedCertificate(true, "ab12"), "AB12");
+            c.True("notice: thumbprint hidden when strict", EditorNotices.AcceptedCertificate(false, "ab12") is null);
+            c.True("notice: no thumbprint without a certificate", EditorNotices.AcceptedCertificate(true, null) is null);
         }
         finally
         {

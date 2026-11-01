@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using PTMonitor.Core.Model;
 
@@ -23,11 +24,16 @@ public sealed class HttpTransport : IDisposable
 
     private readonly HttpClient _client;
     private readonly string? _basicAuthorization;
+    private readonly Action<string>? _onCertificateAccepted;
     private bool _disposed;
 
-    public HttpTransport(ServerConfig config, string? password)
+    /// <summary>The last leaf-certificate thumbprint accepted in insecure mode, if any.</summary>
+    public string? ObservedThumbprint { get; private set; }
+
+    public HttpTransport(ServerConfig config, string? password, Action<string>? onCertificateAccepted = null)
     {
         BaseUri = EndpointParser.BaseUri(config.Host, config.Port, config.UseTls);
+        _onCertificateAccepted = onCertificateAccepted;
 
         var handler = new HttpClientHandler
         {
@@ -38,8 +44,16 @@ public sealed class HttpTransport : IDisposable
         };
         if (config.AllowInsecureTls)
         {
-            handler.ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            // Same accept-anything semantics as DangerousAcceptAnyServerCertificateValidator,
+            // but the accepted leaf certificate is recorded so a swap is visible.
+            handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
+            {
+                if (certificate is null) return false;
+                var thumbprint = certificate.GetCertHashString(HashAlgorithmName.SHA256);
+                ObservedThumbprint = thumbprint;
+                _onCertificateAccepted?.Invoke(thumbprint);
+                return true;
+            };
         }
 
         _client = new HttpClient(handler)
