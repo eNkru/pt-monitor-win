@@ -44,12 +44,18 @@ public interface ISecretStore
   must not raise; `Set` must, because the editor's abort depends on it.
 - `Set` sets `State = Ok` after a successful write.
 - While `State == Unreadable`, the *first persist of any kind* preserves the
-  unreadable bytes as `secrets.dat.corrupt` (`File.Move(_path, _path + ".corrupt",
-  true)`, overwriting any earlier copy) before the rewrite. It happens inside the
-  write path, so `Delete`/`DeleteAll` — which rewrite the file too — cannot
+  unreadable bytes as `secrets.dat.corrupt` before the rewrite. It happens inside
+  the write path, so `Delete`/`DeleteAll` — which rewrite the file too — cannot
   destroy the only recovery copy before a `Set` ever runs. The rename is
   best-effort: if it fails, the write still proceeds — preserving the old bytes
   is not worth blocking the user's edit.
+- The copy is made **only once**, guarded by `File.Exists(... ".corrupt")`. State
+  stays `Unreadable` until a `Set` *succeeds*, so a second `Delete` before then
+  would otherwise move the freshly written (valid) file over the damaged
+  original. Overwriting the copy on every persist destroys exactly the bytes it
+  exists to save. Checked explicitly rather than relying on two-argument
+  `File.Move` throwing when the destination exists: that is an incidental
+  guarantee of the framework, not the rule being implemented.
 
 Trade-off: a throwing `Delete` would be more honest, but `PreferencesWindow`
 removes the row from the UI regardless; throwing there forces a second error path

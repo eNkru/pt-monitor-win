@@ -182,9 +182,17 @@ public sealed class DpapiSecretStore : ISecretStore
     private void PreserveUnreadableCopy()
     {
         if (_state != SecretStoreState.Unreadable) return;
+
+        // State stays Unreadable until a Set succeeds, so a later persist would
+        // otherwise move the freshly written (valid) file over the original
+        // damaged bytes. The first copy wins; it is the one worth recovering.
+        // Checked explicitly rather than by relying on File.Move throwing when
+        // the destination exists: that is an incidental guarantee, not the rule.
+        if (File.Exists(_path + ".corrupt")) return;
+
         try
         {
-            File.Move(_path, _path + ".corrupt", true);
+            File.Move(_path, _path + ".corrupt");
         }
         catch (Exception)
         {

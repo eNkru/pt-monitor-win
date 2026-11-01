@@ -391,6 +391,31 @@ public class SecretStoreTests
     }
 
     [Fact]
+    public void ThePreservedCopySurvivesRepeatedWritesWhileUnreadable()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            const string damaged = "{ not json";
+            File.WriteAllText(path, damaged);
+            var store = new DpapiSecretStore(path);
+
+            // Two deletes: the first writes a valid file while the state is still
+            // Unreadable. The second must not move that file over the copy.
+            store.Delete(Guid.NewGuid());
+            store.Delete(Guid.NewGuid());
+
+            Assert.Equal(damaged, File.ReadAllText(path + ".corrupt"));
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void UnreadableSecretsRelabelOnlyAuthFailures()
     {
         var directory = TempDirectory();
