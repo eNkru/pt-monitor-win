@@ -3,7 +3,7 @@
   "name": "release-chain-hardening",
   "title": "Release-chain hardening",
   "description": "Close findings 8,9,10: pin actions to commit SHAs, scope contents:write per job and add a pull_request gate, add checksums + build-provenance attestation to releases, and introduce a redacting log file so auth failures are diagnosable",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": "backend",
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "Howard.J",
   "assignee": "Howard.J",
   "createdAt": "2026-11-01",
-  "completedAt": null,
+  "completedAt": "2026-11-02",
   "branch": "security/release-chain-hardening",
   "base_branch": "main",
   "worktree_path": null,
@@ -22,5 +22,7 @@
   "parent": "11-01-security-hardening",
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/10"
+  }
 }

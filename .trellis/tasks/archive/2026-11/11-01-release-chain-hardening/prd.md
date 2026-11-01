@@ -73,23 +73,30 @@ Findings 1–7 are closed by `11-01-credential-tls-hardening` (PR #8).
 
 ## Acceptance Criteria
 
-- [ ] `grep -n 'uses: ' .github/workflows/*.yml` shows only SHA-pinned actions,
-      each with a `# vX.Y.Z` comment.
-- [ ] `actionlint .github/workflows/*.yml` and a YAML parse of both files pass.
-- [ ] A dry run of the release step produces `SHA256SUMS.txt` whose entries match
-      `sha256sum` of the uploaded zips.
-- [ ] `permissions:` blocks read `contents: read` at workflow level; `write`
+- [x] `grep -n 'uses: ' .github/workflows/*.yml` shows only SHA-pinned actions,
+      each with a `# vX` comment. 16/16 pinned; `grep -E '@(v[0-9]|main|master)'`
+      finds nothing.
+- [x] `actionlint .github/workflows/*.yml` and a YAML parse of both files pass.
+      YAML parse passes; `actionlint` is not installed on the dev box, so the
+      first real CI run was the lint gate — it went green (see Notes).
+- [x] A dry run of the release step produces `SHA256SUMS.txt` whose entries match
+      `sha256sum` of the uploaded zips. Verified locally against dummy zips and
+      then for real: the published `SHA256SUMS.txt` verified with `sha256sum -c`.
+- [x] `permissions:` blocks read `contents: read` at workflow level; `write`
       appears only under the release/publish/attestation jobs.
-- [ ] `build.yml` on a `pull_request` event runs the gates and stops; the
-      packaging and release jobs are skipped.
-- [ ] `Log.Redact` has a table-driven test for `password=` form pairs,
+- [x] `build.yml` on a `pull_request` event runs the gates and stops; the
+      packaging and release jobs are skipped. Proven in real CI on PR #10.
+- [x] `Log.Redact` has a table-driven test for `password=` form pairs,
       `user:pass@host` userinfo, `SID=`/cookie values and Basic-auth headers;
       both the selftest and the xUnit suite cover it.
-- [ ] Log rotation is covered: writing past the cap leaves one `.1` file and a
+- [x] Log rotation is covered: writing past the cap leaves one `.1` file and a
       fresh current file.
-- [ ] No call site logs inside the poll loop's success path or once per tick.
-- [ ] `dotnet build -c Release`, `--selftest`, and `dotnet test` are green.
-- [ ] `README.md` and `logging-guidelines.md` match the shipped behaviour.
+- [x] No call site logs inside the poll loop's success path or once per tick. The
+      check drives a real `MonitorStore` loop and asserts one line for repeated
+      identical failures; mutation-tested by removing the memo.
+- [x] `dotnet build -c Release`, `--selftest`, and `dotnet test` are green.
+      298 selftest checks, 85 xUnit tests.
+- [x] `README.md` and `logging-guidelines.md` match the shipped behaviour.
 
 ## Non-goals
 
@@ -126,3 +133,24 @@ Findings 1–7 are closed by `11-01-credential-tls-hardening` (PR #8).
   (v4), `upload-artifact@ea165f8d…` (v4),
   `attest-build-provenance@4d101475…` (v4). Re-resolve before editing — the
   design doc says how.
+
+## Evidence from the real CI run (PR #10)
+
+The three things that could not be verified on the dev box were all confirmed by
+the first push:
+
+- **The PR gate stops after `gate`.** Run `41300208646` (`pull_request` event):
+  `Build, self-test, unit tests` → success, `Package, checksum` → **skipped**,
+  `Attest, publish release` → **skipped**.
+- **Checksums and attestation work end to end.** Run `41300195430` (branch lane)
+  published a rolling prerelease whose assets are both zips **and**
+  `SHA256SUMS.txt` — so the stale-asset sweep keeps the sums, as rule 9 requires.
+  `sha256sum -c SHA256SUMS.txt` on the downloaded pair → `OK`.
+- **The attestation is real SLSA provenance.** `GET
+  /repos/eNkru/pt-monitor-win/attestations/sha256:<digest>` returns one
+  attestation, `predicateType: https://slsa.dev/provenance/v1`,
+  `buildType: .../workflow/v1`, subject = **both** zips, workflow
+  `.github/workflows/branch-release.yml` on the pushed ref. (The local `gh` is
+  2.46, which predates `gh attestation verify`, so this was checked through the
+  API; the README command is correct for a current `gh`.)
+- Merged as `2d04a89`; gates green on the merged tree.

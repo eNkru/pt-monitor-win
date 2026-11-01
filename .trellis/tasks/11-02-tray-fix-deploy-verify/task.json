@@ -1,0 +1,28 @@
+{
+  "id": "tray-fix-deploy-verify",
+  "name": "tray-fix-deploy-verify",
+  "title": "Deploy the tray fix and prove the 59-minute crash is gone",
+  "description": "Ship a build that contains the cached-icon tray fix (e6064d6), record crash #6 in the tray task's PRD with the uptime fingerprint that identifies the leak ceiling, and run a >60-minute Windows soak that must produce no event 1026 and a clean ptmonitor.log",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "backend",
+  "package": null,
+  "priority": "P2",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-02",
+  "completedAt": null,
+  "branch": "bugfix/startup-dispatcher-regression",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/11"
+  }
+}

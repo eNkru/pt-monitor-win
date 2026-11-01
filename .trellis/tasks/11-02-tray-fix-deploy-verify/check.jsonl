@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "verify the handle trend against the documented poll/change-detection behaviour"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "verify the soak log against the event-only and redaction contract"}
