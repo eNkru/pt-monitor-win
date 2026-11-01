@@ -183,41 +183,42 @@ the fallback is a plain `Unreachable`, which is only a worse label.
 
 ## 7. Redirect credentials
 
-.NET clears `request.Headers.Authorization` inside `RedirectHandler` on every
-redirect, before following it. Today a same-origin redirect therefore drops Basic
-auth and the retry 401s, while a redirect to another origin is re-authenticated
-by a challenge — so the credential still goes wherever `Location` points.
+> **Revised during implementation.** The first version of this section proposed
+> `handler.Credentials` + `PreAuthenticate`. A loopback probe disproved it:
+> .NET's `RedirectHandler` clears `Authorization` on every hop **and** sends the
+> redirected request through a second inner handler with credential auth
+> disabled (`_redirectInnerHandler`), so nothing re-authenticates the hop. The
+> shipped design follows redirects in the transport.
 
-Keep `AllowAutoRedirect = true` (cookie handling and method rewriting stay the
-framework's) and stop depending on the manual header for redirects:
+`AllowAutoRedirect = false`; `SendFollowingRedirectsAsync` walks the chain and
+decides per hop:
 
-```csharp
-handler.Credentials = new NetworkCredential(config.Username, passwordValue);
-handler.PreAuthenticate = true;
-```
+| Hop | Credential |
+|---|---|
+| same origin (scheme, host, port) | `Authorization` carried over |
+| different origin, including https→http | header dropped; only a 401 re-authenticates |
+| any origin, redirect carries a request body | **not followed** — the 3xx is returned |
 
-- `SocketsHttpHandler` runs credential auth on every request
-  (`HttpConnectionPool.SendAsync` → `SendWithRequestAuthAsync`). Its pre-auth
-  cache is keyed by origin, so a same-origin redirect re-attaches Basic without a
-  challenge, while a different origin — and an https→http downgrade, which is a
-  different origin — starts with no header and gets the credential only after a
-  401. That is the intended split: no credential is sprayed at a redirect target
-  before it asks for one.
-- `UseBasicAuthorization` stays: it covers the first request, including both
-  clients' login calls, before any challenge has populated the cache.
-- The login POST body (qBittorrent form) is not covered: a 307/308 replays it
-  byte for byte, so a downgrade puts the password in clear once. Documented in
-  `client-and-parser-rules.md`, not prevented — preventing it means refusing
-  redirects, which breaks a stock WebUI behind a reverse proxy.
+- Method rewriting matches the framework: 303 → GET, 301/302 → GET for POST,
+  307/308 keep method and body. `MaxRedirects = 10`, then the 3xx is returned.
+- The body rule exists because the qBittorrent login form *is* the password: a
+  307/308 to another origin would replay it in clear, which is exactly the
+  downgrade the finding describes.
+- `UseBasicAuthorization` stays and provides the first request's header; the
+  helper copies it onto same-origin hops.
+- The decision points are pure (`SameOrigin`, `TryGetRedirect`,
+  `BuildRedirectRequest`) so the selftest covers them without sockets, and the
+  behaviour was verified end to end against two loopback listeners.
 
-Trade-off: one extra round trip on a cross-origin redirect that rejects
-anonymous requests. Accepted.
+Trade-off: the engine no longer handles 100 redirect semantics for us, so the
+method/body rules are ours to keep right — covered by the selftest table.
 
 ## Compatibility & rollback
 
 - `settings.json` untouched; an existing server keeps whatever `useTls` it has, so
   the new default only affects newly added servers.
-- No public API removed except `ValidatedServerConfig.Notice` (single caller) and
-  `ISecretStore` gaining a member (`InMemorySecretStore` is the only other impl).
+- `ISecretStore` gains `State` (`InMemorySecretStore` is the only other impl);
+  `ValidatedServerConfig.Notice` survives as a convenience property so the change
+  is additive.
 - Each finding is its own commit → individually revertable. Rollback of the
   default alone is a one-line revert that does not touch 3, 4 or 5.

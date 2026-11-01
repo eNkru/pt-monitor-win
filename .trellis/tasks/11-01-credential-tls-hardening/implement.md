@@ -79,16 +79,15 @@ pure function.
     breach to `ProtocolViolation`.
   - Gate.
 - [ ] **8. Redirect credentials** (finding 7)
-  - `HttpTransport` ctor: `handler.Credentials = new NetworkCredential(...)` and
-    `handler.PreAuthenticate = true` per `design.md` §7; keep
-    `UseBasicAuthorization` for the first request; leave `AllowAutoRedirect` on.
+  - `HttpTransport`: `AllowAutoRedirect = false` plus `SendFollowingRedirects`
+    per `design.md` §7; pure helpers `SameOrigin`, `TryGetRedirect`,
+    `BuildRedirectRequest` for the selftest.
   - `.trellis/spec/backend/client-and-parser-rules.md`: same-origin redirects
     keep Basic; a different origin, including an https→http downgrade, gets a
-    challenge first; a 307/308 replays the login body, so a downgrade sends the
-    password in clear once.
-  - Verify: point a server at a stub that 302s to another path on the same
-    origin and confirm the follow-up is not 401; a cross-origin stub must see a
-    challenge round trip before any `Authorization` header.
+    401 challenge first; a redirect carrying a body is not followed across
+    origins at all.
+  - Verified end to end against loopback listeners (same-origin keeps the
+    header, cross-origin does not).
 - [ ] **9. Docs + final verification**
   - `README.md` "Data, settings and secrets": HTTPS default, plaintext warning,
     unreadable-secret behaviour.

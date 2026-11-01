@@ -90,9 +90,39 @@ keyed by `serverId.ToString("N")`, protected with
 
 - Non-Windows development builds write `plain:` + base64 so `dotnet run` works;
   the Windows build never produces that form.
-- `Set` with an empty password removes the entry and returns `false`.
+- `Set` with an empty password removes the entry and returns `false`. `false` is
+  **not** a success flag — the two outcomes are "throws, nothing stored" and
+  "returns whether a password remains".
 - An unreadable entry decodes to `null` rather than throwing.
-- `InMemorySecretStore` is the test/`SelfTest` implementation.
+- `InMemorySecretStore` is the test/`SelfTest` implementation; its `State` is
+  always `Ok`.
+- The DPAPI path only runs on Windows. `--selftest` and the xUnit suite exercise
+  `DpapiSecretStore` through the plaintext fallback, so DPAPI-specific failures
+  are **not** covered by either gate — verify them by hand on Windows.
+
+### `State`: Ok, Absent, Unreadable
+
+`Load` distinguishes a missing file (`Absent`, a fresh install) from a file that
+exists but does not parse (`Unreadable`). While unreadable, every `Get` returns
+`null` and the state stays that way until a successful `Set` rewrites the file.
+
+- Before **any** persist while `Unreadable`, the existing bytes are moved to
+  `secrets.dat.corrupt` (overwriting an older copy). This happens in the write
+  path, not in `Set`, so a `Delete` from Preferences cannot destroy the only
+  recovery copy before a password is re-entered.
+- `MonitorStore.Classify` relabels an auth failure as "stored password could not
+  be read" when no password was available and the store is unreadable. It runs in
+  both poll paths (`PollLoopAsync` and `PollAsync`), and only **after** the poll
+  fails: a server that needs no password keeps working through a corruption.
+- `PreferencesWindow` shows one banner while the state is `Unreadable`.
+
+### Writes: throwing vs swallowing
+
+`Persist()` throws; `PersistOrIgnore()` swallows with a comment. `Set` uses the
+former, `Delete`/`DeleteAll` the latter — the preferences row is already gone
+from the UI by the time the delete runs, so a throw there would be a second
+error path with nothing to show. `Set` restores the previous in-memory entry if
+the write fails, so the store never claims a password the file does not hold.
 
 ### Order matters on save
 
