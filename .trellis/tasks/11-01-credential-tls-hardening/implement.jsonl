@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "HTTP transport, TLS flags and host parsing rules the credential changes must follow"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "secret-first save order, DPAPI invariants, atomic write pattern for secrets.dat"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "how failures map to ServerFailure kinds and where they may surface"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "editor form controls, notice/message line conventions"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "English + Simplified Chinese pairs for new warning strings"}

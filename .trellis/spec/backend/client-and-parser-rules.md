@@ -103,13 +103,50 @@ if (webApiVersion is { } version && version >= WebApiVersion.V2_1_1)
 
 `HttpTransport` owns everything cross-cutting for one server: base URI, 15 s
 timeout, cookie container, Basic auth header, optional self-signed TLS trust,
-and OS-error → `FailureKind` translation (`Describe`). A client should never
-construct its own `HttpClient`.
+redirect policy, the response-size cap, and OS-error → `FailureKind`
+translation (`Describe`). A client should never construct its own `HttpClient`.
 
 `HostFieldParser` is the single owner of `(host, port)` extraction — pasted
-URLs, `host:port`, IPv6 literals, `user@host`. `ServerConfigValidator` composes
-it and returns the `Notice` the editor shows. Do not re-parse hosts anywhere
-else.
+URLs, `host:port`, IPv6 literals, `user:pass@host`. `ServerConfigValidator`
+composes it and returns the notices the editor shows (`Notices`, plural —
+a port adjustment, a scheme adjustment and a credential adjustment can all
+apply at once) plus `PasswordFromHost`. Do not re-parse hosts anywhere else.
+
+### TLS
+
+- New servers default to HTTPS (`ServerEditorWindow.Load`). A hand-typed
+  `http://` scheme still wins and is reported as a notice.
+- While HTTPS is off and a password is entered, the editor shows
+  `EditorNotices.PlaintextWarning`. Its composition is a pure `Core` function
+  so the selftest covers it; the `App` layer only translates and renders.
+- `AllowInsecureTls` still accepts any certificate, but the transport installs
+  its own validation callback so the accepted leaf's SHA-256 is recorded and
+  shown on a successful Test Connection. Never go back to
+  `DangerousAcceptAnyServerCertificateValidator`: it accepts the same things and
+  observes nothing. There is no pinning or trust store — that is a follow-up.
+
+### Redirects
+
+- The transport follows redirects itself (`AllowAutoRedirect = false`) because
+  .NET's `RedirectHandler` clears `Authorization` on every hop *and* sends the
+  redirected request through a handler with credential auth disabled — the
+  credential cannot be restored there, so a same-origin redirect would silently
+  fail with a 401.
+- Credential rule: a **same-origin** hop (scheme, host and port all equal) keeps
+  the `Authorization` header. Any other origin — host change, port change, or an
+  **https→http downgrade** — starts without it and is re-authenticated only if it
+  answers 401.
+- A redirect that would replay a request **body** (301/302/307/308 carrying
+  content) is not followed across origins at all, because the qBittorrent login
+  body is the password. The caller sees the 3xx and fails as a protocol error.
+- Method rewriting matches the framework: 303 always becomes GET, 301/302 do for
+  POST, 307/308 keep both method and body. `MaxRedirects` bounds the chain.
+
+### Response size
+
+`HttpClient.MaxResponseContentBufferSize` caps a buffered body at 32 MiB
+(`HttpTransport.MaxResponseBytes`). A breach is a `ProtocolViolation`, not an
+`Unreachable`: the server answered, it just is not a torrent client.
 
 ---
 

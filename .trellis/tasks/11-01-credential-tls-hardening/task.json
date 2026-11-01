@@ -1,0 +1,28 @@
+{
+  "id": "credential-tls-hardening",
+  "name": "credential-tls-hardening",
+  "title": "Credential and TLS hardening",
+  "description": "Close findings 1,2,3,4,5,6,7: plaintext default, accept-any-cert, swallowed secret write, silent secret loss, dropped host-field userinfo, unbounded response, redirect credentials",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "backend",
+  "package": null,
+  "priority": "P1",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-01",
+  "completedAt": null,
+  "branch": "security/credential-tls-hardening",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "11-01-security-hardening",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/8"
+  }
+}

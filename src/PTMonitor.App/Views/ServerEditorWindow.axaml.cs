@@ -31,6 +31,8 @@ public partial class ServerEditorWindow : Window
     {
         base.OnOpened(e);
         ApplyLocalization();
+        TlsToggle.IsCheckedChanged += OnNoticeInputChanged;
+        PasswordField.TextChanged += OnNoticeInputChanged;
         Load();
     }
 
@@ -64,7 +66,7 @@ public partial class ServerEditorWindow : Window
             NameField.Text = "";
             HostField.Text = "";
             PortField.Text = ServerKind.Qbittorrent.DefaultPort().ToString();
-            TlsToggle.IsChecked = false;
+            TlsToggle.IsChecked = true;
             InsecureToggle.IsChecked = false;
             EnabledToggle.IsChecked = true;
             UserField.Text = "";
@@ -82,6 +84,8 @@ public partial class ServerEditorWindow : Window
             UserField.Text = _existing.Username;
             PasswordField.Text = AppServices.Instance.Secrets.Get(_existing.Id) ?? "";
         }
+
+        RefreshNotices();
     }
 
     private ServerKind CurrentKind =>
@@ -106,7 +110,7 @@ public partial class ServerEditorWindow : Window
         try
         {
             var result = ServerConfigValidator.Validate(ProvisionalConfig(), PortField.Text ?? "");
-            ShowNotice(result.Notice);
+            RefreshNotices(result.Notices);
             HideMessage();
             return result;
         }
@@ -117,11 +121,18 @@ public partial class ServerEditorWindow : Window
         }
     }
 
-    private void ShowNotice(string? notice)
+    /// <summary>Rebuilds the notice line: validator notices plus the plaintext warning.</summary>
+    private void RefreshNotices(IReadOnlyList<string>? validatorNotices = null)
     {
-        NoticeText.IsVisible = notice is not null;
-        NoticeText.Text = notice ?? "";
+        var parts = EditorNotices
+            .Compose(validatorNotices, TlsToggle.IsChecked == true, PasswordField.Text)
+            .Select(L10n.S)
+            .ToList();
+        NoticeText.IsVisible = parts.Count > 0;
+        NoticeText.Text = string.Join("\n", parts);
     }
+
+    private void OnNoticeInputChanged(object? sender, EventArgs e) => RefreshNotices();
 
     private void ShowMessage(string text, bool isError)
     {
@@ -154,17 +165,27 @@ public partial class ServerEditorWindow : Window
         _isTesting = true;
         TestButton.Content = L10n.S("Testing…");
         TestButton.IsEnabled = false;
+        string? acceptedThumbprint = null;
+        void Observe(string thumbprint) => acceptedThumbprint = thumbprint;
         try
         {
             var config = validated.Config;
-            var password = PasswordField.Text ?? "";
+            var insecure = validated.Config.AllowInsecureTls;
+            // A password typed into the host field (user:pass@host) is only used
+            // when the password box is empty — an explicit entry always wins.
+            var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
+                ? typed
+                : validated.PasswordFromHost ?? "";
             ITorrentClient client = config.Kind == ServerKind.Qbittorrent
-                ? new QBittorrentClient(config, password)
-                : new TransmissionClient(config, password);
+                ? new QBittorrentClient(config, password, Observe)
+                : new TransmissionClient(config, password, Observe);
             await using (client)
             {
                 var version = await client.TestConnectionAsync(CancellationToken.None);
-                ShowMessage(L10n.Connected(version), isError: false);
+                var message = L10n.Connected(version);
+                if (EditorNotices.AcceptedCertificate(insecure, acceptedThumbprint) is { } thumbprint)
+                    message += $" · {L10n.Format("cert SHA-256 %@", thumbprint)}";
+                ShowMessage(message, isError: false);
             }
         }
         catch (ServerFailureException failure)
@@ -187,15 +208,21 @@ public partial class ServerEditorWindow : Window
     {
         if (Validate() is not { } validated) return;
         var config = validated.Config;
-        var password = PasswordField.Text ?? "";
+        // Same rule as Test Connection: an explicit password wins over the one
+        // parsed out of the host field.
+        var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
+            ? typed
+            : validated.PasswordFromHost ?? "";
 
         var services = AppServices.Instance;
         try
         {
             // The secret write happens BEFORE the configuration write, so a
             // failed DPAPI write cannot leave an enabled server polling with
-            // an empty password (which trips qBittorrent's IP ban).
-            services.Secrets.Set(password, config.Id);
+            // an empty password (which trips qBittorrent's IP ban). A failure
+            // throws; the `false` result only means "empty password, nothing to
+            // store", which is not an error.
+            _ = services.Secrets.Set(password, config.Id);
         }
         catch (Exception exception)
         {

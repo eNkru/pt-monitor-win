@@ -124,7 +124,8 @@ public sealed class MonitorStore : IDisposable
 
     private async Task PollLoopAsync(ServerConfig config, CancellationToken cancellationToken)
     {
-        await using var client = _clientFactory(config, _secrets.Get(config.Id));
+        var password = _secrets.Get(config.Id);
+        await using var client = _clientFactory(config, password);
         while (!cancellationToken.IsCancellationRequested)
         {
             var interval = _settings.PollInterval;
@@ -139,7 +140,7 @@ public sealed class MonitorStore : IDisposable
             }
             catch (ServerFailureException failure)
             {
-                var status = new ServerStatus.Failed(failure.Failure);
+                var status = new ServerStatus.Failed(Classify(password, _secrets, failure.Failure));
                 SetStatus(config.Id, status);
                 interval = RetryDelay(status, interval);
             }
@@ -173,9 +174,10 @@ public sealed class MonitorStore : IDisposable
         CancellationToken cancellationToken = default)
     {
         if (!config.IsEnabled) return ServerStatus.Disabled.Instance;
+        var password = secrets.Get(config.Id);
         try
         {
-            await using var client = clientFactory(config, secrets.Get(config.Id));
+            await using var client = clientFactory(config, password);
             return new ServerStatus.Online(await client.FetchSnapshotAsync(cancellationToken));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -184,7 +186,7 @@ public sealed class MonitorStore : IDisposable
         }
         catch (ServerFailureException failure)
         {
-            return new ServerStatus.Failed(failure.Failure);
+            return new ServerStatus.Failed(Classify(password, secrets, failure.Failure));
         }
         catch (Exception exception)
         {
@@ -242,6 +244,19 @@ public sealed class MonitorStore : IDisposable
         }
         return true;
     }
+
+    /// <summary>
+    /// Relabels an auth failure caused by an unreadable secret file, so the panel
+    /// says what happened instead of blaming the credentials. A server that
+    /// polls successfully is never pre-empted: it takes no password, or keeps
+    /// failing for a reason of its own.
+    /// </summary>
+    public static ServerFailure Classify(string? password, ISecretStore secrets, ServerFailure failure) =>
+        failure.Kind == FailureKind.Auth
+        && password is null
+        && secrets.State == SecretStoreState.Unreadable
+            ? ServerFailure.Auth("stored password could not be read")
+            : failure;
 
     public static MonitorAggregate AggregateOf(IReadOnlyDictionary<Guid, ServerStatus> statuses)
     {

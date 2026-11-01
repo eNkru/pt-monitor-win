@@ -115,9 +115,9 @@ public sealed class TransmissionClient : ITorrentClient
     private long? _cachedFreeSpace;
     private DateTimeOffset? _lastFreeSpaceFetch;
 
-    public TransmissionClient(ServerConfig config, string? password)
+    public TransmissionClient(ServerConfig config, string? password, Action<string>? onCertificateAccepted = null)
     {
-        _transport = new HttpTransport(config, password);
+        _transport = new HttpTransport(config, password, onCertificateAccepted);
         var passwordValue = password ?? "";
         if (config.Username.Length > 0 || passwordValue.Length > 0)
         {

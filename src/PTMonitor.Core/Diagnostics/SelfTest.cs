@@ -566,6 +566,123 @@ public static class SelfTest
             c.True("409: first retries", SessionIdHandshake.Step(409, "abc", false).ShouldRetry);
             c.True("409: second does not", !SessionIdHandshake.Step(409, "abc", true).ShouldRetry);
             c.True("409: 200 does not", !SessionIdHandshake.Step(200, null, false).ShouldRetry);
+
+            var secretPath = Path.Combine(directory, "secrets.dat");
+            var store = new DpapiSecretStore(secretPath);
+            var serverId = Guid.NewGuid();
+            c.Expect("secrets: fresh store is absent", store.State, SecretStoreState.Absent);
+            c.True("secrets: empty password is false", !store.Set("", serverId));
+            c.True("secrets: password stored", store.Set("hunter2", serverId));
+            c.Expect("secrets: read back", store.Get(serverId), "hunter2");
+            c.Expect("secrets: state after write", store.State, SecretStoreState.Ok);
+            c.Expect("secrets: reload", new DpapiSecretStore(secretPath).Get(serverId), "hunter2");
+
+            // A path whose parent is a file cannot be written: Set must raise and
+            // leave both the store state and the entry untouched.
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var broken = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+            var brokenId = Guid.NewGuid();
+            var threw = false;
+            try { broken.Set("hunter2", brokenId); }
+            catch (Exception) { threw = true; }
+            c.True("secrets: failed write throws", threw);
+            c.Expect("secrets: failed write keeps state", broken.State, SecretStoreState.Absent);
+            c.True("secrets: failed write stores nothing", broken.Get(brokenId) is null);
+            broken.Delete(brokenId);   // must not raise, even on a broken path
+            c.True("secrets: delete after failure is silent", broken.Get(brokenId) is null);
+
+            // Notice line: the validator notice leads, the plaintext warning is
+            // independent of it, and an empty password warns about nothing.
+            var warns = EditorNotices.Compose(null, useTls: false, password: "hunter2");
+            c.Expect("notice: plaintext warning", warns.Count, 1);
+            c.Expect("notice: plaintext text", warns[0], EditorNotices.PlaintextWarning);
+            c.Expect("notice: https silences it", EditorNotices.Compose(null, useTls: true, password: "hunter2").Count, 0);
+            c.Expect("notice: empty password silences it", EditorNotices.Compose(null, useTls: false, password: "").Count, 0);
+            var both = EditorNotices.Compose(["Used port 8080 from the host field."], useTls: false, password: "hunter2");
+            c.Expect("notice: validator first", both.Count, 2);
+            c.Expect("notice: validator kept", both[0], "Used port 8080 from the host field.");
+            var three = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "http://bob:hunter2@nas:8080/path"), "8080");
+            c.Expect("userinfo: host stripped", three.Config.Host, "nas");
+            c.Expect("userinfo: port", three.Config.Port, 8080);
+            c.Expect("userinfo: user name", three.Config.Username, "bob");
+            c.Expect("userinfo: password", three.PasswordFromHost, "hunter2");
+            c.Expect("userinfo: tls forced off", three.Config.UseTls, false);
+            c.Expect("userinfo: notices", three.Notices.Count, 2);
+            var escaped = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "u%40x:p%3Aw@nas"), "");
+            c.Expect("userinfo: unescaped user", escaped.Config.Username, "u@x");
+            c.Expect("userinfo: unescaped password", escaped.PasswordFromHost, "p:w");
+            var typedWins = ServerConfigValidator.Validate(
+                new ServerConfig(ServerKind.Qbittorrent, "bob@nas") { Username = "alice" }, "");
+            c.Expect("userinfo: typed user wins", typedWins.Config.Username, "alice");
+            c.True("userinfo: no password means none", typedWins.PasswordFromHost is null);
+            var plainHost = ServerConfigValidator.Validate(new ServerConfig(ServerKind.Qbittorrent, "nas"), "");
+            c.Expect("userinfo: plain host has no notices", plainHost.Notices.Count, 0);
+            c.True("userinfo: plain host has no password", plainHost.PasswordFromHost is null);
+            c.Expect("notice: thumbprint shown when insecure", EditorNotices.AcceptedCertificate(true, "ab12"), "AB12");
+            c.True("notice: thumbprint hidden when strict", EditorNotices.AcceptedCertificate(false, "ab12") is null);
+            c.True("notice: no thumbprint without a certificate", EditorNotices.AcceptedCertificate(true, null) is null);
+
+            // Corrupt store: unreadable, distinguishable, and preserved.
+            var corruptPath = Path.Combine(directory, "corrupt.dat");
+            File.WriteAllText(corruptPath, "{ this is not json");
+            var corrupt = new DpapiSecretStore(corruptPath);
+            var corruptId = Guid.NewGuid();
+            c.Expect("corrupt: reported unreadable", corrupt.State, SecretStoreState.Unreadable);
+            c.True("corrupt: nothing readable", corrupt.Get(corruptId) is null);
+            var relabelled = MonitorStore.Classify(null, corrupt, ServerFailure.Auth("invalid username or password"));
+            c.Expect("corrupt: auth failure renamed", relabelled.Message, "stored password could not be read");
+            c.Expect("corrupt: kind is still auth", relabelled.Kind, FailureKind.Auth);
+            c.Expect("corrupt: unrelated failure untouched",
+                MonitorStore.Classify(null, corrupt, ServerFailure.Unreachable("refused")).Message, "refused");
+            c.Expect("corrupt: password present means no rename",
+                MonitorStore.Classify("hunter2", corrupt, ServerFailure.Auth("x")).Message, "x");
+            corrupt.Delete(Guid.NewGuid());   // any persist preserves the bytes
+            c.True("corrupt: copy kept on the first persist", File.Exists(corruptPath + ".corrupt"));
+            c.True("corrupt: rewrite clears the state",
+                corrupt.Set("hunter2", corruptId) && corrupt.State == SecretStoreState.Ok);
+            c.Expect("corrupt: new value readable", corrupt.Get(corruptId), "hunter2");
+
+            // Response cap: a framework buffer-limit error becomes a protocol
+            // failure, not an unreachable server.
+            c.True("cap: framework wording recognised",
+                HttpTransport.IsResponseTooLarge("Cannot write more bytes to the buffer than the configured maximum buffer size: 33554432."));
+            c.True("cap: unrelated error ignored", !HttpTransport.IsResponseTooLarge("connection refused"));
+            c.Expect("cap: protocol violation", HttpTransport.TooLargeMessage,
+                "response above 32 MiB; is this a torrent client API?");
+
+            // Redirects: the credential travels on a same-origin hop only.
+            var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+            c.True("redirect: same origin keeps auth",
+                HttpTransport.SameOrigin(origin, new Uri("https://nas.local:8080/api/v2/sync/maindata")));
+            c.True("redirect: https->http is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("http://nas.local:8080/x")));
+            c.True("redirect: another host is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("https://evil.example/x")));
+            c.True("redirect: another port is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("https://nas.local:9091/x")));
+            c.True("redirect: null uri is not the same origin", !HttpTransport.SameOrigin(null, origin));
+
+            var getRequest = new HttpRequestMessage(HttpMethod.Get, origin);
+            c.True("redirect: 303 becomes GET",
+                HttpTransport.TryGetRedirect(
+                    new HttpResponseMessage(System.Net.HttpStatusCode.Redirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
+                    getRequest, out _, out var getMethod) && getMethod == HttpMethod.Get);
+            c.True("redirect: 307 keeps the method",
+                HttpTransport.TryGetRedirect(
+                    new HttpResponseMessage(System.Net.HttpStatusCode.TemporaryRedirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
+                    new HttpRequestMessage(HttpMethod.Post, origin), out _, out var postMethod) && postMethod == HttpMethod.Post);
+            c.True("redirect: 200 is not a redirect",
+                !HttpTransport.TryGetRedirect(new HttpResponseMessage(System.Net.HttpStatusCode.OK), getRequest, out _, out _));
+
+            var secured = new HttpRequestMessage(HttpMethod.Post, origin) { Content = new ByteArrayContent([]) };
+            secured.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "abc");
+            var sameHop = HttpTransport.BuildRedirectRequest(secured, new Uri("https://nas.local:8080/next"), HttpMethod.Post, [1]);
+            var crossHop = HttpTransport.BuildRedirectRequest(secured, new Uri("http://nas.local:8080/next"), HttpMethod.Get, null);
+            c.True("redirect: same-origin hop carries the header", sameHop.Headers.Authorization is not null);
+            c.True("redirect: cross-origin hop drops it", crossHop.Headers.Authorization is null);
         }
         finally
         {

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "secret-write ordering, corruption and DPAPI-fallback invariants the children must make true"}
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "TLS, userinfo and redirect rules the credential child documents"}
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "lane parity, pinning, permissions and provenance rules the release child documents"}

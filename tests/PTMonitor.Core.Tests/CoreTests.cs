@@ -1,3 +1,4 @@
+using System.Net;
 using PTMonitor.Core.Client;
 using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Format;
@@ -25,7 +26,8 @@ public class HostFieldParserTests
     [InlineData("nas.local:9091", 8080, "nas.local", 9091)]
     [InlineData("https://nas.local:8443/path", 8080, "nas.local", 8443)]
     [InlineData("[2001:db8::1]:9091", 8080, "2001:db8::1", 9091)]
-    [InlineData("user@nas.local", 8080, "user@nas.local", 8080)]
+    [InlineData("user@nas.local", 8080, "nas.local", 8080)]
+    [InlineData("bob:hunter2@nas.local:9091", 8080, "nas.local", 9091)]
     public void ParsesExpectedShapes(string raw, int defaultPort, string expectedHost, int expectedPort)
     {
         var parsed = HostFieldParser.Parse(raw, defaultPort);
@@ -45,6 +47,28 @@ public class HostFieldParserTests
     public void RejectsNonHttpSchemes()
     {
         Assert.Throws<ServerFailureException>(() => HostFieldParser.Parse("ws://nas.local:8080", 8080));
+    }
+
+    [Theory]
+    [InlineData("bob:hunter2@nas:8080", "bob", "hunter2")]
+    [InlineData("http://bob:hunter2@nas:8080/path", "bob", "hunter2")]
+    [InlineData("u%40x:p%3Aw@nas", "u@x", "p:w")]
+    [InlineData("nas", null, null)]
+    public void ParsesUserinfoOutOfTheHostField(string raw, string? expectedUser, string? expectedPassword)
+    {
+        var parsed = HostFieldParser.Parse(raw, 8080);
+        Assert.Equal(expectedUser, parsed.Username);
+        Assert.Equal(expectedPassword, parsed.Password);
+    }
+
+    [Fact]
+    public void ValidatorPrefersATypedUserNameOverTheHostField()
+    {
+        var validated = ServerConfigValidator.Validate(
+            new ServerConfig(ServerKind.Qbittorrent, "bob:hunter2@nas") { Username = "alice" }, "");
+        Assert.Equal("alice", validated.Config.Username);
+        Assert.Equal("hunter2", validated.PasswordFromHost);
+        Assert.Contains("Used the user name and password from the host field.", validated.Notices);
     }
 }
 
@@ -189,6 +213,236 @@ public class MonitorStoreTests
             throw new ServerFailureException(FailureKind.Unreachable, "stub");
         public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}
+
+public class HttpTransportTests
+{
+    [Theory]
+    [InlineData("Cannot write more bytes to the buffer than the configured maximum buffer size: 33554432.", true)]
+    [InlineData("The response ended prematurely", false)]
+    [InlineData("connection refused", false)]
+    public void OnlyBufferLimitErrorsCountAsTooLarge(string message, bool expected)
+    {
+        Assert.Equal(expected, HttpTransport.IsResponseTooLarge(message));
+    }
+
+    [Fact]
+    public void TheCapIsBoundedAndGenerous()
+    {
+        Assert.Equal(32L * 1024 * 1024, HttpTransport.MaxResponseBytes);
+    }
+    [Fact]
+    public void RedirectsKeepTheCredentialOnlyOnTheSameOrigin()
+    {
+        var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+        Assert.True(HttpTransport.SameOrigin(origin, new Uri("https://nas.local:8080/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("http://nas.local:8080/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("https://evil.example/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("https://nas.local:9091/x")));
+    }
+
+    [Fact]
+    public void RedirectRequestsCarryAuthorizationOnlyAcrossTheSameOrigin()
+    {
+        var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+        var original = new HttpRequestMessage(HttpMethod.Post, origin) { Content = new ByteArrayContent([]) };
+        original.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "abc");
+
+        var same = HttpTransport.BuildRedirectRequest(original, new Uri("https://nas.local:8080/next"), HttpMethod.Post, [1]);
+        var cross = HttpTransport.BuildRedirectRequest(original, new Uri("http://nas.local:8080/next"), HttpMethod.Get, null);
+
+        Assert.NotNull(same.Headers.Authorization);
+        Assert.NotNull(same.Content);
+        Assert.Null(cross.Headers.Authorization);
+        Assert.Null(cross.Content);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Redirect, "GET", true)]
+    [InlineData(HttpStatusCode.TemporaryRedirect, "POST", true)]
+    [InlineData(HttpStatusCode.OK, "GET", false)]
+    public void RedirectsAreRecognisedByStatus(HttpStatusCode status, string method, bool expected)
+    {
+        var request = new HttpRequestMessage(new HttpMethod(method), new Uri("https://nas.local/a"));
+        var response = new HttpResponseMessage(status) { Headers = { Location = new Uri("https://nas.local/b") } };
+        Assert.Equal(expected, HttpTransport.TryGetRedirect(response, request, out _, out _));
+    }
+}
+
+public class EditorNoticesTests
+{
+    [Fact]
+    public void PlaintextWarningIsShownOnlyWithoutTlsAndWithAPassword()
+    {
+        Assert.Equal([EditorNotices.PlaintextWarning], EditorNotices.Compose(null, false, "hunter2"));
+        Assert.Empty(EditorNotices.Compose(null, true, "hunter2"));
+        Assert.Empty(EditorNotices.Compose(null, false, ""));
+        Assert.Empty(EditorNotices.Compose(null, false, null));
+    }
+
+    [Fact]
+    public void ValidatorNoticeComesFirstAndCoexists()
+    {
+        var parts = EditorNotices.Compose(["Used port 8080 from the host field."], false, "hunter2");
+        Assert.Equal(["Used port 8080 from the host field.", EditorNotices.PlaintextWarning], parts);
+    }
+    [Fact]
+    public void ThumbprintIsReportedOnlyForAcceptedInsecureCertificates()
+    {
+        Assert.Equal("AB12", EditorNotices.AcceptedCertificate(true, "ab12"));
+        Assert.Null(EditorNotices.AcceptedCertificate(false, "ab12"));
+        Assert.Null(EditorNotices.AcceptedCertificate(true, " "));
+        Assert.Null(EditorNotices.AcceptedCertificate(true, null));
+    }
+}
+
+public class SecretStoreTests
+{
+    [Fact]
+    public void SetPersistsAndReportsState()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            var store = new DpapiSecretStore(path);
+            var id = Guid.NewGuid();
+
+            Assert.Equal(SecretStoreState.Absent, store.State);
+            Assert.False(store.Set("", id));
+            Assert.True(store.Set("hunter2", id));
+            Assert.Equal("hunter2", store.Get(id));
+            Assert.Equal(SecretStoreState.Ok, store.State);
+            Assert.Equal("hunter2", new DpapiSecretStore(path).Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FailedWriteThrowsAndStoresNothing()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var store = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+            var id = Guid.NewGuid();
+
+            Assert.ThrowsAny<IOException>(() => store.Set("hunter2", id));
+            Assert.Equal(SecretStoreState.Absent, store.State);
+            Assert.Null(store.Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void DeleteNeverThrowsOnABrokenPath()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var store = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+
+            Assert.Null(Record.Exception(() => store.Delete(Guid.NewGuid())));
+            Assert.Null(Record.Exception(store.DeleteAll));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void CorruptFileIsUnreadableAndPreserved()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            File.WriteAllText(path, "{ not json");
+            var store = new DpapiSecretStore(path);
+            var id = Guid.NewGuid();
+
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+            Assert.Null(store.Get(id));
+
+            store.Delete(Guid.NewGuid());
+            Assert.True(File.Exists(path + ".corrupt"));
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+
+            Assert.True(store.Set("hunter2", id));
+            Assert.Equal(SecretStoreState.Ok, store.State);
+            Assert.Equal("hunter2", store.Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ThePreservedCopySurvivesRepeatedWritesWhileUnreadable()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            const string damaged = "{ not json";
+            File.WriteAllText(path, damaged);
+            var store = new DpapiSecretStore(path);
+
+            // Two deletes: the first writes a valid file while the state is still
+            // Unreadable. The second must not move that file over the copy.
+            store.Delete(Guid.NewGuid());
+            store.Delete(Guid.NewGuid());
+
+            Assert.Equal(damaged, File.ReadAllText(path + ".corrupt"));
+            Assert.Equal(SecretStoreState.Unreadable, store.State);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void UnreadableSecretsRelabelOnlyAuthFailures()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            File.WriteAllText(path, "{ not json");
+            var store = new DpapiSecretStore(path);
+
+            Assert.Equal("stored password could not be read",
+                MonitorStore.Classify(null, store, ServerFailure.Auth("invalid username or password")).Message);
+            Assert.Equal("refused",
+                MonitorStore.Classify(null, store, ServerFailure.Unreachable("refused")).Message);
+            Assert.Equal("x",
+                MonitorStore.Classify("hunter2", store, ServerFailure.Auth("x")).Message);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static string TempDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
     }
 }
 

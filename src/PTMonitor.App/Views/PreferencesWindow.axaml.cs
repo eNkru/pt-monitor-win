@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using PTMonitor.App.Services;
 using PTMonitor.Core.Model;
+using PTMonitor.Core.Store;
 
 namespace PTMonitor.App.Views;
 
@@ -86,6 +87,13 @@ public partial class PreferencesWindow : Window
         ServerList.ItemsSource = rows;
         EmptyHelp.IsVisible = rows.Count == 0;
         ServerList.IsVisible = rows.Count > 0;
+
+        // A corrupt secrets.dat leaves every stored password unreadable; say so
+        // once here instead of letting each server fail on its own.
+        var unreadable = services.Secrets.State == SecretStoreState.Unreadable;
+        SecretsWarning.IsVisible = unreadable;
+        SecretsWarningText.Text = L10n.S(
+            "Stored passwords could not be read (secrets.dat is damaged). Re-enter each password; the old file is kept as secrets.dat.corrupt.");
 
         PollLabel.Text = string.Format(
             L10n.S("Poll every %lld seconds").Replace("%lld", "{0}"),

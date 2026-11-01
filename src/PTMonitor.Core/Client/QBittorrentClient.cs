@@ -213,11 +213,11 @@ public sealed class QBittorrentClient : ITorrentClient
     private WebApiVersion? _cachedWebApiVersion;
     private bool _loggedIn;
 
-    public QBittorrentClient(ServerConfig config, string? password)
+    public QBittorrentClient(ServerConfig config, string? password, Action<string>? onCertificateAccepted = null)
     {
         _config = config;
         _password = password ?? "";
-        _transport = new HttpTransport(config, password);
+        _transport = new HttpTransport(config, password, onCertificateAccepted);
     }
 
     public async Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)

@@ -3,7 +3,13 @@ using PTMonitor.Core.Model;
 namespace PTMonitor.Core.Client;
 
 /// <summary>The (host, port) pair a user's host field actually denotes.</summary>
-public sealed record ParsedHostField(string Host, int Port, bool? SchemeIsTls, bool ExtractedPort);
+public sealed record ParsedHostField(
+    string Host,
+    int Port,
+    bool? SchemeIsTls,
+    bool ExtractedPort,
+    string? Username = null,
+    string? Password = null);
 
 /// <summary>Single owner for turning a typed host into (host, port).</summary>
 public static class HostFieldParser
@@ -28,8 +34,20 @@ public static class HostFieldParser
 
         var slash = host.IndexOf('/');
         if (slash >= 0) host = host[..slash];
+
+        // `user:pass@host` — the last `@` separates the userinfo, so an unescaped
+        // `@` inside the user name still resolves to the right host.
+        string? username = null;
+        string? password = null;
         var at = host.LastIndexOf('@');
-        if (at >= 0) host = host[(at + 1)..];
+        if (at >= 0)
+        {
+            var userinfo = host[..at];
+            host = host[(at + 1)..];
+            var colon = userinfo.IndexOf(':');
+            username = Uri.UnescapeDataString(colon >= 0 ? userinfo[..colon] : userinfo);
+            if (colon >= 0) password = Uri.UnescapeDataString(userinfo[(colon + 1)..]);
+        }
 
         var port = defaultPort;
         var extractedPort = false;
@@ -68,7 +86,7 @@ public static class HostFieldParser
         if (port is < 1 or > 65535)
             throw new ServerFailureException(FailureKind.Unreachable, $"invalid port {port}");
 
-        return new ParsedHostField(host, port, schemeIsTls, extractedPort);
+        return new ParsedHostField(host, port, schemeIsTls, extractedPort, username, password);
     }
 }
 
@@ -88,8 +106,22 @@ public static class EndpointParser
     }
 }
 
-/// <summary>A normalised config plus the one adjustment the user should be told about.</summary>
-public sealed record ValidatedServerConfig(ServerConfig Config, string? Notice);
+/// <summary>
+/// A normalised config plus the adjustments the user should be told about.
+/// <para>
+/// <see cref="PasswordFromHost"/> carries the password parsed out of
+/// <c>user:pass@host</c>; it is not part of <see cref="ServerConfig"/> and only
+/// exists so the caller can hand it to the secret store.
+/// </para>
+/// </summary>
+public sealed record ValidatedServerConfig(
+    ServerConfig Config,
+    IReadOnlyList<string> Notices,
+    string? PasswordFromHost = null)
+{
+    /// <summary>Convenience for callers that only show the first notice.</summary>
+    public string? Notice => Notices.Count == 0 ? null : Notices[0];
+}
 
 public static class ServerConfigValidator
 {
@@ -114,21 +146,24 @@ public static class ServerConfigValidator
         }
 
         var parsed = HostFieldParser.Parse(rawHost, fallbackPort);
-        string? notice = null;
+        var notices = new List<string>(2);
         if (parsed.ExtractedPort && portText.Length > 0)
-            notice = $"Used port {parsed.Port} from the host field.";
+            notices.Add($"Used port {parsed.Port} from the host field.");
 
         var useTls = config.UseTls;
         if (parsed.SchemeIsTls is { } schemeIsTls)
         {
-            if (schemeIsTls != useTls && notice is null)
+            if (schemeIsTls != useTls)
             {
-                notice = schemeIsTls
+                notices.Add(schemeIsTls
                     ? "Enabled HTTPS because the host starts with https://."
-                    : "Disabled HTTPS because the host starts with http://.";
+                    : "Disabled HTTPS because the host starts with http://.");
             }
             useTls = schemeIsTls;
         }
+
+        if (parsed.Username is not null)
+            notices.Add("Used the user name and password from the host field.");
 
         var normalised = new ServerConfig
         {
@@ -139,9 +174,9 @@ public static class ServerConfigValidator
             Port = parsed.Port,
             UseTls = useTls,
             AllowInsecureTls = config.AllowInsecureTls,
-            Username = config.Username.Trim(),
+            Username = config.Username.Trim() is { Length: > 0 } typed ? typed : parsed.Username ?? "",
             IsEnabled = config.IsEnabled,
         };
-        return new ValidatedServerConfig(normalised, notice);
+        return new ValidatedServerConfig(normalised, notices, parsed.Password);
     }
 }
