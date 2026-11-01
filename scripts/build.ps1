@@ -6,6 +6,9 @@
 #   publish/<rid>/PTMonitor.exe               self-contained single-file exe
 #   publish/<rid>/cli/PTMonitor.Cli.exe       headless selftest / probe CLI
 #   artifacts/PTMonitor-<version>-<rid>.zip   the above, zipped
+#   artifacts/SHA256SUMS.txt                  sha256sum -c compatible sums of
+#                                             every zip in artifacts/ (rewritten
+#                                             each run, so two -Rid runs converge)
 #
 # Usage:
 #   .\scripts\build.ps1                        # full pipeline, win-x64
@@ -86,6 +89,23 @@ if (-not $SkipZip) {
     if (Test-Path $zip) { Remove-Item $zip }
     Compress-Archive -Path "publish/$Rid" -DestinationPath $zip
     Write-Host "==> built $zip"
+
+    # sha256sum format: "<64 lowercase hex><two spaces><basename>", so
+    # `sha256sum -c SHA256SUMS.txt` works on Linux/macOS and a Get-FileHash
+    # comparison works on Windows. Rewritten from EVERY zip in artifacts/
+    # (sorted by name), not appended, so running the script once per -Rid
+    # converges on the pair instead of piling up duplicate lines. ASCII, no
+    # BOM: a BOM would make the first line unparseable for `sha256sum -c`.
+    # CI recomputes the same sums from the uploaded bytes — this copy is what
+    # lets a self-built binary be compared with a released one.
+    $sums = Get-ChildItem artifacts -Filter "PTMonitor-*.zip" |
+        Sort-Object Name |
+        ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+        }
+    Set-Content -Path "artifacts/SHA256SUMS.txt" -Value $sums -Encoding ascii
+    Write-Host "==> built artifacts/SHA256SUMS.txt"
 }
 
 Write-Host "==> done. Run: publish\$Rid\PTMonitor.exe" -ForegroundColor Green
