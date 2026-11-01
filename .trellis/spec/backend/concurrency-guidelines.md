@@ -43,6 +43,9 @@ Rules that must survive any edit:
    edits.
 5. **Cancel and dispose every CTS** on `StopAsync`, `Dispose`, and at the top of
    `Reconcile`.
+6. **The loop logs failure *transitions* only** (`ShouldLogFailure`): the previous
+   status was `Online`, or the `FailureKind` changed. A successful poll clears the
+   memo, so recovery-then-failure logs again. Never a line per tick.
 
 ---
 

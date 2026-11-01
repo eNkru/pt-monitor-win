@@ -249,8 +249,8 @@ problem:
 
 1. `dotnet restore`
 2. `dotnet build -c Release`
-3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (204 checks)
-4. `dotnet test tests/PTMonitor.Core.Tests` (37 tests)
+3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (296 checks)
+4. `dotnet test tests/PTMonitor.Core.Tests` (84 tests)
 5. `dotnet publish src/PTMonitor.App -r win-x64 --self-contained -p:PublishSingleFile=true`
 6. Re-runs `--selftest` **on the packaged CLI exe**, not just the build output
 7. Zips everything into `artifacts\PTMonitor-<version>-win-x64.zip`
@@ -351,7 +351,7 @@ Runs the built-in check suite and exits `0` (pass) or `1` (fail).
 
 ```powershell
 PTMonitor.Cli.exe --selftest
-# → selftest: OK (204 checks passed)
+# → selftest: OK (296 checks passed)
 ```
 
 On failure it prints every failing check, e.g.:
@@ -448,6 +448,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 |---|---|---|
 | `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
+| `ptmonitor.log` | startup line, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
 
 - The settings file is written atomically (temp file + move), so a crash cannot
   truncate it. A corrupt or older payload is treated as "not configured" rather
@@ -465,13 +466,36 @@ Everything lives under `%APPDATA%\PTMonitor\`:
   disables it, and the form then warns that the password will be sent in clear.
 - **"Allow self-signed certificate" accepts any certificate** (expired,
   wrong-host, or a man-in-the-middle). When it does, Test Connection shows the
-  leaf certificate's SHA-256 so a swap between sessions is visible. Compare it
-  with the server's own certificate; there is no pinning.
+  leaf certificate's SHA-256 so a swap between sessions is visible, and the log
+  records it (one line per server and thumbprint). Compare it with the server's
+  own certificate; there is no pinning.
 - A pasted `user:pass@host` fills in the credentials rather than being discarded,
   and the form says where they came from.
 - If `secrets.dat` is damaged, the app says so in Preferences and keeps the file
   as `secrets.dat.corrupt` the next time it writes. Servers need their passwords
   re-entered; a server that needs no password is unaffected.
+
+### The log
+
+`%APPDATA%\PTMonitor\ptmonitor.log` is always on. It records **events only**:
+
+- the startup record: version, OS, data directory, secret-store state;
+- every unhandled exception, with its stack trace on a single line;
+- poll failures **when they start or change kind** — a server that keeps failing
+  the same way logs once, not once per 2-second poll;
+- secret-store trouble (unreadable file, preserved `.corrupt` copy, failed
+  write), TLS certificates accepted under "allow self-signed certificate" (with
+  the SHA-256 thumbprint), and settings writes that failed.
+
+It is capped at 512 KiB plus one rotated predecessor (`ptmonitor.log.1`), so the
+pair never exceeds ~1 MiB. Nothing else is logged: no passwords, no auth
+headers, no cookies or `SID`, no payload bodies, no per-poll chatter. A single
+redaction pass runs over every line at write time as a safety net, but the rule
+is still "do not pass secrets to the logger". A logging failure (read-only
+folder, full disk) is swallowed — it never interrupts polling.
+
+There is no log level to configure and no toggle: a log the user has to enable
+beforehand cannot explain a crash that already happened.
 
 To wipe everything: quit the app and delete `%APPDATA%\PTMonitor\`.
 
@@ -507,7 +531,7 @@ Three projects, strictly layered — the same split as the macOS original.
 | `Client/` | `ITorrentClient`; `QBittorrentClient`, `TransmissionClient`, `HttpTransport`, `HostFieldParser`, `ServerConfigValidator`, pure parsers |
 | `Store/` | `SettingsStore` (JSON), `DpapiSecretStore` / `InMemorySecretStore`, `MonitorStore` (polling loops, aggregation) |
 | `Format/` | `ByteRateFormatter` (rates, byte counts, tray text ladder) |
-| `Diagnostics/` | `SelfTest` (the 204-check suite), `ProbeRunner` |
+| `Diagnostics/` | `SelfTest` (the 296-check suite), `ProbeRunner`, `Log` (the file sink) |
 
 **Key design rules** (kept from the macOS original, and enforced by the check
 suite):
@@ -584,7 +608,7 @@ src/
     Diagnostics/                 SelfTest, ProbeRunner
   PTMonitor.Cli/                 headless --selftest / --probe entry point
 tests/
-  PTMonitor.Core.Tests/          xUnit suite (37 tests, mirrors the selftest)
+  PTMonitor.Core.Tests/          xUnit suite (84 tests, mirrors the selftest)
 scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
   make-app-icon.py               draw + encode app.ico (flat Windows style)
@@ -664,7 +688,7 @@ Two gates, both run by `build.ps1` and by CI.
 
 ### 1. In-binary check suite — `--selftest`
 
-204 assertions, no network, no fixtures on disk. It covers:
+296 assertions, no network, no fixtures on disk. It covers:
 
 - host-field parsing (`host:port`, IPv6 literals, pasted URLs, scheme
   rejection) and config validation/normalisation;
@@ -676,14 +700,17 @@ Two gates, both run by `build.ps1` and by CI.
   extraction and hoisting;
 - byte-rate formatting (including printf-style half-to-even rounding);
 - settings round-trip, migration, clamping; backoff ladder; aggregate and
-  menu-state mapping; disabled servers never being contacted.
+  menu-state mapping; disabled servers never being contacted;
+- the log sink: the redaction table, rotation, one line per event, silence
+  before `Initialize`, an unwritable path, and the failure-transition rule that
+  keeps a steady failure to one line.
 
 Because it is a pure-logic suite, it runs anywhere — that is why it exists
 instead of relying only on unit tests.
 
 ### 2. xUnit suite
 
-37 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
+84 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
 `SelfTest` suite, so the two can never drift apart.
 
 ```powershell
@@ -784,8 +811,10 @@ git push origin v1.0.0
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
 | **Antivirus / SmartScreen warning** | The exe is unsigned. "More info" → "Run anyway", or build it yourself. |
 
-Logs: the app writes nothing by default. For diagnosis use the CLI probe, which
-prints the exact failure:
+Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see
+[Data, settings and secrets](#data-settings-and-secrets)) — start there when the
+tray icon disappears or the app dies without a dialog. For a single failure the
+CLI probe prints the exact cause without touching the log:
 
 ```powershell
 PTMonitor.Cli.exe --probe qbittorrent --host 192.168.1.2 --port 8080 --user admin --pass secret

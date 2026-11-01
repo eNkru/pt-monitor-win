@@ -25,7 +25,7 @@ OS without a NAS.
 | [Error Handling](./error-handling.md) | `ServerFailure`/`FailureKind`, when to throw, when to swallow |
 | [Persistence & Secrets](./persistence-guidelines.md) | `settings.json` shape, atomic writes, DPAPI secret store |
 | [Concurrency & Polling](./concurrency-guidelines.md) | Poll loops, cancellation, locking, change detection, backoff |
-| [Logging](./logging-guidelines.md) | There is no log file — what is printed and where |
+| [Logging](./logging-guidelines.md) | The one log file, the event list, and the redaction contract |
 | [Quality Guidelines](./quality-guidelines.md) | Self-test contract, forbidden patterns, review checklist |
 
 ---
