@@ -133,3 +133,44 @@ Left open deliberately: the parent's "a user with a working HTTPS setup sees no
 change in behaviour" needs a human on Windows, and
 `11-01-credential-tls-hardening`'s PRD criteria are the same class of manual UI
 check, so neither was ticked by inspection.
+
+
+## Session 4: Floating chip: show the aggregate rates over the speed graph
+<!-- trellis-session: v=2 fp=5cd35b940c0df98d -->
+
+**Date**: 2026-11-02
+**Task**: Floating chip: show the aggregate rates over the speed graph
+**Branch**: `main`
+
+### Summary
+
+The floating speed chip's graph mode now shows the aggregate down/up rates in the top-left corner, drawn on top of the plot. The label keeps the background transparent: a new runtime-drawn OutlinedText control paints a hard 1 px outline around the glyphs instead of an opaque plate, so the graph shows through behind the numbers. win-x64 artifacts were rebuilt and re-checksummed.
+
+### Main Changes
+
+- Floating chip graph mode pins the aggregate ↓/↑ rates to the top-left corner (FloatingSpeedWindow.axaml/.cs); ShowRates writes the same formatted string to both readouts
+- New Views/OutlinedText.cs draws a hard outline around the glyphs (offset copies of the text, fill on top); replaces the first-pass opaque plate that hid the plot
+- App.axaml gains the graphRate / graphArrow style classes; README and .trellis/spec/frontend/component-guidelines.md document the outlined-text rule
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `88ab12e` | Show the aggregate rates in the corner of the floating speed graph |
+| `9d7a41c` | Document the outlined-text rule for labels over live data |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors, 0 warnings
+- [OK] CLI --selftest: 298 checks passed; dotnet test: 85/85 passed
+- [OK] Headless Avalonia+Skia render of the real chip checked at 1x and 6x: graph mode legible over both series, numbers mode pixel-identical to before
+- [OK] win-x64 self-contained publish rebuilt; artifacts/PTMonitor-1.0.0-win-x64.zip re-zipped, sha256sum -c SHA256SUMS.txt OK
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows confirmation of the corner readout (needs the user on the target machine)
+- The 4 open Trellis tasks (tray-icon-crash, tray-fix-deploy-verify, credential-tls-hardening, security-hardening) stay open — tray-icon-crash still needs the on-Windows event-1026 confirmation
