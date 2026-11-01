@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray icon ownership, UpdateTray contract"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "scoped swallowing rule for the cosmetic icon update"}

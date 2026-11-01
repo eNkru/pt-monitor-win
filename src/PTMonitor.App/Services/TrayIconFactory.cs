@@ -53,9 +53,19 @@ public static class TrayIconFactory
     private const double PillHeight = 0.042;
     private const double PillY = 0.785;
 
-    public static WindowIcon Idle() => new(Render(TrayState.Idle));
-    public static WindowIcon Active() => new(Render(TrayState.Active));
-    public static WindowIcon Error() => new(Render(TrayState.Error));
+    // One instance per state. Assigning a WindowIcon to the tray makes the
+    // platform wrap it in a native icon (HICON), and the RenderTargetBitmap
+    // behind it is never disposed by the tray. Creating a fresh pair per status
+    // change churned those native handles until CreateIcon failed and took the
+    // process down — see .trellis/tasks/11-01-tray-icon-crash. The artwork is
+    // static per state, so render it once.
+    private static readonly Lazy<WindowIcon> IdleIcon = new(() => new WindowIcon(Render(TrayState.Idle)));
+    private static readonly Lazy<WindowIcon> ActiveIcon = new(() => new WindowIcon(Render(TrayState.Active)));
+    private static readonly Lazy<WindowIcon> ErrorIcon = new(() => new WindowIcon(Render(TrayState.Error)));
+
+    public static WindowIcon Idle() => IdleIcon.Value;
+    public static WindowIcon Active() => ActiveIcon.Value;
+    public static WindowIcon Error() => ErrorIcon.Value;
 
     /// <summary>Renders the shared tile/arrows/pill artwork for one state.</summary>
     public static RenderTargetBitmap Render(TrayState state)
