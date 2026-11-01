@@ -23,18 +23,18 @@ Severity as rated in the review. Fix order follows the review's ranking
 
 ## Findings
 
-| # | Finding | Severity | Child |
-|---|---|---|---|
-| 1 | Credentials travel in clear by default (`TlsToggle.IsChecked = false` for new servers, `http://` in `EndpointParser`) with no warning | High | A |
-| 2 | "Allow self-signed certificate" disables *all* validation; anything accepted is invisible | High | A |
-| 3 | Failed secret write is swallowed (`PersistUnsafe`), so the documented secret-first order is not actually enforced and the editor's error branch is dead code | Med/High | A |
-| 4 | A corrupt `secrets.dat` silently drops every password, then all servers poll anonymously | Medium | A |
-| 5 | `user:pass@host` typed into the host field is parsed and discarded | Medium | A |
-| 6 | No bound on response body size (unbounded buffering) | Low/Med | A |
-| 7 | Redirects: .NET clears `Authorization` on every redirect (same-origin loses auth; another origin re-authenticates after a 401, including https→http), and a 307/308 replays the login form body | Low | A |
-| 8 | Releases unsigned, no checksum/attestation; actions pinned to mutable major tags | Medium | B |
-| 9 | `contents: write` granted workflow-wide; no `pull_request` gate | Low | B |
-| 10 | No log file at all; auth failures undiagnosable, redaction contract unwritten | Low | B |
+| # | Finding | Severity | Child | Status |
+|---|---|---|---|---|
+| 1 | Credentials travel in clear by default (`TlsToggle.IsChecked = false` for new servers, `http://` in `EndpointParser`) with no warning | High | A | |
+| 2 | "Allow self-signed certificate" disables *all* validation; anything accepted is invisible | High | A | |
+| 3 | Failed secret write is swallowed (`PersistUnsafe`), so the documented secret-first order is not actually enforced and the editor's error branch is dead code | Med/High | A | |
+| 4 | A corrupt `secrets.dat` silently drops every password, then all servers poll anonymously | Medium | A | |
+| 5 | `user:pass@host` typed into the host field is parsed and discarded | Medium | A | |
+| 6 | No bound on response body size (unbounded buffering) | Low/Med | A | |
+| 7 | Redirects: .NET clears `Authorization` on every redirect (same-origin loses auth; another origin re-authenticates after a 401, including https→http), and a 307/308 replays the login form body | Low | A | |
+| 8 | Releases unsigned, no checksum/attestation; actions pinned to mutable major tags | Medium | B | ✅ closed — SHA pins + `SHA256SUMS.txt` + build-provenance attestation |
+| 9 | `contents: write` granted workflow-wide; no `pull_request` gate | Low | B | ✅ closed — workflow `contents: read`, job-scoped write, PR gate runs `gate` only |
+| 10 | No log file at all; auth failures undiagnosable, redaction contract unwritten | Low | B | ✅ closed — bounded, redacted, event-only `ptmonitor.log` |
 
 ## Child map
 
@@ -63,7 +63,7 @@ its `implement.md`).
       actually does for secret writes, corruption, and the DPAPI fallback.
 - [ ] `.trellis/spec/backend/client-and-parser-rules.md` documents the TLS and
       userinfo rules.
-- [ ] `.trellis/spec/guides/ci-pipeline.md` documents the pinning, permissions
+- [x] `.trellis/spec/guides/ci-pipeline.md` documents the pinning, permissions
       and provenance rules.
 - [ ] A user with a working HTTPS setup sees no change in behaviour.
 - [ ] Full verification (build, selftest, tests) passes on the final state.

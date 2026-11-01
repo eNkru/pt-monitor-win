@@ -1,16 +1,32 @@
 # CI & Release Pipelines
 
 > Two Windows workflows. One contract. This file says how to change them without
-> publishing an ungated binary.
+> publishing an ungated, unchecksummed or unattested binary.
 
 ---
 
 ## The two lanes
 
-| Lane | File | Trigger | Output |
-|---|---|---|---|
-| Stable | `build.yml` | `main` push, `v*` tag, dispatch | artifacts; release on tag only |
-| Branch | `branch-release.yml` | any other branch push, branch delete, dispatch | rolling prerelease per branch; delete cleanup |
+| Lane | File | Trigger | Jobs | Output |
+|---|---|---|---|---|
+| Stable | `build.yml` | `main` push, `v*` tag, `pull_request`, dispatch | `gate` → `package` → `release` | PR: gate only · `main`/dispatch: artifacts · tag: release |
+| Branch | `branch-release.yml` | any other branch push, branch delete, dispatch | `gate` → `publish`; `cleanup` | rolling prerelease per branch; delete cleanup |
+
+```
+build.yml
+  gate     build + --selftest + dotnet test            every event (PRs included)
+  package  build.ps1 -SkipGates x2 + SHA256SUMS.txt    event != pull_request
+  release  download → verify sums → attest → release   tag pushes only
+           permissions: contents: write, id-token: write, attestations: write
+
+branch-release.yml
+  gate     build + --selftest + dotnet test            event != delete
+  publish  build.ps1 -SkipGates x2 + SHA256SUMS.txt,
+           verify sums → attest → tag move → upsert    event != delete
+           permissions: contents: write, id-token: write, attestations: write
+  cleanup  release + tag delete                        branch delete events
+           permissions: contents: write
+```
 
 Both run the same gates in the same order and package both architectures through
 `scripts/build.ps1 -SkipGates`. A `v*` tag is the only stable-release path.
@@ -24,10 +40,12 @@ Both run the same gates in the same order and package both architectures through
    calls and the artifact names on purpose — a branch release is a published
    binary, so it must pass everything `main` passes. Both headers carry the
    "keep in sync" note; if you add a third lane, copy them too.
-2. **Gates run once, before packaging.** `-SkipGates` is only legal after
-   build + `--selftest` + `dotnet test` succeeded in the same job.
+2. **Gates run once, before packaging.** The `gate` job is the only place
+   build + `--selftest` + `dotnet test` run, and `package`/`publish` `needs: gate`
+   — that dependency is what makes `-SkipGates` legal. Never add a `-SkipGates`
+   call to a job that does not depend on a green gate.
 3. **Never build a release from a ref you did not just gate.** The release step
-   is the last step and only runs after both package steps.
+   is the last step of the last job and only runs after both package steps.
 4. **Refs in tags are sanitised, never raw.** Branch names carry `/`, spaces and
    `$`; the slug is lowercase `[a-z0-9-]` plus a digest of the raw ref (sanitising
    is lossy: `feature/x` and `feature-x` collide without it).
@@ -35,13 +53,78 @@ Both run the same gates in the same order and package both architectures through
    name containing `$`, a backtick or `"` otherwise expands or breaks the parse.
 6. **`--target` is create-only.** GitHub ignores `target_commitish` for a tag
    that already exists; move rolling tags with `git tag -f` + `git push --force`.
+   That push needs a checkout of the released commit with the **default**
+   persisted credentials, which is why the tag move lives in the job that holds
+   `contents: write` (in `branch-release.yml`, the `publish` job checks out
+   `ref: ${{ github.sha }}`).
 7. **Derived values used by more than one job are duplicated verbatim**, not
-   re-invented (the cleanup job re-derives the slug with the same three lines).
+   re-invented (the cleanup job re-derives the slug with the same three lines;
+   the checksum-verification block appears in both workflows character for
+   character).
 8. **`main` stays out of the branch lane** (`branches: ['**', '!main']`) and a
    `tags:` filter must never be added to it, or tag pushes would double-publish.
+   Adding `pull_request` to `build.yml` does not change this: `build.yml`'s PR
+   run only executes `gate`.
 9. **Asset names that embed a version are never replaced by `--clobber`** — the
    name changes with every commit, so a rolling release must delete the previous
-   assets explicitly or it grows by two build zips per push.
+   assets explicitly or it grows by two build zips per push. The one asset whose
+   name is stable, `SHA256SUMS.txt`, belongs in the keep-list so the stale-asset
+   sweep does not delete it.
+10. **Every `uses:` is pinned to a full 40-character commit SHA** with the
+    human-readable release in a trailing comment:
+
+    ```yaml
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+    ```
+
+    A major tag is mutable — whoever controls the action can repoint it at new
+    code that then runs with this repository's token. Re-resolve before bumping
+    (annotated tags point at a tag object, so deref once):
+
+    ```bash
+    for spec in actions/checkout@v5 actions/setup-dotnet@v4 \
+                actions/upload-artifact@v4 actions/download-artifact@v4 \
+                actions/attest-build-provenance@v4; do
+      repo=${spec%@*}; tag=${spec#*@}
+      sha=$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha)
+      type=$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.type)
+      [ "$type" = tag ] && sha=$(gh api "repos/$repo/git/tags/$sha" --jq .object.sha)
+      echo "$repo@$tag -> $sha"
+    done
+    ```
+
+    No `@vN` may survive, in either file.
+11. **`permissions:` is `contents: read` at workflow level.** `contents: write`
+    exists only on the job that creates, edits or deletes a release or tag; an
+    attesting job additionally gets `id-token: write` and `attestations: write`
+    and nothing else. A job that compiles, tests or packages must not hold write
+    access — that is the whole point of the `gate`/`package` split.
+12. **The `pull_request` gate runs the contract and stops.** `build.yml` on a
+    `pull_request` event runs `gate` only: `package` is guarded with
+    `github.event_name != 'pull_request'` and `release` additionally with
+    `startsWith(github.ref, 'refs/tags/v')` plus `needs: package`, so a PR (a
+    fork PR especially, whose token is read-only) can never reach a release step.
+    It does **not** replace `branch-release.yml`: a same-repo branch push still
+    publishes a rolling prerelease, and only a fork PR is invisible to that lane.
+13. **`SHA256SUMS.txt` is `sha256sum`-compatible**: `<64 lowercase hex><two
+    spaces><basename>`, one line per zip, sorted by name. Two producers, both
+    required:
+
+    | Producer | Why |
+    |---|---|
+    | `scripts/build.ps1` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` it can see, so running it once per `-Rid` converges instead of appending |
+    | the `release`/`publish` job | guarantees the published sums describe the bytes actually shipped, not a workspace leftover |
+
+    The workflow block re-derives every line with `Get-FileHash` and fails on a
+    count mismatch, a malformed line, uppercase hex, a missing zip or a hash
+    disagreement. Two spaces, not one: `sha256sum -c` splits on exactly two and
+    a wrong separator silently breaks every downstream check.
+14. **Attestation happens before publishing.** `actions/attest-build-provenance`
+    with `subject-path: artifacts/*.zip` runs after the artifacts are in place
+    (downloaded in `release`, freshly built in `publish`) and before the release
+    is created or updated — so a failed attestation fails the job while the
+    previous release is still intact. **Never publish an unattested binary**, and
+    never reorder the attest step after `gh release create`/`gh release upload`.
 
 ---
 
@@ -53,7 +136,9 @@ actionlint .github/workflows/*.yml
 ```
 
 Then diff the changed run blocks against the other workflow. actionlint does not
-know pwsh, so a green lint says nothing about quoting — read those blocks.
+know pwsh, so a green lint says nothing about quoting — read those blocks. It
+also does not know which SHA a `uses:` should have; check that against the
+resolution loop in rule 10.
 
 ## Local dry run
 
@@ -66,3 +151,6 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 PATH=<stub-bin>:$PATH pwsh -File step.ps
 ```
 
 `dotnet build`/`--selftest`/`test` still need a .NET SDK; they cannot be faked.
+The checksum step is the exception — it needs no network and no stub, so extract
+it, point it at a directory with two dummy zips plus a `SHA256SUMS.txt`, and run
+it under `pwsh`.
