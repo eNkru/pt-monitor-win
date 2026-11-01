@@ -28,7 +28,7 @@ review-worthy decision.
 | `Client/` | `ITorrentClient`, the two clients, `HttpTransport`, `HostFieldParser`, `ServerConfigValidator`, the pure parsers, `Json` accessors | Anything UI or persisted shape |
 | `Store/` | `SettingsStore`, `ISecretStore` + implementations, `MonitorStore`, `AppPaths` | Parsing, formatting |
 | `Format/` | `ByteRateFormatter` (rates, byte counts, tray text ladder) | Locale-specific wording |
-| `Diagnostics/` | `SelfTest`, `ProbeRunner` | Production behaviour |
+| `Diagnostics/` | `SelfTest`, `ProbeRunner`, `Log` (the one file sink) | Production behaviour |
 | namespace `PTMonitor.Core.X` | mirrors folder `X`, file-scoped | |
 
 `src/PTMonitor.Cli/Program.cs` is the only file in `Cli`; all real logic lives

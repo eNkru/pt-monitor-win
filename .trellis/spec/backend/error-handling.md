@@ -81,6 +81,7 @@ Each one has a comment explaining why, and keeps the app running:
 | `PanelViewModel.SafeWebUri` | an unusable host yields `about:blank` |
 | `MainPanelWindow.OpenUrl` | no browser launched is not worth a dialog |
 | `SelfTest` temp-dir cleanup | `catch { }` on `Directory.Delete` |
+| `Log.Write` / `Log.Initialize` | a lost log line is cosmetic; a full disk must not break polling |
 | `ServerEditorWindow.OnTest` general catch | show it in the message line and stay open |
 
 Write `catch (Exception)` with a comment. Do not log-and-rethrow.

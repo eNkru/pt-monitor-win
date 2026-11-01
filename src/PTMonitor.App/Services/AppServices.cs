@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Threading;
+using PTMonitor.Core.Client;
+using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Model;
 using PTMonitor.Core.Store;
 using PTMonitor.App.Views;
@@ -18,6 +20,9 @@ namespace PTMonitor.App.Services;
 public sealed class AppServices
 {
     public static AppServices Instance { get; private set; } = null!;
+
+    /// <summary>The last certificate thumbprint logged per server, so a steady handshake is not re-logged.</summary>
+    private static readonly Dictionary<Guid, string> LoggedCertificates = [];
 
     public SettingsStore Settings { get; }
     public ISecretStore Secrets { get; }
@@ -39,7 +44,11 @@ public sealed class AppServices
 
         Settings = new SettingsStore(AppPaths.SettingsFile);
         Secrets = new DpapiSecretStore(AppPaths.SecretsFile);
-        Monitor = new MonitorStore(Settings, Secrets);
+        Monitor = new MonitorStore(Settings, Secrets, ClientFactory);
+        // Second half of the startup event (Program.cs logs version, OS and the
+        // data directory): the secret store is created here, so its state is
+        // only known now.
+        Log.Info("startup", $"secret store: {Secrets.State}");
 
         L10n.SetLanguage(Settings.AppLanguage);
         Settings.Changed += OnSettingsChanged;
@@ -80,6 +89,33 @@ public sealed class AppServices
     {
         if (Instance is not null) return; // idempotent
         _ = new AppServices();
+    }
+
+    /// <summary>
+    /// Client factory that records an accepted self-signed certificate. Without
+    /// it the poll loops would build clients with no observer at all, and the
+    /// "allow self-signed certificate" toggle would leave no trace.
+    /// </summary>
+    private static ITorrentClient ClientFactory(ServerConfig config, string? password)
+    {
+        void Observe(string thumbprint) => LogCertificate(config, thumbprint);
+        return config.Kind == ServerKind.Transmission
+            ? new TransmissionClient(config, password, Observe)
+            : new QBittorrentClient(config, password, Observe);
+    }
+
+    /// <summary>
+    /// One line per server and thumbprint: the same certificate on every
+    /// handshake is not news, a changed one is.
+    /// </summary>
+    private static void LogCertificate(ServerConfig config, string thumbprint)
+    {
+        lock (LoggedCertificates)
+        {
+            if (LoggedCertificates.TryGetValue(config.Id, out var logged) && logged == thumbprint) return;
+            LoggedCertificates[config.Id] = thumbprint;
+        }
+        Log.Warn("tls", $"{config.Name}: accepted the server certificate {thumbprint}");
     }
 
     private static Application GetApp() =>

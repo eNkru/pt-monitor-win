@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "two-lane contract, sync rule, pwsh quoting rules the workflow split must preserve"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "the no-log-file premise being replaced; message rules and what never gets logged"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "selftest + xUnit mirror contract for the new Log checks"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "where Core/Diagnostics modules belong and the dependency direction"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServerFailure kinds and where a failure may surface before it is logged"}
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "poll loop, change detection and backoff rules the transition-only logging must respect"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "atomic write + secret store invariants the log writer and corrupt-file logging sit next to"}

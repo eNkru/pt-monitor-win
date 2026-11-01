@@ -127,6 +127,32 @@ runs on Windows, and also builds/runs on Linux and macOS for development
 There is no installer and nothing is written outside `%APPDATA%\PTMonitor\`.
 To uninstall: quit from the tray menu and delete the exe plus that folder.
 
+### Verifying a download
+
+The exe is not code-signed, so a release ships two independent proofs of what it
+is instead: a `SHA256SUMS.txt` next to the two zips, and a GitHub
+build-provenance attestation for both zips.
+
+```bash
+# provenance: proves the zip came out of this repo's workflow, from that commit
+gh attestation verify PTMonitor-1.0.0-win-x64.zip --repo eNkru/pt-monitor-win
+
+# checksum: proves the bytes you hold are the bytes that were released
+sha256sum -c SHA256SUMS.txt
+```
+
+`gh` runs on Windows too, so both commands work from PowerShell. Without `gh`,
+`Get-FileHash` does the checksum half — compare the printed hash with the
+matching line of `SHA256SUMS.txt`:
+
+```powershell
+(Get-FileHash .\PTMonitor-1.0.0-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+```
+
+If you built the app yourself, `scripts\build.ps1` writes the same
+`artifacts\SHA256SUMS.txt` for your own binaries, so a self-built zip can be
+compared line by line with a released one.
+
 ---
 
 ## Using the app
@@ -249,11 +275,14 @@ problem:
 
 1. `dotnet restore`
 2. `dotnet build -c Release`
-3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (204 checks)
-4. `dotnet test tests/PTMonitor.Core.Tests` (37 tests)
+3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (296 checks)
+4. `dotnet test tests/PTMonitor.Core.Tests` (84 tests)
 5. `dotnet publish src/PTMonitor.App -r win-x64 --self-contained -p:PublishSingleFile=true`
 6. Re-runs `--selftest` **on the packaged CLI exe**, not just the build output
 7. Zips everything into `artifacts\PTMonitor-<version>-win-x64.zip`
+8. Writes `artifacts\SHA256SUMS.txt` — `sha256sum`-format sums of **every** zip in
+   `artifacts\`, rewritten rather than appended, so running the script once per
+   `-Rid` leaves one file listing both architectures
 
 Outputs:
 
@@ -261,6 +290,7 @@ Outputs:
 publish\win-x64\PTMonitor.exe          ~90 MB, self-contained, single file
 publish\win-x64\cli\PTMonitor.Cli.exe  headless selftest / probe
 artifacts\PTMonitor-1.0.0-win-x64.zip
+artifacts\SHA256SUMS.txt
 ```
 
 Options:
@@ -268,7 +298,7 @@ Options:
 ```powershell
 .\scripts\build.ps1 -Version 1.2.3        # stamp a version
 .\scripts\build.ps1 -Rid win-arm64        # build the ARM64 exe instead
-.\scripts\build.ps1 -SkipZip              # skip the zip step
+.\scripts\build.ps1 -SkipZip              # skip the zip (and the checksum) step
 .\scripts\build.ps1 -SkipGates            # publish only (CI reuse)
 ```
 
@@ -351,7 +381,7 @@ Runs the built-in check suite and exits `0` (pass) or `1` (fail).
 
 ```powershell
 PTMonitor.Cli.exe --selftest
-# → selftest: OK (204 checks passed)
+# → selftest: OK (296 checks passed)
 ```
 
 On failure it prints every failing check, e.g.:
@@ -448,6 +478,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 |---|---|---|
 | `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
+| `ptmonitor.log` | startup line, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
 
 - The settings file is written atomically (temp file + move), so a crash cannot
   truncate it. A corrupt or older payload is treated as "not configured" rather
@@ -465,13 +496,36 @@ Everything lives under `%APPDATA%\PTMonitor\`:
   disables it, and the form then warns that the password will be sent in clear.
 - **"Allow self-signed certificate" accepts any certificate** (expired,
   wrong-host, or a man-in-the-middle). When it does, Test Connection shows the
-  leaf certificate's SHA-256 so a swap between sessions is visible. Compare it
-  with the server's own certificate; there is no pinning.
+  leaf certificate's SHA-256 so a swap between sessions is visible, and the log
+  records it (one line per server and thumbprint). Compare it with the server's
+  own certificate; there is no pinning.
 - A pasted `user:pass@host` fills in the credentials rather than being discarded,
   and the form says where they came from.
 - If `secrets.dat` is damaged, the app says so in Preferences and keeps the file
   as `secrets.dat.corrupt` the next time it writes. Servers need their passwords
   re-entered; a server that needs no password is unaffected.
+
+### The log
+
+`%APPDATA%\PTMonitor\ptmonitor.log` is always on. It records **events only**:
+
+- the startup record: version, OS, data directory, secret-store state;
+- every unhandled exception, with its stack trace on a single line;
+- poll failures **when they start or change kind** — a server that keeps failing
+  the same way logs once, not once per 2-second poll;
+- secret-store trouble (unreadable file, preserved `.corrupt` copy, failed
+  write), TLS certificates accepted under "allow self-signed certificate" (with
+  the SHA-256 thumbprint), and settings writes that failed.
+
+It is capped at 512 KiB plus one rotated predecessor (`ptmonitor.log.1`), so the
+pair never exceeds ~1 MiB. Nothing else is logged: no passwords, no auth
+headers, no cookies or `SID`, no payload bodies, no per-poll chatter. A single
+redaction pass runs over every line at write time as a safety net, but the rule
+is still "do not pass secrets to the logger". A logging failure (read-only
+folder, full disk) is swallowed — it never interrupts polling.
+
+There is no log level to configure and no toggle: a log the user has to enable
+beforehand cannot explain a crash that already happened.
 
 To wipe everything: quit the app and delete `%APPDATA%\PTMonitor\`.
 
@@ -507,7 +561,7 @@ Three projects, strictly layered — the same split as the macOS original.
 | `Client/` | `ITorrentClient`; `QBittorrentClient`, `TransmissionClient`, `HttpTransport`, `HostFieldParser`, `ServerConfigValidator`, pure parsers |
 | `Store/` | `SettingsStore` (JSON), `DpapiSecretStore` / `InMemorySecretStore`, `MonitorStore` (polling loops, aggregation) |
 | `Format/` | `ByteRateFormatter` (rates, byte counts, tray text ladder) |
-| `Diagnostics/` | `SelfTest` (the 204-check suite), `ProbeRunner` |
+| `Diagnostics/` | `SelfTest` (the 296-check suite), `ProbeRunner`, `Log` (the file sink) |
 
 **Key design rules** (kept from the macOS original, and enforced by the check
 suite):
@@ -584,12 +638,12 @@ src/
     Diagnostics/                 SelfTest, ProbeRunner
   PTMonitor.Cli/                 headless --selftest / --probe entry point
 tests/
-  PTMonitor.Core.Tests/          xUnit suite (37 tests, mirrors the selftest)
+  PTMonitor.Core.Tests/          xUnit suite (84 tests, mirrors the selftest)
 scripts/
   build.ps1                      restore → build → selftest → test → publish → zip
   make-app-icon.py               draw + encode app.ico (flat Windows style)
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
-.github/workflows/build.yml      windows-latest CI: main → artifacts, tag → stable release
+.github/workflows/build.yml      windows-latest CI: PR → gate, main → artifacts, tag → release
 .github/workflows/branch-release.yml  windows-latest CI: branch → prerelease; ubuntu cleanup
 ```
 
@@ -664,7 +718,7 @@ Two gates, both run by `build.ps1` and by CI.
 
 ### 1. In-binary check suite — `--selftest`
 
-204 assertions, no network, no fixtures on disk. It covers:
+296 assertions, no network, no fixtures on disk. It covers:
 
 - host-field parsing (`host:port`, IPv6 literals, pasted URLs, scheme
   rejection) and config validation/normalisation;
@@ -676,14 +730,17 @@ Two gates, both run by `build.ps1` and by CI.
   extraction and hoisting;
 - byte-rate formatting (including printf-style half-to-even rounding);
 - settings round-trip, migration, clamping; backoff ladder; aggregate and
-  menu-state mapping; disabled servers never being contacted.
+  menu-state mapping; disabled servers never being contacted;
+- the log sink: the redaction table, rotation, one line per event, silence
+  before `Initialize`, an unwritable path, and the failure-transition rule that
+  keeps a steady failure to one line.
 
 Because it is a pure-logic suite, it runs anywhere — that is why it exists
 instead of relying only on unit tests.
 
 ### 2. xUnit suite
 
-37 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
+84 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
 `SelfTest` suite, so the two can never drift apart.
 
 ```powershell
@@ -705,30 +762,50 @@ Two workflows, both building the two architectures on the same `windows-latest`
 x64 runner (ARM64 is cross-compiled). The branch lane adds an `ubuntu-latest`
 cleanup job.
 
-**`build.yml` — `main` and stable releases:**
+Both lanes are split into jobs, because the job that compiles does not need to
+write to the repository: the workflow is `contents: read` and only the job that
+creates, edits or deletes a release escalates (plus `id-token: write` and
+`attestations: write` for the attestation). Every action is pinned to a full
+40-character commit SHA with the human-readable release in a trailing comment,
+so a repointed `vN` tag cannot change what runs here.
+
+**`build.yml` — `main`, stable releases, and pull requests:**
 
 ```
-checkout → setup .NET 8 → resolve version → build → selftest → test
-        → package x64 → package ARM64 → upload artifacts → (tag only) Release
+gate     checkout → setup .NET 8 → build → selftest → test
+package  resolve version → package x64 → package ARM64 → SHA256SUMS.txt
+         → upload artifacts
+release  download → verify sums → attest provenance → create Release
 ```
 
 `main` merges stay artifact-only; `v*` tags are the stable-release lane. Branch
 pushes are handled by `branch-release.yml` below.
 
-- **Every merge to `main`** runs the gates and publishes both the
-  `PTMonitor-win-x64` and `PTMonitor-win-arm64` workflow artifacts.
-- **Every push of a tag `v*`** additionally creates a GitHub Release with
-  **both zips** attached. The tag (minus the leading `v`) becomes the app
-  version. This is the only lane that produces a stable, non-prerelease
-  release.
+- **Every merge to `main`** runs the gates and publishes the
+  `PTMonitor-win-x64`, `PTMonitor-win-arm64` and `PTMonitor-release` workflow
+  artifacts.
+- **Every push of a tag `v*`** additionally runs the release job: it re-verifies
+  the checksums from the downloaded artifacts, attests build provenance for both
+  zips, and creates a GitHub Release with **both zips plus `SHA256SUMS.txt`**.
+  The tag (minus the leading `v`) becomes the app version. This is the only lane
+  that produces a stable, non-prerelease release. A failed attestation fails the
+  job before the release is created, so an unattested binary is never published.
+- **Every pull request** runs the gates and nothing else — build + `--selftest`
+  + `dotnet test`, no packaging, no release, no artifact upload that needs write
+  scope. Fork pull requests are included: they get a read-only token and the
+  packaging and release jobs are guarded, so a PR can never reach a publishing
+  step. This does **not** replace the branch lane — a same-repo branch push still
+  publishes its rolling prerelease; only a fork PR is invisible to that lane.
 - **Manual runs** (`workflow_dispatch`, or
   `gh workflow run build.yml --ref main`) produce the artifacts only.
 
 **`branch-release.yml` — try a branch on a real machine:**
 
 ```
-checkout → setup .NET 8 → resolve slug/version → build → selftest → test
-        → package x64 → package ARM64 → upload artifacts → upsert prerelease
+gate     checkout → setup .NET 8 → build → selftest → test
+publish  resolve slug/version → package x64 → package ARM64 → SHA256SUMS.txt
+         → verify sums → attest provenance → move tag → upsert prerelease
+cleanup  (branch delete) delete release + tag
 ```
 
 - **Every push to any branch other than `main`** (a new branch's first push
@@ -741,16 +818,18 @@ checkout → setup .NET 8 → resolve slug/version → build → selftest → te
   release; `feature/Tray Panel Fix` becomes
   `branch-build/feature-tray-panel-fix-<refhash>`. Raw branch names never appear
   in tags.
-- Repeated pushes update the **same** release, replace its assets and re-point
-  its tag — no release per commit, and the previous commit's zips are deleted
-  after the new ones upload. A newer push cancels the older run, and a failing
-  gate leaves the previous release untouched.
+- Repeated pushes update the **same** release, replace its assets (including
+  `SHA256SUMS.txt`) and re-point its tag — no release per commit, and the
+  previous commit's zips are deleted after the new ones upload. A newer push
+  cancels the older run, and a failing gate leaves the previous release
+  untouched.
 - **Deleting a branch** deletes its release and its tag.
 - `workflow_dispatch` can run this lane for a chosen ref, including `main` — such
   a release is never cleaned up automatically, because `main` is never deleted.
 - Re-running an older run rewinds the release to that run's commit.
 - A branch build is a throwaway: nothing is bumped, signed or tagged on `main`.
-- Pull requests do **not** build either lane.
+- Pull requests never publish: `build.yml` gates them, `branch-release.yml`
+  never sees them.
 
 To cut a stable release:
 
@@ -782,10 +861,12 @@ git push origin v1.0.0
 | **Panel appears in an odd place** | It anchors to the bottom-right of the *primary* screen's work area. Secondary-taskbar placement is not detected (see limitations). |
 | **No tray icon** | Windows hides new tray icons by default — expand the overflow chevron and drag it out. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
-| **Antivirus / SmartScreen warning** | The exe is unsigned. "More info" → "Run anyway", or build it yourself. |
+| **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
 
-Logs: the app writes nothing by default. For diagnosis use the CLI probe, which
-prints the exact failure:
+Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see
+[Data, settings and secrets](#data-settings-and-secrets)) — start there when the
+tray icon disappears or the app dies without a dialog. For a single failure the
+CLI probe prints the exact cause without touching the log:
 
 ```powershell
 PTMonitor.Cli.exe --probe qbittorrent --host 192.168.1.2 --port 8080 --user admin --pass secret

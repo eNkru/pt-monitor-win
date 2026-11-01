@@ -105,6 +105,7 @@ public static class SelfTest
             FormatChecks(checks);
             await StoreChecks(checks);
             await ClientChecks(checks);
+            await LogChecks(checks);
         }
         catch (Exception exception)
         {
@@ -639,6 +640,12 @@ public static class SelfTest
                 MonitorStore.Classify(null, corrupt, ServerFailure.Unreachable("refused")).Message, "refused");
             c.Expect("corrupt: password present means no rename",
                 MonitorStore.Classify("hunter2", corrupt, ServerFailure.Auth("x")).Message, "x");
+            c.True("corrupt: unreadable-auth predicate",
+                MonitorStore.IsUnreadableSecretAuth(null, corrupt, ServerFailure.Auth("x")));
+            c.True("corrupt: predicate needs an unreadable store, no password, auth kind",
+                !MonitorStore.IsUnreadableSecretAuth("hunter2", corrupt, ServerFailure.Auth("x"))
+                && !MonitorStore.IsUnreadableSecretAuth(null, corrupt, ServerFailure.Unreachable("x"))
+                && !MonitorStore.IsUnreadableSecretAuth(null, new InMemorySecretStore(), ServerFailure.Auth("x")));
             corrupt.Delete(Guid.NewGuid());   // any persist preserves the bytes
             c.True("corrupt: copy kept on the first persist", File.Exists(corruptPath + ".corrupt"));
             c.True("corrupt: rewrite clears the state",
@@ -690,6 +697,158 @@ public static class SelfTest
         }
     }
 
+    private static async Task LogChecks(Checks c)
+    {
+        // Redaction contract (see .trellis/spec/backend/logging-guidelines.md).
+        // The net, not the design: call sites still must not pass secrets.
+        var table = new (string Input, string Expected)[]
+        {
+            ("password=hunter2", "password=***"),
+            ("user=bob&pass=hunter2", "user=bob&password=***"),
+            ("https://nas.local/api?password=hunter2&x=1", "https://nas.local/api?password=***&x=1"),
+            ("passwd=hunter2", "password=***"),
+            ("pwd=hunter2", "password=***"),
+            ("Authorization: Basic aGVsbG86aHVudGVyMg==", "Authorization: Basic ***"),
+            ("Authorization: Bearer abc.def.ghi", "Authorization: Bearer ***"),
+            ("Set-Cookie: SID=abc123; Path=/", "Set-Cookie: ***"),
+            ("Cookie: SID=abc123", "Cookie: ***"),
+            ("SID=abc123", "SID=***"),
+            ("https://bob:hunter2@nas.local:8080/x", "https://***@nas.local:8080/x"),
+            ("bob:hunter2@nas.local", "bob:***@nas.local"),
+            ("nothing to hide", "nothing to hide"),
+        };
+        foreach (var (input, expected) in table)
+            c.Expect($"log: redact {input}", Log.Redact(input), expected);
+        c.Expect("log: redact is idempotent", Log.Redact(Log.Redact("password=hunter2")), "password=***");
+
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-log-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            // Silent before Initialize: the CLI and the suite must not write files.
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Shutdown();
+            Log.Info("test", "before initialize");
+            c.True("log: silent before initialize", !File.Exists(path));
+
+            // Shutdown really stops the sink: initialize, write, shut down, write
+            // again — the second event must not land. Asserting only "no file at
+            // a path nobody initialised" would pass with the whole module deleted.
+            Log.Initialize(path);
+            Log.Info("test", "while initialized");
+            Log.Shutdown();
+            Log.Info("test", "after shutdown");
+            var shutdownLines = File.ReadAllLines(path);
+            c.Expect("log: shutdown silences the sink", shutdownLines.Length, 1);
+            c.True("log: shutdown keeps the earlier event",
+                shutdownLines[0].Contains("while initialized", StringComparison.Ordinal));
+            File.Delete(path);
+
+            // Line shape: UTC timestamp, level, area, redacted message, one line.
+            Log.Initialize(path);
+            Log.Info("startup", "PTMonitor 1.0.0, secrets absent");
+            Log.Warn("poll", "nas: auth failed: password=hunter2");
+            Log.Error("crash", "boom\n   at Foo()\r\n   at Bar()");
+            Log.Shutdown();
+            var lines = File.ReadAllLines(path);
+            c.Expect("log: one line per event", lines.Length, 3);
+            c.True("log: utc timestamp shape",
+                lines[0].Length > 24 && lines[0][4] == '-' && lines[0][10] == 'T' && lines[0][19] == '.' && lines[0][23] == 'Z');
+            c.True("log: level and area", lines[0].Contains("[info] startup: ", StringComparison.Ordinal));
+            c.True("log: message redacted",
+                lines[1].Contains("password=***", StringComparison.Ordinal) && !lines[1].Contains("hunter2", StringComparison.Ordinal));
+            c.True("log: stack joined on one line", lines[2].EndsWith("boom | at Foo() | at Bar()", StringComparison.Ordinal));
+
+            // Rotation: past the cap, one .1 predecessor and a fresh current file.
+            // The cap is checked before each append, so the live file may exceed
+            // it by one line — never by a second file's worth.
+            var rotated = Path.Combine(directory, "rotate.log");
+            Log.Initialize(rotated, 120);
+            for (var index = 0; index < 12; index++) Log.Info("poll", $"event {index}");
+            Log.Shutdown();
+            var currentLines = File.ReadAllLines(rotated).Length;
+            var currentText = File.ReadAllText(rotated);
+            c.True("log: rotated predecessor kept", File.ReadAllLines(rotated + Log.RotatedSuffix).Length > 0);
+            c.True("log: current file restarted", currentLines > 0 && currentLines < 12);
+            c.True("log: newest event survives", currentText.Contains("event 11", StringComparison.Ordinal));
+            c.True("log: old events rotated away", !currentText.Contains("event 0", StringComparison.Ordinal));
+            c.True("log: only one predecessor", !File.Exists(rotated + Log.RotatedSuffix + ".1"));
+
+            // A full disk or an unwritable directory must never break polling.
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var threw = false;
+            try
+            {
+                Log.Initialize(Path.Combine(blocker, "ptmonitor.log"));
+                Log.Info("test", "unwritable");
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
+            c.True("log: unwritable path is silent", !threw);
+            Log.Shutdown();
+
+            // A steady failure logs once, not once per tick.
+            // A steady failure logs once, not once per tick. Driven through the
+            // real loop: two consecutive failing polls must leave one line, which
+            // is what proves the loop resets the memo only on success.
+            var looped = Path.Combine(directory, "loop.log");
+            Log.Initialize(looped);
+            c.Expect("log: loop logs a steady failure once", await LoopFailureLines(looped), 1);
+            Log.Shutdown();
+
+            // The pure rule the loop uses, pinned on its own.
+            c.True("log: same kind again is quiet", !MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Auth("x"))));
+            c.True("log: a kind change logs again", MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Unreachable("refused"))));
+            c.True("log: success clears the memo", MonitorStore.ShouldLogFailure(null, new ServerStatus.Failed(ServerFailure.Auth("x"))));
+            c.True("log: online is never a failure", !MonitorStore.ShouldLogFailure(null, new ServerStatus.Online(new TransferSnapshot())));
+        }
+        finally
+        {
+            Log.Shutdown();
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Drives a real <see cref="MonitorStore"/> loop until two polls have failed
+    /// and reports how many lines the loop wrote. Two identical failures must
+    /// leave one line: that is the loop's memo, not a re-implementation of it.
+    /// </summary>
+    private static async Task<int> LoopFailureLines(string logPath)
+    {
+        var settingsDir = Path.Combine(Path.GetDirectoryName(logPath)!, "settings");
+        Directory.CreateDirectory(settingsDir);
+        var settings = new SettingsStore(Path.Combine(settingsDir, "settings.json"));
+        settings.SetPollInterval(SettingsStore.MinPollInterval);
+        var config = new ServerConfig(ServerKind.Qbittorrent, "nas.invalid") { IsEnabled = true };
+        settings.Add(config);
+
+        // Counted at the client, not via StatusesChanged: an identical repeat is
+        // deliberately not published (IsEquivalent), so the second failure is only
+        // observable as a second poll. Wait for the THIRD poll to start: the log
+        // write happens after the fetch throws, so a second-poll signal could be
+        // read before the line is on disk.
+        var polls = 0;
+        var settled = new TaskCompletionSource();
+        using var monitor = new MonitorStore(
+            settings,
+            new InMemorySecretStore(),
+            (_, _) => new CountingClient(() =>
+            {
+                if (Interlocked.Increment(ref polls) >= 3) settled.TrySetResult();
+            }));
+
+        monitor.Start();
+        // Two polls at the minimum interval; the timeout only guards a hang.
+        await Task.WhenAny(settled.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        await monitor.StopAsync();
+
+        return File.Exists(logPath) ? File.ReadAllLines(logPath).Length : 0;
+    }
+
     private static async Task ClientChecks(Checks c)
     {
         var secrets = new InMemorySecretStore();
@@ -725,6 +884,22 @@ public static class SelfTest
             }
             return (response, decision.SessionId ?? sessionId);
         }
+    }
+
+    /// <summary>Fails every poll and reports each attempt, so a test can count ticks.</summary>
+    private sealed class CountingClient(Action onPoll) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+        {
+            onPoll();
+            return Task.FromException<TransferSnapshot>(
+                new ServerFailureException(ServerFailure.Unreachable("connection refused")));
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) =>
+            Task.FromResult("stub");
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class StubClient : ITorrentClient

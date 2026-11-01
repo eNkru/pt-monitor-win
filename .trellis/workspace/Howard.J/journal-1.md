@@ -63,3 +63,49 @@ Added optional always-on-top floating speed chip: persisted off-by-default setti
 ### Status
 
 [OK] **Completed**
+
+## Session 3: Release-chain hardening
+<!-- trellis-session: v=2 fp=releasechainhardening01 -->
+
+**Date**: 2026-11-01
+**Task**: Release-chain hardening (findings 8, 9, 10 of the 2026-11 security review)
+**Branch**: `security/release-chain-hardening`
+
+### Summary
+
+Closed the last three review findings. Finding 10: a bounded, redacting, event-only
+`ptmonitor.log` (`Core/Diagnostics/Log.cs`) with startup, crash, poll-transition,
+secret-store, TLS-acceptance and settings-failure call sites — the crash handler
+is what makes the next tray-class incident diagnosable. Finding 9: both lanes
+split into `gate` / `package`|`publish` / `release`, workflow-level
+`contents: read`, `pull_request` added to `build.yml` and stopping after `gate`.
+Finding 8: every `uses:` pinned to a commit SHA, `SHA256SUMS.txt` from both
+`build.ps1` and the release job, build-provenance attestation before publishing.
+Specs (`ci-pipeline.md`, `logging-guidelines.md`) and README updated; parent PRD
+findings 8-10 ticked.
+
+The log is **always on** by decision (2026-11-01): a log enabled after the fact
+cannot diagnose a crash that already happened.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9bc5297` | Add a bounded, redacting log sink with a transition-only poll rule |
+| `75988ec` | Log startup, crashes, poll transitions and store failures |
+| `547a505` | Document what the log holds and never holds |
+| `c54a9b1` | Pin actions, scope write access to the publishing job, attest every zip |
+| `b7cc50a` | Document how to verify a download and how the lanes are gated |
+| `0b32f8b` | Make the log checks prove the loop and the sink, not themselves |
+
+### Verification
+
+`dotnet build -c Release` clean, `--selftest` 298 checks, `dotnet test` 85 tests.
+Workflows: YAML parse + all 12 `pwsh` blocks parsed with the PowerShell AST +
+checksum producer/verifier dry-run under a local `pwsh`; `actionlint` unavailable
+here. Two new checks were mutation-tested (removing the poll memo, no-oping
+`Shutdown`) and fail as they should.
+
+### Status
+
+[OK] **Completed** — awaiting PR / archive.

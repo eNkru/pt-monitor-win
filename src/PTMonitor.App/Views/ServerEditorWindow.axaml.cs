@@ -4,6 +4,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using PTMonitor.App.Services;
 using PTMonitor.Core.Client;
+using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Model;
 using PTMonitor.Core.Store;
 
@@ -226,6 +227,9 @@ public partial class ServerEditorWindow : Window
         }
         catch (Exception exception)
         {
+            // The save is aborted, so nothing reaches settings.json — the only
+            // record of why is this line.
+            Log.Warn("settings", $"server {config.Name}: password write failed, save aborted: {exception.Message}");
             ShowMessage(L10n.Format("Could not save the password (%@). Nothing was saved.", exception.Message),
                 isError: true);
             return;

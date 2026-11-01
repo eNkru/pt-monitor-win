@@ -1,4 +1,5 @@
 using PTMonitor.Core.Client;
+using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Model;
 
 namespace PTMonitor.Core.Store;
@@ -126,12 +127,24 @@ public sealed class MonitorStore : IDisposable
     {
         var password = _secrets.Get(config.Id);
         await using var client = _clientFactory(config, password);
+        // Failure-transition memo: a steady failure is logged once, not once per
+        // tick (at the default 2 s interval that would be the whole log file).
+        // A successful poll clears it, so a recovery-then-failure logs again.
+        FailureKind? loggedFailure = null;
+        void Report(ServerStatus status, string? note = null)
+        {
+            if (status.Failure is not { } failure || !ShouldLogFailure(loggedFailure, status)) return;
+            loggedFailure = failure.Kind;
+            Log.Warn("poll", $"{config.Name}: {failure.KindLabel}: {failure.Message}{note}");
+        }
+
         while (!cancellationToken.IsCancellationRequested)
         {
             var interval = _settings.PollInterval;
             try
             {
                 var snapshot = await client.FetchSnapshotAsync(cancellationToken);
+                loggedFailure = null;
                 SetStatus(config.Id, new ServerStatus.Online(snapshot));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -140,14 +153,19 @@ public sealed class MonitorStore : IDisposable
             }
             catch (ServerFailureException failure)
             {
-                var status = new ServerStatus.Failed(Classify(password, _secrets, failure.Failure));
+                var classified = Classify(password, _secrets, failure.Failure);
+                var status = new ServerStatus.Failed(classified);
                 SetStatus(config.Id, status);
+                Report(status, IsUnreadableSecretAuth(password, _secrets, failure.Failure)
+                    ? " (the secret store is unreadable; re-enter the password)"
+                    : null);
                 interval = RetryDelay(status, interval);
             }
             catch (Exception exception)
             {
                 var status = new ServerStatus.Failed(ServerFailure.Unreachable(exception.Message));
                 SetStatus(config.Id, status);
+                Report(status);
                 interval = RetryDelay(status, interval);
             }
 
@@ -252,11 +270,27 @@ public sealed class MonitorStore : IDisposable
     /// failing for a reason of its own.
     /// </summary>
     public static ServerFailure Classify(string? password, ISecretStore secrets, ServerFailure failure) =>
-        failure.Kind == FailureKind.Auth
-        && password is null
-        && secrets.State == SecretStoreState.Unreadable
+        IsUnreadableSecretAuth(password, secrets, failure)
             ? ServerFailure.Auth("stored password could not be read")
             : failure;
+
+    /// <summary>
+    /// Whether an auth failure is really "the secret file cannot be read". The
+    /// same predicate drives <see cref="Classify"/> and the log note, so the two
+    /// can never disagree about what happened.
+    /// </summary>
+    public static bool IsUnreadableSecretAuth(string? password, ISecretStore secrets, ServerFailure failure) =>
+        failure.Kind == FailureKind.Auth
+        && password is null
+        && secrets.State == SecretStoreState.Unreadable;
+
+    /// <summary>
+    /// Failure-transition rule: log only when this kind has not already been
+    /// logged since the server was last online. The loop passes <c>null</c> after
+    /// every success, so recovery-then-failure is logged again.
+    /// </summary>
+    public static bool ShouldLogFailure(FailureKind? lastLogged, ServerStatus candidate) =>
+        candidate.Failure is { } failure && failure.Kind != lastLogged;
 
     public static MonitorAggregate AggregateOf(IReadOnlyDictionary<Guid, ServerStatus> statuses)
     {
