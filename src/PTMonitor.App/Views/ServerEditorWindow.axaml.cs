@@ -194,8 +194,10 @@ public partial class ServerEditorWindow : Window
         {
             // The secret write happens BEFORE the configuration write, so a
             // failed DPAPI write cannot leave an enabled server polling with
-            // an empty password (which trips qBittorrent's IP ban).
-            services.Secrets.Set(password, config.Id);
+            // an empty password (which trips qBittorrent's IP ban). A failure
+            // throws; the `false` result only means "empty password, nothing to
+            // store", which is not an error.
+            _ = services.Secrets.Set(password, config.Id);
         }
         catch (Exception exception)
         {

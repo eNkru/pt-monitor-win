@@ -566,6 +566,31 @@ public static class SelfTest
             c.True("409: first retries", SessionIdHandshake.Step(409, "abc", false).ShouldRetry);
             c.True("409: second does not", !SessionIdHandshake.Step(409, "abc", true).ShouldRetry);
             c.True("409: 200 does not", !SessionIdHandshake.Step(200, null, false).ShouldRetry);
+
+            var secretPath = Path.Combine(directory, "secrets.dat");
+            var store = new DpapiSecretStore(secretPath);
+            var serverId = Guid.NewGuid();
+            c.Expect("secrets: fresh store is absent", store.State, SecretStoreState.Absent);
+            c.True("secrets: empty password is false", !store.Set("", serverId));
+            c.True("secrets: password stored", store.Set("hunter2", serverId));
+            c.Expect("secrets: read back", store.Get(serverId), "hunter2");
+            c.Expect("secrets: state after write", store.State, SecretStoreState.Ok);
+            c.Expect("secrets: reload", new DpapiSecretStore(secretPath).Get(serverId), "hunter2");
+
+            // A path whose parent is a file cannot be written: Set must raise and
+            // leave both the store state and the entry untouched.
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var broken = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+            var brokenId = Guid.NewGuid();
+            var threw = false;
+            try { broken.Set("hunter2", brokenId); }
+            catch (Exception) { threw = true; }
+            c.True("secrets: failed write throws", threw);
+            c.Expect("secrets: failed write keeps state", broken.State, SecretStoreState.Absent);
+            c.True("secrets: failed write stores nothing", broken.Get(brokenId) is null);
+            broken.Delete(brokenId);   // must not raise, even on a broken path
+            c.True("secrets: delete after failure is silent", broken.Get(brokenId) is null);
         }
         finally
         {

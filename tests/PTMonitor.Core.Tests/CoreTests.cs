@@ -192,6 +192,79 @@ public class MonitorStoreTests
     }
 }
 
+public class SecretStoreTests
+{
+    [Fact]
+    public void SetPersistsAndReportsState()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "secrets.dat");
+            var store = new DpapiSecretStore(path);
+            var id = Guid.NewGuid();
+
+            Assert.Equal(SecretStoreState.Absent, store.State);
+            Assert.False(store.Set("", id));
+            Assert.True(store.Set("hunter2", id));
+            Assert.Equal("hunter2", store.Get(id));
+            Assert.Equal(SecretStoreState.Ok, store.State);
+            Assert.Equal("hunter2", new DpapiSecretStore(path).Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FailedWriteThrowsAndStoresNothing()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var store = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+            var id = Guid.NewGuid();
+
+            Assert.ThrowsAny<IOException>(() => store.Set("hunter2", id));
+            Assert.Equal(SecretStoreState.Absent, store.State);
+            Assert.Null(store.Get(id));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void DeleteNeverThrowsOnABrokenPath()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var store = new DpapiSecretStore(Path.Combine(blocker, "secrets.dat"));
+
+            Assert.Null(Record.Exception(() => store.Delete(Guid.NewGuid())));
+            Assert.Null(Record.Exception(store.DeleteAll));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static string TempDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+}
+
 public class ByteRateFormatterTests
 {
     [Theory]
