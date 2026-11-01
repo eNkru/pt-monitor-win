@@ -8,6 +8,7 @@ using PTMonitor.Core.Store;
 namespace PTMonitor.Core.Tests;
 
 /// <summary>The full built-in check suite, mirrored by `PTMonitor.Cli --selftest`.</summary>
+[Collection("log")]
 public class SelfTestSuite
 {
     [Fact]
@@ -16,6 +17,165 @@ public class SelfTestSuite
         var result = await SelfTest.RunAsync();
         Assert.True(result.IsSuccess, result.Failure ?? "selftest failed");
         Assert.True(result.Passed > 150, $"expected a substantial suite, got {result.Passed} checks");
+    }
+}
+
+/// <summary>
+/// <see cref="Log"/> is process-global state, so every class that touches it
+/// shares this collection: xUnit runs different collections in parallel, and a
+/// second <c>Initialize</c> would steal the first one's sink.
+/// </summary>
+[CollectionDefinition("log", DisableParallelization = true)]
+public class LogCollection;
+
+[Collection("log")]
+public class LogTests
+{
+    [Theory]
+    [InlineData("password=hunter2", "password=***")]
+    [InlineData("user=bob&pass=hunter2", "user=bob&password=***")]
+    [InlineData("https://nas.local/api?password=hunter2&x=1", "https://nas.local/api?password=***&x=1")]
+    [InlineData("passwd=hunter2", "password=***")]
+    [InlineData("pwd=hunter2", "password=***")]
+    [InlineData("Authorization: Basic aGVsbG86aHVudGVyMg==", "Authorization: Basic ***")]
+    [InlineData("Authorization: Bearer abc.def.ghi", "Authorization: Bearer ***")]
+    [InlineData("Set-Cookie: SID=abc123; Path=/", "Set-Cookie: ***")]
+    [InlineData("Cookie: SID=abc123", "Cookie: ***")]
+    [InlineData("SID=abc123", "SID=***")]
+    [InlineData("https://bob:hunter2@nas.local:8080/x", "https://***@nas.local:8080/x")]
+    [InlineData("bob:hunter2@nas.local", "bob:***@nas.local")]
+    [InlineData("nothing to hide", "nothing to hide")]
+    public void RedactsEverySecretShape(string input, string expected) =>
+        Assert.Equal(expected, Log.Redact(input));
+
+    [Fact]
+    public void RedactionIsIdempotent() =>
+        Assert.Equal("password=***", Log.Redact(Log.Redact("password=hunter2")));
+
+    [Fact]
+    public void CallsBeforeInitializeAreNoOps()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            Log.Shutdown();
+            Log.Info("test", "before initialize");
+            Assert.False(File.Exists(Path.Combine(directory, "ptmonitor.log")));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void LinesCarryUtcTimestampLevelAreaAndARedactedMessage()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            Log.Info("startup", "PTMonitor 1.0.0, secrets absent");
+            Log.Warn("poll", "nas: auth failed: password=hunter2");
+            Log.Error("crash", "boom\n   at Foo()\r\n   at Bar()");
+            Log.Shutdown();
+
+            var lines = File.ReadAllLines(path);
+            Assert.Equal(3, lines.Length);
+            Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[info\] startup: ", lines[0]);
+            Assert.Contains("password=***", lines[1]);
+            Assert.DoesNotContain("hunter2", lines[1]);
+            Assert.EndsWith("boom | at Foo() | at Bar()", lines[2]);
+        }
+        finally
+        {
+            Log.Shutdown();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void RotationLeavesOnePredecessorAndAFreshCurrentFile()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "rotate.log");
+            Log.Initialize(path, 120);
+            for (var index = 0; index < 12; index++) Log.Info("poll", $"event {index}");
+            Log.Shutdown();
+
+            Assert.True(File.Exists(path + Log.RotatedSuffix));
+            Assert.NotEmpty(File.ReadAllLines(path + Log.RotatedSuffix));
+            var current = File.ReadAllText(path);
+            Assert.Contains("event 11", current);
+            Assert.DoesNotContain("event 0", current);
+            Assert.False(File.Exists(path + Log.RotatedSuffix + ".1"));
+        }
+        finally
+        {
+            Log.Shutdown();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void AnUnwritablePathNeverThrows()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+
+            var exception = Record.Exception(() =>
+            {
+                Log.Initialize(Path.Combine(blocker, "ptmonitor.log"));
+                Log.Info("test", "unwritable");
+            });
+
+            Assert.Null(exception);
+        }
+        finally
+        {
+            Log.Shutdown();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ASteadyFailureIsLoggedOnce()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "steady.log");
+            Log.Initialize(path);
+            FailureKind? logged = null;
+            for (var index = 0; index < 5; index++)
+            {
+                var status = new ServerStatus.Failed(ServerFailure.Auth("invalid username or password"));
+                if (!MonitorStore.ShouldLogFailure(logged, status)) continue;
+                Log.Warn("poll", $"nas: {status.Failure!.KindLabel}: {status.Failure.Message}");
+                logged = status.Failure.Kind;
+            }
+            Log.Shutdown();
+
+            Assert.Single(File.ReadAllLines(path));
+        }
+        finally
+        {
+            Log.Shutdown();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static string TempDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-log-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
     }
 }
 
@@ -205,6 +365,23 @@ public class MonitorStoreTests
             new ServerStatus.Online(old), new ServerStatus.Online(newer)));
         Assert.False(MonitorStore.IsEquivalent(
             new ServerStatus.Online(old), new ServerStatus.Online(new TransferSnapshot { DownSpeed = 6 })));
+    }
+
+    [Theory]
+    [InlineData(null, FailureKind.Auth, true)]
+    [InlineData(FailureKind.Auth, FailureKind.Auth, false)]
+    [InlineData(FailureKind.Auth, FailureKind.Unreachable, true)]
+    [InlineData(FailureKind.Banned, FailureKind.Auth, true)]
+    public void OnlyAFailureTransitionIsLogged(FailureKind? lastLogged, FailureKind candidate, bool expected)
+    {
+        var status = new ServerStatus.Failed(candidate switch
+        {
+            FailureKind.Auth => ServerFailure.Auth("x"),
+            FailureKind.Banned => ServerFailure.Banned("x"),
+            _ => ServerFailure.Unreachable("x"),
+        });
+        Assert.Equal(expected, MonitorStore.ShouldLogFailure(lastLogged, status));
+        Assert.False(MonitorStore.ShouldLogFailure(lastLogged, new ServerStatus.Online(new TransferSnapshot())));
     }
 
     private sealed class StubClient : ITorrentClient

@@ -105,6 +105,7 @@ public static class SelfTest
             FormatChecks(checks);
             await StoreChecks(checks);
             await ClientChecks(checks);
+            LogChecks(checks);
         }
         catch (Exception exception)
         {
@@ -639,6 +640,12 @@ public static class SelfTest
                 MonitorStore.Classify(null, corrupt, ServerFailure.Unreachable("refused")).Message, "refused");
             c.Expect("corrupt: password present means no rename",
                 MonitorStore.Classify("hunter2", corrupt, ServerFailure.Auth("x")).Message, "x");
+            c.True("corrupt: unreadable-auth predicate",
+                MonitorStore.IsUnreadableSecretAuth(null, corrupt, ServerFailure.Auth("x")));
+            c.True("corrupt: predicate needs an unreadable store, no password, auth kind",
+                !MonitorStore.IsUnreadableSecretAuth("hunter2", corrupt, ServerFailure.Auth("x"))
+                && !MonitorStore.IsUnreadableSecretAuth(null, corrupt, ServerFailure.Unreachable("x"))
+                && !MonitorStore.IsUnreadableSecretAuth(null, new InMemorySecretStore(), ServerFailure.Auth("x")));
             corrupt.Delete(Guid.NewGuid());   // any persist preserves the bytes
             c.True("corrupt: copy kept on the first persist", File.Exists(corruptPath + ".corrupt"));
             c.True("corrupt: rewrite clears the state",
@@ -686,6 +693,111 @@ public static class SelfTest
         }
         finally
         {
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    private static void LogChecks(Checks c)
+    {
+        // Redaction contract (see .trellis/spec/backend/logging-guidelines.md).
+        // The net, not the design: call sites still must not pass secrets.
+        var table = new (string Input, string Expected)[]
+        {
+            ("password=hunter2", "password=***"),
+            ("user=bob&pass=hunter2", "user=bob&password=***"),
+            ("https://nas.local/api?password=hunter2&x=1", "https://nas.local/api?password=***&x=1"),
+            ("passwd=hunter2", "password=***"),
+            ("pwd=hunter2", "password=***"),
+            ("Authorization: Basic aGVsbG86aHVudGVyMg==", "Authorization: Basic ***"),
+            ("Authorization: Bearer abc.def.ghi", "Authorization: Bearer ***"),
+            ("Set-Cookie: SID=abc123; Path=/", "Set-Cookie: ***"),
+            ("Cookie: SID=abc123", "Cookie: ***"),
+            ("SID=abc123", "SID=***"),
+            ("https://bob:hunter2@nas.local:8080/x", "https://***@nas.local:8080/x"),
+            ("bob:hunter2@nas.local", "bob:***@nas.local"),
+            ("nothing to hide", "nothing to hide"),
+        };
+        foreach (var (input, expected) in table)
+            c.Expect($"log: redact {input}", Log.Redact(input), expected);
+        c.Expect("log: redact is idempotent", Log.Redact(Log.Redact("password=hunter2")), "password=***");
+
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-log-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            // Silent before Initialize: the CLI and the suite must not write files.
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Shutdown();
+            Log.Info("test", "before initialize");
+            c.True("log: silent before initialize", !File.Exists(path));
+
+            // Line shape: UTC timestamp, level, area, redacted message, one line.
+            Log.Initialize(path);
+            Log.Info("startup", "PTMonitor 1.0.0, secrets absent");
+            Log.Warn("poll", "nas: auth failed: password=hunter2");
+            Log.Error("crash", "boom\n   at Foo()\r\n   at Bar()");
+            Log.Shutdown();
+            var lines = File.ReadAllLines(path);
+            c.Expect("log: one line per event", lines.Length, 3);
+            c.True("log: utc timestamp shape",
+                lines[0].Length > 24 && lines[0][4] == '-' && lines[0][10] == 'T' && lines[0][19] == '.' && lines[0][23] == 'Z');
+            c.True("log: level and area", lines[0].Contains("[info] startup: ", StringComparison.Ordinal));
+            c.True("log: message redacted",
+                lines[1].Contains("password=***", StringComparison.Ordinal) && !lines[1].Contains("hunter2", StringComparison.Ordinal));
+            c.True("log: stack joined on one line", lines[2].EndsWith("boom | at Foo() | at Bar()", StringComparison.Ordinal));
+
+            // Rotation: past the cap, one .1 predecessor and a fresh current file.
+            // The cap is checked before each append, so the live file may exceed
+            // it by one line — never by a second file's worth.
+            var rotated = Path.Combine(directory, "rotate.log");
+            Log.Initialize(rotated, 120);
+            for (var index = 0; index < 12; index++) Log.Info("poll", $"event {index}");
+            Log.Shutdown();
+            var currentLines = File.ReadAllLines(rotated).Length;
+            var currentText = File.ReadAllText(rotated);
+            c.True("log: rotated predecessor kept", File.ReadAllLines(rotated + Log.RotatedSuffix).Length > 0);
+            c.True("log: current file restarted", currentLines > 0 && currentLines < 12);
+            c.True("log: newest event survives", currentText.Contains("event 11", StringComparison.Ordinal));
+            c.True("log: old events rotated away", !currentText.Contains("event 0", StringComparison.Ordinal));
+            c.True("log: only one predecessor", !File.Exists(rotated + Log.RotatedSuffix + ".1"));
+
+            // A full disk or an unwritable directory must never break polling.
+            var blocker = Path.Combine(directory, "blocker");
+            File.WriteAllText(blocker, "not a directory");
+            var threw = false;
+            try
+            {
+                Log.Initialize(Path.Combine(blocker, "ptmonitor.log"));
+                Log.Info("test", "unwritable");
+            }
+            catch (Exception)
+            {
+                threw = true;
+            }
+            c.True("log: unwritable path is silent", !threw);
+            Log.Shutdown();
+
+            // A steady failure logs once, not once per tick.
+            var steady = Path.Combine(directory, "steady.log");
+            Log.Initialize(steady);
+            FailureKind? logged = null;
+            for (var index = 0; index < 5; index++)
+            {
+                var status = new ServerStatus.Failed(ServerFailure.Auth("invalid username or password"));
+                if (!MonitorStore.ShouldLogFailure(logged, status)) continue;
+                Log.Warn("poll", $"nas: {status.Failure!.KindLabel}: {status.Failure.Message}");
+                logged = status.Failure.Kind;
+            }
+            Log.Shutdown();
+            c.Expect("log: steady failure logs once", File.ReadAllLines(steady).Length, 1);
+            c.True("log: same kind again is quiet", !MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Auth("x"))));
+            c.True("log: a kind change logs again", MonitorStore.ShouldLogFailure(FailureKind.Auth, new ServerStatus.Failed(ServerFailure.Unreachable("refused"))));
+            c.True("log: success clears the memo", MonitorStore.ShouldLogFailure(null, new ServerStatus.Failed(ServerFailure.Auth("x"))));
+            c.True("log: online is never a failure", !MonitorStore.ShouldLogFailure(null, new ServerStatus.Online(new TransferSnapshot())));
+        }
+        finally
+        {
+            Log.Shutdown();
             try { Directory.Delete(directory, true); } catch { }
         }
     }
