@@ -109,3 +109,27 @@ here. Two new checks were mutation-tested (removing the poll memo, no-oping
 ### Status
 
 [OK] **Completed** — awaiting PR / archive.
+
+### Outcome (2026-11-02)
+
+Merged as `2d04a89` (PR #10). Three things that were unverifiable on the dev box
+were confirmed by the first push:
+
+- PR run `41300208646`: `gate` success, `Package, checksum` **skipped**,
+  `Attest, publish release` **skipped** — the pull_request gate stops where it
+  should.
+- Branch run `41300195430`: rolling prerelease published with both zips **and**
+  `SHA256SUMS.txt` (so the stale-asset sweep keeps the sums); `sha256sum -c` OK.
+- Attestation is real SLSA v1 provenance (`predicateType
+  https://slsa.dev/provenance/v1`, both zips as subjects, workflow
+  `branch-release.yml` on the pushed ref), checked via the attestations API
+  because the local `gh` 2.46 predates `gh attestation verify`.
+
+Merged tree green: build clean, 298 selftest checks, 85 xUnit tests. Main build
+run `41300665595` produced the first artifact that carries **both** the tray fix
+and the log sink — the deploy candidate for `11-02-tray-fix-deploy-verify`.
+
+Left open deliberately: the parent's "a user with a working HTTPS setup sees no
+change in behaviour" needs a human on Windows, and
+`11-01-credential-tls-hardening`'s PRD criteria are the same class of manual UI
+check, so neither was ticked by inspection.
