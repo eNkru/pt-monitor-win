@@ -1,3 +1,4 @@
+using System.Net;
 using PTMonitor.Core.Client;
 using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Format;
@@ -230,6 +231,42 @@ public class HttpTransportTests
     public void TheCapIsBoundedAndGenerous()
     {
         Assert.Equal(32L * 1024 * 1024, HttpTransport.MaxResponseBytes);
+    }
+    [Fact]
+    public void RedirectsKeepTheCredentialOnlyOnTheSameOrigin()
+    {
+        var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+        Assert.True(HttpTransport.SameOrigin(origin, new Uri("https://nas.local:8080/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("http://nas.local:8080/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("https://evil.example/x")));
+        Assert.False(HttpTransport.SameOrigin(origin, new Uri("https://nas.local:9091/x")));
+    }
+
+    [Fact]
+    public void RedirectRequestsCarryAuthorizationOnlyAcrossTheSameOrigin()
+    {
+        var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+        var original = new HttpRequestMessage(HttpMethod.Post, origin) { Content = new ByteArrayContent([]) };
+        original.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "abc");
+
+        var same = HttpTransport.BuildRedirectRequest(original, new Uri("https://nas.local:8080/next"), HttpMethod.Post, [1]);
+        var cross = HttpTransport.BuildRedirectRequest(original, new Uri("http://nas.local:8080/next"), HttpMethod.Get, null);
+
+        Assert.NotNull(same.Headers.Authorization);
+        Assert.NotNull(same.Content);
+        Assert.Null(cross.Headers.Authorization);
+        Assert.Null(cross.Content);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Redirect, "GET", true)]
+    [InlineData(HttpStatusCode.TemporaryRedirect, "POST", true)]
+    [InlineData(HttpStatusCode.OK, "GET", false)]
+    public void RedirectsAreRecognisedByStatus(HttpStatusCode status, string method, bool expected)
+    {
+        var request = new HttpRequestMessage(new HttpMethod(method), new Uri("https://nas.local/a"));
+        var response = new HttpResponseMessage(status) { Headers = { Location = new Uri("https://nas.local/b") } };
+        Assert.Equal(expected, HttpTransport.TryGetRedirect(response, request, out _, out _));
     }
 }
 

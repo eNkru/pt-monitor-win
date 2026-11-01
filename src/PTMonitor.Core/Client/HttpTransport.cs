@@ -45,7 +45,11 @@ public sealed class HttpTransport : IDisposable
         {
             UseCookies = true,
             CookieContainer = new CookieContainer(),
-            AllowAutoRedirect = true,
+            // Redirects are followed by hand below: .NET's RedirectHandler clears
+            // Authorization and routes the hop through a handler with credential
+            // auth disabled, so a same-origin redirect would silently lose auth
+            // and no handler-level Credentials setting can restore it.
+            AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.All,
         };
         if (config.AllowInsecureTls)
@@ -103,7 +107,7 @@ public sealed class HttpTransport : IDisposable
     {
         try
         {
-            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
+            using var response = await SendFollowingRedirectsAsync(request, cancellationToken);
             var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
             var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var header in response.Headers)
@@ -139,6 +143,132 @@ public sealed class HttpTransport : IDisposable
             throw new ServerFailureException(FailureKind.Unreachable, exception.Message);
         }
     }
+
+    /// <summary>
+    /// Follows a redirect chain, deciding per hop whether the credential travels.
+    /// <para>
+    /// .NET's own redirect handling cannot do this: it clears the Authorization
+    /// header and routes the redirected request through a handler whose credential
+    /// auth is disabled (<c>RedirectHandler</c>), so <c>Credentials</c> +
+    /// <c>PreAuthenticate</c> re-authenticate nothing after a redirect. Verified
+    /// against a loopback listener before this was written.
+    /// </para>
+    /// <para>
+    /// Policy: a same-origin hop keeps the credential (a stock WebUI behind a
+    /// path redirect is the common case). A different origin — which any
+    /// https→http downgrade is — carries no Authorization header and is only
+    /// re-authenticated if it asks with a 401, so a downgrade cannot leak the
+    /// credential silently.
+    /// </para>
+    /// </summary>
+    private async Task<HttpResponseMessage> SendFollowingRedirectsAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var current = request;
+        var owned = new List<HttpRequestMessage>();
+        try
+        {
+            for (var hop = 0; ; hop++)
+            {
+                var response = await _client.SendAsync(current, HttpCompletionOption.ResponseContentRead, cancellationToken);
+                if (!TryGetRedirect(response, current, out var next, out var nextMethod) || hop >= MaxRedirects)
+                {
+                    foreach (var extra in owned) extra.Dispose();
+                    return response;
+                }
+
+                var body = current.Content is null
+                    ? null
+                    : await current.Content.ReadAsByteArrayAsync(cancellationToken);
+
+                // A 307/308 to another origin would replay the request body — for
+                // a login that body is the password, so an https→http downgrade
+                // would put it in clear. Do not follow; the caller sees the 3xx.
+                if (body is not null && nextMethod != HttpMethod.Get && !SameOrigin(current.RequestUri, next))
+                {
+                    foreach (var extra in owned) extra.Dispose();
+                    return response;
+                }
+
+                var replayed = BuildRedirectRequest(current, next, nextMethod, body);
+                owned.Add(replayed);
+                response.Dispose();
+                current = replayed;
+            }
+        }
+        catch
+        {
+            // The caller keeps ownership of its own request; dispose only ours.
+            foreach (var extra in owned) extra.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>How many redirects are followed before the 3xx is returned.</summary>
+    public const int MaxRedirects = 10;
+
+    /// <summary>
+    /// Whether <paramref name="response"/> is a redirect this transport follows.
+    /// Pure so the selftest can exercise the method/body rules.
+    /// </summary>
+    public static bool TryGetRedirect(
+        HttpResponseMessage response, HttpRequestMessage request, out Uri next, out HttpMethod nextMethod)
+    {
+        next = null!;
+        nextMethod = request.Method;
+        var code = (int)response.StatusCode;
+        if (code is not (301 or 302 or 303 or 307 or 308)) return false;
+        var location = response.Headers.Location;
+        if (location is null || request.RequestUri is null) return false;
+
+        next = location.IsAbsoluteUri ? location : new Uri(request.RequestUri, location);
+
+        // 303 always becomes GET; 301/302 historically do for POST; 307/308 keep
+        // both method and body.
+        if (code == 303 || ((code is 301 or 302) && request.Method == HttpMethod.Post))
+            nextMethod = HttpMethod.Get;
+        return true;
+    }
+
+    /// <summary>
+    /// Builds the request for one hop. The credential is attached only for a
+    /// same-origin hop; a different origin starts without it.
+    /// </summary>
+    public static HttpRequestMessage BuildRedirectRequest(
+        HttpRequestMessage current, Uri next, HttpMethod method, byte[]? body)
+    {
+        var replayed = new HttpRequestMessage(method, next);
+        foreach (var header in current.Headers)
+        {
+            if (header.Key == "Authorization") continue;
+            replayed.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        var sameOrigin = SameOrigin(current.RequestUri, next);
+        if (sameOrigin && current.Headers.Authorization is { } authorization)
+            replayed.Headers.Authorization = authorization;
+
+        if (body is not null && method != HttpMethod.Get)
+        {
+            replayed.Content = new ByteArrayContent(body);
+            if (current.Content is { } original)
+            {
+                foreach (var header in original.Headers)
+                    replayed.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+        return replayed;
+    }
+
+    /// <summary>
+    /// Whether two URIs share scheme, host and port. An https→http hop is
+    /// deliberately not the same origin, so it never inherits the credential.
+    /// </summary>
+    public static bool SameOrigin(Uri? from, Uri? to) =>
+        from is not null && to is not null
+        && Uri.Compare(from, to,
+            UriComponents.Scheme | UriComponents.Host | UriComponents.Port, UriFormat.UriEscaped,
+            StringComparison.OrdinalIgnoreCase) == 0;
 
     /// <summary>
     /// Whether a framework error is the buffer cap being hit. The wording comes

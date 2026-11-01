@@ -652,6 +652,37 @@ public static class SelfTest
             c.True("cap: unrelated error ignored", !HttpTransport.IsResponseTooLarge("connection refused"));
             c.Expect("cap: protocol violation", HttpTransport.TooLargeMessage,
                 "response above 32 MiB; is this a torrent client API?");
+
+            // Redirects: the credential travels on a same-origin hop only.
+            var origin = new Uri("https://nas.local:8080/api/v2/auth/login");
+            c.True("redirect: same origin keeps auth",
+                HttpTransport.SameOrigin(origin, new Uri("https://nas.local:8080/api/v2/sync/maindata")));
+            c.True("redirect: https->http is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("http://nas.local:8080/x")));
+            c.True("redirect: another host is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("https://evil.example/x")));
+            c.True("redirect: another port is another origin",
+                !HttpTransport.SameOrigin(origin, new Uri("https://nas.local:9091/x")));
+            c.True("redirect: null uri is not the same origin", !HttpTransport.SameOrigin(null, origin));
+
+            var getRequest = new HttpRequestMessage(HttpMethod.Get, origin);
+            c.True("redirect: 303 becomes GET",
+                HttpTransport.TryGetRedirect(
+                    new HttpResponseMessage(System.Net.HttpStatusCode.Redirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
+                    getRequest, out _, out var getMethod) && getMethod == HttpMethod.Get);
+            c.True("redirect: 307 keeps the method",
+                HttpTransport.TryGetRedirect(
+                    new HttpResponseMessage(System.Net.HttpStatusCode.TemporaryRedirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
+                    new HttpRequestMessage(HttpMethod.Post, origin), out _, out var postMethod) && postMethod == HttpMethod.Post);
+            c.True("redirect: 200 is not a redirect",
+                !HttpTransport.TryGetRedirect(new HttpResponseMessage(System.Net.HttpStatusCode.OK), getRequest, out _, out _));
+
+            var secured = new HttpRequestMessage(HttpMethod.Post, origin) { Content = new ByteArrayContent([]) };
+            secured.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "abc");
+            var sameHop = HttpTransport.BuildRedirectRequest(secured, new Uri("https://nas.local:8080/next"), HttpMethod.Post, [1]);
+            var crossHop = HttpTransport.BuildRedirectRequest(secured, new Uri("http://nas.local:8080/next"), HttpMethod.Get, null);
+            c.True("redirect: same-origin hop carries the header", sameHop.Headers.Authorization is not null);
+            c.True("redirect: cross-origin hop drops it", crossHop.Headers.Authorization is null);
         }
         finally
         {
