@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using PTMonitor.Core.Diagnostics;
 
 namespace PTMonitor.Core.Store;
 
@@ -156,10 +157,13 @@ public sealed class DpapiSecretStore : ISecretStore
             _items = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(_path)) ?? [];
             _state = SecretStoreState.Ok;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             _items = [];
             _state = SecretStoreState.Unreadable;
+            // Every password is gone until a Set succeeds; the file itself is
+            // kept, so say so on disk as well as in the Preferences banner.
+            Log.Error("secrets", $"could not read {Path.GetFileName(_path)}: {exception.Message}");
         }
     }
 
@@ -167,11 +171,21 @@ public sealed class DpapiSecretStore : ISecretStore
     private void Persist()
     {
         PreserveUnreadableCopy();
-        var directory = Path.GetDirectoryName(_path);
-        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-        var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(_items));
-        File.Move(temp, _path, true);
+        try
+        {
+            var directory = Path.GetDirectoryName(_path);
+            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+            var temp = _path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(_items));
+            File.Move(temp, _path, true);
+        }
+        catch (Exception exception)
+        {
+            // Set rethrows so the caller aborts its own save and Delete swallows;
+            // either way the reason is worth a line.
+            Log.Error("secrets", $"could not write {Path.GetFileName(_path)}: {exception.Message}");
+            throw;
+        }
     }
 
     /// <summary>
@@ -193,10 +207,12 @@ public sealed class DpapiSecretStore : ISecretStore
         try
         {
             File.Move(_path, _path + ".corrupt");
+            Log.Warn("secrets", $"kept the unreadable {Path.GetFileName(_path)} as {Path.GetFileName(_path)}.corrupt");
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             // Best effort: a preserved copy is not worth failing the user's write.
+            Log.Warn("secrets", $"could not keep a copy of the unreadable {Path.GetFileName(_path)}: {exception.Message}");
         }
     }
 

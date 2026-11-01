@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PTMonitor.Core.Diagnostics;
 using PTMonitor.Core.Model;
 
 namespace PTMonitor.Core.Store;
@@ -251,9 +252,11 @@ public sealed class SettingsStore
             File.WriteAllText(temp, JsonSerializer.Serialize(snapshot, JsonOptions));
             File.Move(temp, _path, true);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             // Keep the in-memory value; settings persistence must not crash the app.
+            // The log line is the only record that the file fell behind.
+            Log.Error("settings", $"could not write {Path.GetFileName(_path)}: {exception.Message}");
         }
     }
 
