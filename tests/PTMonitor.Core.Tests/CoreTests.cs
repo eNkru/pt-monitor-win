@@ -215,6 +215,24 @@ public class MonitorStoreTests
     }
 }
 
+public class HttpTransportTests
+{
+    [Theory]
+    [InlineData("Cannot write more bytes to the buffer than the configured maximum buffer size: 33554432.", true)]
+    [InlineData("The response ended prematurely", false)]
+    [InlineData("connection refused", false)]
+    public void OnlyBufferLimitErrorsCountAsTooLarge(string message, bool expected)
+    {
+        Assert.Equal(expected, HttpTransport.IsResponseTooLarge(message));
+    }
+
+    [Fact]
+    public void TheCapIsBoundedAndGenerous()
+    {
+        Assert.Equal(32L * 1024 * 1024, HttpTransport.MaxResponseBytes);
+    }
+}
+
 public class EditorNoticesTests
 {
     [Fact]

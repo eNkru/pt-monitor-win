@@ -644,6 +644,14 @@ public static class SelfTest
             c.True("corrupt: rewrite clears the state",
                 corrupt.Set("hunter2", corruptId) && corrupt.State == SecretStoreState.Ok);
             c.Expect("corrupt: new value readable", corrupt.Get(corruptId), "hunter2");
+
+            // Response cap: a framework buffer-limit error becomes a protocol
+            // failure, not an unreachable server.
+            c.True("cap: framework wording recognised",
+                HttpTransport.IsResponseTooLarge("Cannot write more bytes to the buffer than the configured maximum buffer size: 33554432."));
+            c.True("cap: unrelated error ignored", !HttpTransport.IsResponseTooLarge("connection refused"));
+            c.Expect("cap: protocol violation", HttpTransport.TooLargeMessage,
+                "response above 32 MiB; is this a torrent client API?");
         }
         finally
         {

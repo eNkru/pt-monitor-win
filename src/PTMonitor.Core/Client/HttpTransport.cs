@@ -20,6 +20,12 @@ public sealed record HttpResponse(int StatusCode, IReadOnlyDictionary<string, st
 /// </summary>
 public sealed class HttpTransport : IDisposable
 {
+    /// <summary>Upper bound on a buffered response body.</summary>
+    public const long MaxResponseBytes = 32L * 1024 * 1024;
+
+    /// <summary>The message shown when a response is refused for its size.</summary>
+    public const string TooLargeMessage = "response above 32 MiB; is this a torrent client API?";
+
     public Uri BaseUri { get; }
 
     private readonly HttpClient _client;
@@ -59,6 +65,9 @@ public sealed class HttpTransport : IDisposable
         _client = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(15),
+            // A sync/maindata for thousands of torrents is a few MB; anything
+            // past this is not a snapshot and must not be buffered.
+            MaxResponseContentBufferSize = MaxResponseBytes,
         };
         _client.DefaultRequestHeaders.UserAgent.ParseAdd("PTMonitor/1.0");
 
@@ -113,6 +122,9 @@ public sealed class HttpTransport : IDisposable
         }
         catch (HttpRequestException exception)
         {
+            if (IsResponseTooLarge(exception.Message))
+                throw new ServerFailureException(FailureKind.ProtocolViolation, TooLargeMessage);
+
             var message = Describe(exception);
             // With HTTPS on by default, a plain-HTTP server fails here with a TLS
             // error whose stock hint ("allow self-signed certificate") is wrong.
@@ -127,6 +139,15 @@ public sealed class HttpTransport : IDisposable
             throw new ServerFailureException(FailureKind.Unreachable, exception.Message);
         }
     }
+
+    /// <summary>
+    /// Whether a framework error is the buffer cap being hit. The wording comes
+    /// from HttpClient ("Cannot write more bytes to the buffer than the configured
+    /// maximum buffer size"), so match it loosely and only in our own cap's terms.
+    /// </summary>
+    public static bool IsResponseTooLarge(string message) =>
+        message.Contains("maximum buffer size", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("MaxResponseContentBufferSize", StringComparison.OrdinalIgnoreCase);
 
     private static string Describe(HttpRequestException exception)
     {
