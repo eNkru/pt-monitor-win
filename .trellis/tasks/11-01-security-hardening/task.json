@@ -1,0 +1,29 @@
+{
+  "id": "security-hardening",
+  "name": "security-hardening",
+  "title": "Security hardening from the 2026-11 security review",
+  "description": "Parent for the findings of the credential/TLS and release-chain security review; owns the finding set, the child map and cross-child acceptance criteria",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-01",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-01-credential-tls-hardening",
+    "11-01-release-chain-hardening"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
