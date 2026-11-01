@@ -217,6 +217,9 @@ aggregate rates as the panel and `—` when no server is online.
   - **Numbers** — `↓ 1.2M` over `↑ 340K`.
   - **Graph** — a rolling one-minute plot: download in green, upload in orange,
     both overlaid on one axes and scaled to the peak of the visible window.
+    The current `↓` / `↑` rates are pinned to the top-left corner, drawn on
+    top of the plot with a dark outline around the glyphs, so the numbers stay
+    visible without switching modes and the graph shows through behind them.
 - **Click** — opens the panel (the chip stays visible).
 - **Drag** — moves the chip; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed.
@@ -235,7 +238,7 @@ layer is composited, which keeps a permanently-on-top 56 px window cheap.
 | **Poll every N seconds** | 1–60 s, default 2 s. Global; one loop per server. |
 | **Show speeds in the tray tooltip** | Icon state is always shown regardless |
 | **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, click to open the panel |
-| **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s) |
+| **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s, with the current rates pinned to the top-left corner) |
 | **Torrents shown in the panel** | All / ↓ Down / ↑ Up / Active (also settable from the panel) |
 | **Language** | Follow System / English / 简体中文 — applies immediately |
 
