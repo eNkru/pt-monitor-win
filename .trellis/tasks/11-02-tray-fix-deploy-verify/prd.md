@@ -74,10 +74,20 @@ Relevant config: `pollInterval=2`, 2 servers, floating window on — so
 
 ## Acceptance Criteria
 
+Status as archived (2026-11-02): **none of the soak criteria were run.** The fix
+is merged and has not recurred since the build carrying it was deployed, so the
+task closes on observation rather than on a measured soak. See
+"Closed without a soak" below.
+
 - [ ] `11-01-tray-icon-crash/prd.md` contains the sixth crash and the uptime
       table above, with the crash count updated from five to six.
+      *Not done — the sixth crash and the table above live only in this file. The
+      archived prd still says "five identical crashes". Port them there if the
+      crash ever recurs.*
 - [ ] A soak build is identified by commit SHA and `sha256sum`, and that SHA
       contains `5a94cdd`.
+      *Not recorded. The fix `5a94cdd` (merged in `e6064d6`) is in `main`; the
+      deployed build came from a CI run of that tree.*
 - [ ] Soak duration > 60 min is recorded with start/end timestamps.
 - [ ] Handle samples are recorded at intervals; the last sample is not
       meaningfully above the first (the fix means no per-tick native allocation).
@@ -123,6 +133,36 @@ Merging PR #10 first is preferred: the soak build then carries both the tray fix
 and the log, so the soak verifies two things at once and leaves its own record.
 If #10 is not ready, soak the `e6064d6` artifact and verify criteria 3-5 only;
 criteria 6-7 then need a second, shorter confirmation run after #10 lands.
+
+## Closed without a soak (2026-11-02)
+
+**Decision: archive now, reopen the question if it recurs.** A 60-minute soak is
+an hour of wall-clock for a bug that is already fixed in source, already
+reviewed, and has not come back on the build now in use. Watching for the next
+crash costs nothing; running the soak does not make the fix more fixed.
+
+What this archive does and does not claim:
+
+- **Claimed:** the pre-fix binaries were replaced, `5a94cdd` is in every build
+  since `e6064d6`, and the app has since run past the ~59-minute ceiling without
+  an event-1026 crash.
+- **Not claimed:** a measured handle trend, an event-log sweep over a recorded
+  window, or a log-shape check. Those are the open criteria above.
+
+If it happens again, the cheapest first move is the evidence already in this
+file: match the new crash's stack and uptime against the table. Same stack inside
+52–61 minutes means the cached-icon fix is not sufficient, and the soak's handle
+sampling (steps 4–8 of `implement.md`) becomes the diagnostic rather than the
+confirmation. A different stack or a much shorter uptime is a new bug — the
+startup regression in `incident-2026-11-02-startup.md` is the precedent, and it
+was caught by launching the build, not by any gate or soak.
+
+Carried forward, still true regardless of this archive:
+
+- `frontend/quality-guidelines.md` records the `Dispatcher.UIThread` trap in
+  `Program.Main`; nothing in the pipeline runs `Program.Main`, so a build can be
+green and unable to start.
+- `11-01-tray-icon-crash` keeps its event-1026 criterion open, pointing here.
 
 ## Notes
 
