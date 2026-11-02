@@ -359,3 +359,60 @@ Still an outline, not the filled white plate in the screenshot — the user said
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: Code signing — investigated, declined
+<!-- trellis-session: v=2 fp=signing-probe -->
+
+**Date**: 2026-11-02
+**Task**: none (dropped by user decision)
+**Branch**: `main`
+
+### Summary
+
+User asked how to remove the "Publisher: Unknown publisher" warning on the
+unsigned release. Probed the whole path on this box and then dropped it after
+the cost became clear. Nothing in the repo changed.
+
+What the probe established (no residue left behind — the probe cert was
+removed from `Cert:\CurrentUser\My`, the Root store was never written to, the
+temp files are gone):
+
+- `New-SelfSignedCertificate -Type CodeSigningCert` + `Set-AuthenticodeSignature`
+  works from WSL through `powershell.exe` interop; the exe signs and gets a
+  DigiCert timestamp. No Windows SDK / `signtool.exe` needed.
+- `osslsigncode` is not installed here and `sudo` needs a password, so the
+  Linux build script cannot sign on its own.
+- A self-signed cert only removes the warning on machines that import its
+  public part into the trusted-root store. Third parties still see "Unknown
+  publisher", so it does not solve the published-download case.
+
+Real fix for everyone: a CA-issued code-signing certificate (OV/EV), Azure
+Trusted Signing, or SignPath Foundation for an accepted open-source project.
+EV gets SmartScreen reputation immediately; OV takes days/weeks.
+
+The README already states the unsigned situation accurately (the SmartScreen
+troubleshooting entry and the "Signing needs a code-signing certificate"
+note), so no doc change was needed.
+
+### Main Changes
+
+- None. The idea was dropped before it was implemented.
+
+### Git Commits
+
+- (none)
+
+### Testing
+
+- [OK] Probe only: signing + timestamping verified via `Get-AuthenticodeSignature`; trust-anchor step deliberately not left installed
+
+### Status
+
+[OK] **Dropped by user decision**
+
+### Next Steps
+
+- If the warning ever matters for distribution: buy an OV/EV cert or use Azure
+  Trusted Signing, then wire optional signing into `scripts/build.sh` and
+  `scripts/build.ps1` (one env var for the PFX) — the scripts do not exist yet.
