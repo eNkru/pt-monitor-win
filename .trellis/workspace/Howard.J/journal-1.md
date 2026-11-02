@@ -208,3 +208,37 @@ Deleted the remote branch security/release-chain-hardening. Its work was already
 ### Next Steps
 
 - Cut a stable v1.0.0 tag from main (build.yml's v* lane) so the Releases page has a real stable entry, then release/1.0.0 can go too
+
+
+## Session 6: Close the security review and the tray deploy task
+<!-- trellis-session: v=2 fp=7af89efdba95c608 -->
+
+**Date**: 2026-11-02
+**Task**: Close the security review and the tray deploy task
+**Branch**: `main`
+
+### Summary
+
+Archived the tray deploy task by user decision (no soak; the fix is merged and has not recurred) and closed the credential/TLS task and its parent after re-verifying all twelve acceptance criteria on merged main (0 errors, 642 selftest checks, 121 xUnit tests). Recorded what each closure claims and what it does not: rendered-Windows observations, DPAPI, and per-entry corrupt-secret recovery remain open and are documented as such rather than ticked.
+
+### Main Changes
+
+- Archived 11-02-tray-fix-deploy-verify with its soak criteria explicitly unr un and a recurrence triage path in the PRD
+- Re-verified credential/TLS ACs on main; added a closure table to verification-followup.md and ticked the PRD
+- Finalized the parent finding table: 7 closed, finding 4 partial, standing follow-ups named
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] Release rebuild 0 errors; selftest 642 checks; xUnit 121 passed; parent archived with --skip-branch-validation because it never had its own branch
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows observations (DPAPI, trust, rendered UI) and a design for per-entry secret recovery remain the only substantive gaps
