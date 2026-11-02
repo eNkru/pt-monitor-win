@@ -42,10 +42,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - idle — dimmed arrows on the light tile, empty progress pill,
-  - actively transferring — solid blue down arrow, 62 % filled pill (the
-    app-icon artwork proper),
-  - every enabled server failing — red arrows, full pill, red tile outline.
+  - one flat monochrome glyph (a down arrow over a bar) that follows the
+    light/dark taskbar,
+  - idle — the glyph dimmed,
+  - actively transferring — the glyph at full brightness,
+  - every enabled server failing — the glyph in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Floating speed chip (opt-in)** — a small always-on-top readout, either
   numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
@@ -681,6 +682,8 @@ src/
       AppServices.cs             composition root: stores, tray icon, windows
       L10n.cs                    English + zh-Hans string tables
       TrayIconFactory.cs         tray icons drawn at runtime (no binary assets)
+      IcoEncoder.cs              .ico container writer for the tray icon
+      CursorFactory.cs           open-hand cursor drawn at runtime
     ViewModels/
       PanelViewModel.cs          sections, rows, expansion, aggregate, filters
     Views/
@@ -961,7 +964,7 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + tile/arrows/pill artwork drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat monochrome glyph that follows the light/dark taskbar, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
 | `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, drawn from scratch in the Windows flat style by `scripts/make-app-icon.py` — deliberately **not** a port of the macOS artwork |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |

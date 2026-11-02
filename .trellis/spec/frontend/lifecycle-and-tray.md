@@ -132,9 +132,10 @@ sets `ToolTipText` (`PT Monitor — N servers · M online`, plus speeds when the
 toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
-**Assign `TrayIcon.Icon` only when the state changes.** `TrayIconFactory` caches
-one `WindowIcon` per state, and `UpdateTray` skips the assignment while
-`MenuBarState` is unchanged. Reassigning the icon on every status change builds a
+**Assign `TrayIcon.Icon` only when the state or the theme changes.**
+`TrayIconFactory` caches one `WindowIcon` per (state, theme) pair, and
+`UpdateTray` skips the assignment while both are unchanged. Reassigning the
+icon on every status change builds a
 new bitmap plus a new native icon per poll; at the default 2 s interval that
 exhausted the native icon path after a few hours and crashed the process with an
 unhandled `Win32Exception` (`AppServices.UpdateTray`, event log 1026) — see
@@ -144,22 +145,56 @@ scoped `catch`: a cosmetic icon failure must never take the agent down.
 Do not create a `WindowIcon` (or call `Render`) outside the factory. `Render` is
 public for tests/artwork but the tray must use the cached accessors.
 
-`TrayIconFactory` renders 32×32 with `RenderTargetBitmap` using one shared
-geometry: a flat, light rounded tile with a hairline ring, a down/up arrow pair
-and a pill progress meter. The states differ only in colour — idle dims both
-arrows and leaves the pill an empty track, active draws the solid blue down
-arrow with a 62 % pill fill (the app-icon artwork proper), error swaps blue for
-red, fills the pill and outlines the tile in red. Tray icons are always
-drawn, never loaded from files. (The one committed binary asset is the exe
-icon `app.ico` — a different concern, see
+### The artwork
+
+The tray icon is **one flat monochrome glyph** — a bold down arrow over a short
+bar, in the spirit of the exe icon's sub-32 px variant but drawn separately.
+No tile, no ring, no second arrow, no progress meter: the floating chip
+already shows the live rates, so the tray icon is an identity mark, not a
+display.
+
+The colour follows the taskbar, not the app's accent colour:
+
+| Theme | Idle | Active | Error |
+|---|---|---|---|
+| light taskbar | `#1F1F1F` @ 55 % | `#1F1F1F` @ 100 % | `#C42B1C` @ 100 % |
+| dark taskbar | `#FFFFFF` @ 55 % | `#FFFFFF` @ 100 % | `#FF99A4` @ 100 % |
+
+Idle is the same glyph at a lower opacity, so one geometry covers all three
+states. Tray icons are always drawn, never loaded from files. (The one
+committed binary asset is the exe icon `app.ico` — a different concern, see
 [component guidelines](./component-guidelines.md).)
 
-The tray artwork and the exe icon are the **same drawing** described twice:
-`TrayIconFactory.cs` for 32 px and `scripts/make-app-icon.py` for the ICO's
-seven sizes. Change the palette or proportions in both, or the tray and the
-Explorer icon silently drift apart. The script also renders the simplified
-single-arrow variant used below 32 px, which the factory never needs because
-the tray is always 32 px.
+### Theme
+
+The app requests the default theme variant, so
+`Application.Current.ActualThemeVariant` is the OS light/dark setting, and the
+taskbar follows it. Avalonia's Win32 backend reports an OS theme switch as
+`WM_SETTINGCHANGE`/"ImmersiveColorSet" and raises
+`Application.ActualThemeVariantChanged`; `AppServices` subscribes to it and
+redraws the tray icon. There is no timer and no registry polling.
+
+### Packaging
+
+`TrayIconFactory` renders the glyph at 16/20/24/32/48 px and packs the results
+into a real `.ico` container in memory (`Services/IcoEncoder.cs`, 32-bit BGRA
+entries with straight alpha), then hands it to `WindowIcon` as a stream.
+
+Do **not** hand Avalonia a `RenderTargetBitmap` instead. `WindowIcon(Bitmap)`
+goes through `CreateIconIndirect` with `fIcon = FALSE` on Win32: the alpha
+channel is thrown away and only a 1-bit AND mask survives, so the glyph gets
+hard edges and Windows downscales one bitmap to the taskbar size. A real
+`.ico` keeps the alpha, and Avalonia picks the entry whose size matches the
+taskbar (`LoadSmallIcon` asks for 16 × the taskbar scale). The shell still
+receives a single-resolution `HICON` and scales it when the taskbar DPI is not
+an exact match.
+
+### Tray vs exe icon
+
+The tray glyph and the exe icon are **different drawings**: the exe icon
+(`scripts/make-app-icon.py`, `app.ico`) keeps the coloured tile, the tray uses
+the flat monochrome mark. They no longer share constants — do not assume a
+change to one has to be repeated in the other.
 
 ---
 
@@ -171,3 +206,5 @@ the tray is always 32 px.
 - A timer that is not stopped on close, or `Task.Delay` in the UI thread.
 - Blocking `.Result`/`.Wait()` in a click handler.
 - Adding an icon file instead of drawing it.
+- Handing the tray a `RenderTargetBitmap` instead of a `.ico` stream (that
+  path drops the alpha channel).

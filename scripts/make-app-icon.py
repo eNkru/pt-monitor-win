@@ -6,10 +6,10 @@ accent-blue glyph (a down/up arrow pair over a progress pill), in the visual
 language of Windows 11 first-party app icons -- no gradients, no sheen, no
 drop shadow, no macOS-style charcoal card.
 
-`src/PTMonitor.App/Services/TrayIconFactory.cs` draws the *same* artwork at
-runtime for the tray. The two implementations must be edited together; the
-constants below and the ones in that file are deliberately identical (see
-.trellis/spec/frontend/lifecycle-and-tray.md).
+This is the *exe* icon only. The tray icon is a different drawing: a single
+monochrome glyph that follows the light/dark taskbar, drawn at runtime by
+`src/PTMonitor.App/Services/TrayIconFactory.cs`. The two no longer share
+constants -- see .trellis/spec/frontend/lifecycle-and-tray.md.
 
     python3 scripts/make-app-icon.py [path-to-ico]
     python3 scripts/make-app-icon.py --dump /tmp/icon   # + PNG previews
@@ -26,7 +26,7 @@ import zlib
 
 # --- Artwork -----------------------------------------------------------------
 # Every length is a fraction of the icon side, so one description covers 16 px
-# through 256 px. Keep in sync with TrayIconFactory.cs.
+# through 256 px.
 
 CARD_RADIUS = 0.22          # tile corner radius
 CARD_BORDER = 0.030         # flat hairline ring around the tile
@@ -57,8 +57,8 @@ PILL_Y = 0.785
 # Windows solves this the same way for every first-party icon -- a simplified
 # single-glyph variant for the smallest entries -- so below 32 px we drop the
 # up arrow and draw one chunkier down arrow over a fatter pill. Only the exe
-# icon has sub-32 entries; TrayIconFactory (always 32 px) implements the full
-# artwork only.
+# icon has sub-32 entries; the tray icon is a different drawing altogether
+# (see TrayIconFactory.cs).
 SMALL_SIDE = 32
 SMALL_ARROW_CX = 0.50
 SMALL_ARROW_TOP = 0.14
@@ -165,12 +165,11 @@ def arrow_points(side, down, m):
 
 
 def shapes_for(state, side):
-    """Ordered (coverage, colour, alpha) layers for one tray state.
+    """Ordered (coverage, colour, alpha) layers for one app-icon state.
 
     The tile ring is modelled as a *stroke*: a pen of width `w` centred on a
     path inset by `w/2` from the tile edge, so its coverage is the tile shape
-    minus that shape inset by `w`. TrayIconFactory.cs strokes it with an
-    Avalonia pen, and both renderers must agree or the corners drift apart.
+    minus that shape inset by `w`.
     """
     m = metrics(side)
     accent = DANGER if state == "error" else ACCENT
@@ -379,7 +378,7 @@ def dump_previews(directory):
     for side in ICO_SIZES:
         (directory / f"icon-{side}.png").write_bytes(png_bytes(side, render("active", side)))
     for state in ("idle", "error"):
-        (directory / f"tray-{state}-32.png").write_bytes(
+        (directory / f"state-{state}-32.png").write_bytes(
             png_bytes(32, render(state, 32)))
     for name, background in (("light", (0xF3, 0xF3, 0xF3)),
                              ("dark", (0x20, 0x20, 0x20))):

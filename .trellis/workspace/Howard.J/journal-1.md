@@ -242,3 +242,44 @@ Archived the tray deploy task by user decision (no soak; the fix is merged and h
 ### Next Steps
 
 - Windows observations (DPAPI, trust, rendered UI) and a design for per-entry secret recovery remain the only substantive gaps
+
+
+## Session 7: Monochrome, theme-aware tray icon
+<!-- trellis-session: v=2 fp=tray-icon-monochrome -->
+
+**Date**: 2026-11-02
+**Task**: 11-02-tray-icon-monochrome
+**Branch**: `main`
+
+### Summary
+
+Replaced the tray artwork (light tile + ring + arrow pair + progress pill) with one flat monochrome glyph — a bold down arrow over a short bar — that follows the OS light/dark taskbar. The floating chip already shows the rates, so the tray is an identity mark, not a meter. Idle = 55 % opacity, active = full, error = red; one geometry for all three.
+
+The icon is now packaged as a real multi-size `.ico` (16/20/24/32/48) built in memory, because Avalonia's `WindowIcon(Bitmap)` path on Win32 ends in `CreateIconIndirect` with `fIcon = FALSE`: a 1-bit AND mask, no alpha, hard edges, and one bitmap downscaled to the taskbar size. The theme comes from `Application.ActualThemeVariant` (the app requests the default variant, so it is the OS setting) and the icon is redrawn on `ActualThemeVariantChanged`, which Avalonia's Win32 backend raises on `WM_SETTINGCHANGE`/"ImmersiveColorSet".
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs` rewritten: glyph drawing, straight-alpha BGRA extraction, per-(state, theme) icon cache
+- `Services/IcoEncoder.cs` added: `.ico` container writer (32-bit BGRA entries, `biHeight = 2×h`, empty AND mask)
+- `Services/AppServices.cs`: icon keyed by (state, theme), theme-change subscription, warn-level logging on failure
+- Specs + README + `scripts/make-app-icon.py` docstring: the tray and the exe icon are different drawings now
+- `scripts/make-app-icon.py` still reproduces `app.ico` byte-for-byte (verified with `cmp`)
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed; `scripts/build.sh` published the win-x64 package
+- [OK] Tray glyph rendered through the shipped code path on this Linux box (Skia headless) and previewed as PNG for all six state/theme pairs
+- [OK] Generated `.ico` parsed back by an independent parser: 5 entries, correct offsets, `biHeight = 2×h`, empty AND mask, straight alpha
+- [ ] Windows only: the icon on a real light and dark taskbar (the tray cannot run here)
+
+### Status
+
+[OK] **Completed** (Windows spot-check left to the user)
+
+### Next Steps
+
+- The ICO layout has no CI coverage — the App layer still has no automated gate; `InternalsVisibleTo` + a test project would close that

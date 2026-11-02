@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray ownership, UpdateTray contract, icon assignment rule, artwork description"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "App layer has no automated gate; the manual checks that replace it"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "where a new service file belongs"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "scoped swallowing rule for the cosmetic icon update"}
