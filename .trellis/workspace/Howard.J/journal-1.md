@@ -223,7 +223,7 @@ Archived the tray deploy task by user decision (no soak; the fix is merged and h
 
 ### Main Changes
 
-- Archived 11-02-tray-fix-deploy-verify with its soak criteria explicitly unr un and a recurrence triage path in the PRD
+- Archived 11-02-tray-fix-deploy-verify with its soak criteria explicitly not run and a recurrence triage path in the PRD
 - Re-verified credential/TLS ACs on main; added a closure table to verification-followup.md and ticked the PRD
 - Finalized the parent finding table: 7 closed, finding 4 partial, standing follow-ups named
 
