@@ -129,14 +129,7 @@ public sealed class HttpTransport : IDisposable
             if (IsResponseTooLarge(exception.Message))
                 throw new ServerFailureException(FailureKind.ProtocolViolation, TooLargeMessage);
 
-            var message = Describe(exception);
-            // With HTTPS on by default, a plain-HTTP server fails here with a TLS
-            // error whose stock hint ("allow self-signed certificate") is wrong.
-            // Point at the toggle that actually fixes it.
-            if (BaseUri.Scheme == Uri.UriSchemeHttp
-                && message.StartsWith("TLS handshake failed", StringComparison.Ordinal))
-                message += "; or uncheck \"Use HTTPS\" if the server speaks plain HTTP";
-            throw new ServerFailureException(FailureKind.Unreachable, message);
+            throw new ServerFailureException(FailureKind.Unreachable, Describe(exception, BaseUri));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -156,9 +149,8 @@ public sealed class HttpTransport : IDisposable
     /// <para>
     /// Policy: a same-origin hop keeps the credential (a stock WebUI behind a
     /// path redirect is the common case). A different origin — which any
-    /// https→http downgrade is — carries no Authorization header and is only
-    /// re-authenticated if it asks with a 401, so a downgrade cannot leak the
-    /// credential silently.
+    /// https→http downgrade is — carries no Authorization header and NEVER
+    /// reauthenticates, even if it asks with a 401. No handler Credentials are set.
     /// </para>
     /// </summary>
     private async Task<HttpResponseMessage> SendFollowingRedirectsAsync(
@@ -184,7 +176,7 @@ public sealed class HttpTransport : IDisposable
                 // A 307/308 to another origin would replay the request body — for
                 // a login that body is the password, so an https→http downgrade
                 // would put it in clear. Do not follow; the caller sees the 3xx.
-                if (body is not null && nextMethod != HttpMethod.Get && !SameOrigin(current.RequestUri, next))
+                if (!CanFollowRedirect(current, next, nextMethod))
                 {
                     foreach (var extra in owned) extra.Dispose();
                     return response;
@@ -223,12 +215,17 @@ public sealed class HttpTransport : IDisposable
 
         next = location.IsAbsoluteUri ? location : new Uri(request.RequestUri, location);
 
-        // 303 always becomes GET; 301/302 historically do for POST; 307/308 keep
+        // 303 becomes GET except for HEAD; 301/302 do for POST; 307/308 keep
         // both method and body.
-        if (code == 303 || ((code is 301 or 302) && request.Method == HttpMethod.Post))
+        if ((code == 303 && request.Method != HttpMethod.Head)
+            || ((code is 301 or 302) && request.Method == HttpMethod.Post))
             nextMethod = HttpMethod.Get;
         return true;
     }
+
+    /// <summary>Body replay is allowed only within an origin; method rewrites discard content.</summary>
+    public static bool CanFollowRedirect(HttpRequestMessage current, Uri next, HttpMethod method) =>
+        current.Content is null || method != current.Method || SameOrigin(current.RequestUri, next);
 
     /// <summary>
     /// Builds the request for one hop. The credential is attached only for a
@@ -248,7 +245,9 @@ public sealed class HttpTransport : IDisposable
         if (sameOrigin && current.Headers.Authorization is { } authorization)
             replayed.Headers.Authorization = authorization;
 
-        if (body is not null && method != HttpMethod.Get)
+        // An unchanged GET can carry content too. Only a method rewrite drops
+        // the body; treating every GET as rewritten silently loses 307/308 content.
+        if (body is not null && method == current.Method)
         {
             replayed.Content = new ByteArrayContent(body);
             if (current.Content is { } original)
@@ -279,15 +278,20 @@ public sealed class HttpTransport : IDisposable
         message.Contains("maximum buffer size", StringComparison.OrdinalIgnoreCase)
         || message.Contains("MaxResponseContentBufferSize", StringComparison.OrdinalIgnoreCase);
 
-    private static string Describe(HttpRequestException exception)
+    public static string Describe(HttpRequestException exception, Uri endpoint)
     {
-        var text = exception.Message.ToLowerInvariant();
+        var text = (exception.Message + " " + exception.InnerException?.Message).ToLowerInvariant();
         if (text.Contains("name or service") || text.Contains("host") && text.Contains("not known"))
             return "host not found";
         if (text.Contains("refused")) return "connection refused";
         if (text.Contains("timed out") || text.Contains("timeout")) return "timed out";
-        if (text.Contains("certificate") || text.Contains("ssl") || text.Contains("tls"))
-            return "TLS handshake failed (enable \"allow self-signed certificate\" if the server uses one)";
+        var https = endpoint.Scheme == Uri.UriSchemeHttps;
+        if (text.Contains("certificate") || text.Contains("ssl") || text.Contains("tls")
+            || (https && (text.Contains("eof") || text.Contains("unexpected end"))))
+        {
+            var hint = "TLS handshake failed (enable \"allow self-signed certificate\" if the server uses one)";
+            return https ? hint + "; or uncheck \"Use HTTPS\" if the server speaks plain HTTP" : hint;
+        }
         return exception.Message;
     }
 

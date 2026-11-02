@@ -286,7 +286,7 @@ public class HostFieldParserTests
             new ServerConfig(ServerKind.Qbittorrent, "bob:hunter2@nas") { Username = "alice" }, "");
         Assert.Equal("alice", validated.Config.Username);
         Assert.Equal("hunter2", validated.PasswordFromHost);
-        Assert.Contains("Used the user name and password from the host field.", validated.Notices);
+        Assert.Contains("Used the password from the host field; kept the user name field.", validated.Notices);
     }
 }
 

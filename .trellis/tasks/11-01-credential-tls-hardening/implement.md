@@ -1,7 +1,38 @@
 # Implementation plan — credential and TLS hardening
 
 Order is mandatory: the secret-write fix (1) is the one that hides outages, and
-the remaining steps add tests on top of it. Commit per step.
+the remaining steps add tests on top of it. The original checklist below records
+implementation history, not closure of the verification findings. After the
+independent review, the user approved two local commits: code/tests first,
+then documentation/specs/evidence. Pushing and opening a PR are not yet authorized.
+
+## Approved verification follow-up
+
+1. Update PRD/design/plan before code; retain `verification.md` unchanged.
+2. Share effective form parsing/warning/normalization in Core; wire live notices
+   and guarded Host LostFocus/Test/Save prefill in App, with truthful localized
+   credential and port notices. Do not change settings/password persistence.
+3. Preserve fail-closed cross-origin auth: NEVER reauthenticate after 401.
+   Preserve same-origin auth/body; block cross-origin body replay. Fix HEAD+303
+   and HTTPS TLS/EOF hint. Mirror meaningful pure regression tables in both suites.
+4. Correct specs for backup preservation, throwing Set/swallowing deletes,
+   redirect methods/body/client error classification and no reauthentication.
+5. Run shipping Release build, then isolated `/tmp` invariant-globalization CLI
+   and xUnit outputs using the commands in `verification.md`. Attempt a temporary
+   headless editor harness without repository dependency changes if feasible.
+6. Record evidence separately. Per-entry unreadable-secret recovery is unresolved
+   and must not be implemented here. Windows checks stay pending; do not close
+   this task/parent or tick Windows-dependent acceptance criteria.
+
+### Follow-up execution evidence
+
+Implemented the approved focused changes; see `verification-followup.md` for
+files/behavior, regression tables and exact commands. Final gates: shipping
+Release build passed (four pre-existing clean-build warnings); isolated Linux
+selftest **642 checks**, xUnit **121 tests**, real-editor headless harness **40
+checks**, supplemental loopback transport **12 checks**, and qBittorrent stub
+4.6/5.2 auth/ban probes passed. Original `verification.md` is unchanged.
+Windows/manual gates and per-entry secret recovery remain open.
 
 ## Validation commands
 
@@ -12,9 +43,10 @@ dotnet run --project src/PTMonitor.Cli -c Release --no-build -- --selftest
 dotnet test tests/PTMonitor.Core.Tests -c Release --no-build
 ```
 
-Run all three at every gate. The app is not runnable on this Linux box — UI
-verification is by inspection against `design.md`, plus the selftest for every
-pure function.
+Run all three at every gate. On this Linux box, use isolated invariant outputs
+for executable suites as recorded in `verification-followup.md`; shipping outputs
+retain normal globalization. Headless editor checks supplement inspection and
+pure-function tests but do not replace native Windows verification.
 
 ## Checklist
 
@@ -32,7 +64,7 @@ pure function.
   - `App/Views/ServerEditorWindow.Load()`: new-server branch sets
     `TlsToggle.IsChecked = true`.
   - `Core/Client/HttpTransport.Describe`: add the "or uncheck Use HTTPS" hint for
-    TLS failures over an `http` base.
+    TLS failures over an `https` base (corrected in verification follow-up).
   - Gate. Manual check: `http://` in the host field still forces `useTls: false`
     with the existing notice.
 - [x] **3. Plaintext warning** (finding 1)
@@ -83,8 +115,8 @@ pure function.
     per `design.md` §7; pure helpers `SameOrigin`, `TryGetRedirect`,
     `BuildRedirectRequest` for the selftest.
   - `.trellis/spec/backend/client-and-parser-rules.md`: same-origin redirects
-    keep Basic; a different origin, including an https→http downgrade, gets a
-    401 challenge first; a redirect carrying a body is not followed across
+    keep Basic; a different origin, including an https→http downgrade, never
+    reauthenticates even after 401; a redirect replaying a body is not followed across
     origins at all.
   - Verified end to end against loopback listeners (same-origin keeps the
     header, cross-origin does not).

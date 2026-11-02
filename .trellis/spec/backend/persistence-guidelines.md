@@ -93,7 +93,10 @@ keyed by `serverId.ToString("N")`, protected with
 - `Set` with an empty password removes the entry and returns `false`. `false` is
   **not** a success flag — the two outcomes are "throws, nothing stored" and
   "returns whether a password remains".
-- An unreadable entry decodes to `null` rather than throwing.
+- An unreadable entry decodes to `null` rather than throwing. Per-entry decode
+  failures in otherwise valid JSON do not currently change `State`; reporting
+  and recovery semantics remain unresolved, not covered by the malformed-file
+  handling below.
 - `InMemorySecretStore` is the test/`SelfTest` implementation; its `State` is
   always `Ok`.
 - The DPAPI path only runs on Windows. `--selftest` and the xUnit suite exercise
@@ -107,9 +110,10 @@ exists but does not parse (`Unreadable`). While unreadable, every `Get` returns
 `null` and the state stays that way until a successful `Set` rewrites the file.
 
 - Before **any** persist while `Unreadable`, the existing bytes are moved to
-  `secrets.dat.corrupt` (overwriting an older copy). This happens in the write
-  path, not in `Set`, so a `Delete` from Preferences cannot destroy the only
-  recovery copy before a password is re-entered.
+  `secrets.dat.corrupt` only if no backup already exists (an older copy wins).
+  Backup is best-effort. This happens in the write path, not in `Set`, so a
+  `Delete` from Preferences cannot destroy the only recovery copy before a
+  password is re-entered; repeated deletes cannot overwrite that backup either.
 - `MonitorStore.Classify` relabels an auth failure as "stored password could not
   be read" when no password was available and the store is unreadable. It runs in
   both poll paths (`PollLoopAsync` and `PollAsync`), and only **after** the poll

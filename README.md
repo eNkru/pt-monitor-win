@@ -502,11 +502,19 @@ Everything lives under `%APPDATA%\PTMonitor\`:
   leaf certificate's SHA-256 so a swap between sessions is visible, and the log
   records it (one line per server and thumbprint). Compare it with the server's
   own certificate; there is no pinning.
-- A pasted `user:pass@host` fills in the credentials rather than being discarded,
-  and the form says where they came from.
-- If `secrets.dat` is damaged, the app says so in Preferences and keeps the file
-  as `secrets.dat.corrupt` the next time it writes. Servers need their passwords
-  re-entered; a server that needs no password is unaffected.
+- A pasted `user:pass@host` visibly fills the endpoint and empty credential fields
+  when leaving Host or pressing Test/Save, removing userinfo from Host. Explicit
+  credentials win; notices identify imports. The plaintext warning uses the
+  effective URL scheme/password immediately, even before normalization.
+- If `secrets.dat` cannot be parsed, Preferences shows a banner. The next write
+  attempts to preserve it as `secrets.dat.corrupt` without replacing an existing
+  backup. Auth failures explain the unreadable password; passwordless servers
+  keep working. Unreadable individual ciphertext inside valid JSON is still a
+  known unresolved recovery limitation.
+- Same-origin redirects keep Basic auth. Cross-origin redirects (including
+  HTTPS→HTTP) never reauthenticate, even after 401, and cannot replay a request
+  body. Same-origin body replay is allowed; POST 301/302/303 redirects become GET
+  without the body.
 
 ### The log
 
@@ -856,7 +864,7 @@ git push origin v1.0.0
 | **"Unreachable: connection refused"** | Wrong port, or the WebUI/RPC is not enabled on the server. Check qBittorrent → Options → Web UI, or Transmission → `rpc-enabled`. |
 | **"Unreachable: host not found"** | DNS. Try the IP address. |
 | **"Unreachable: timed out"** | Firewall, or the server is on a different VLAN. Windows Defender Firewall prompts on first outbound connection — allow it. |
-| **"Unreachable: TLS handshake failed"** | Self-signed certificate: enable **Allow self-signed certificate**. If the server speaks plain HTTP, uncheck **Use HTTPS** instead — the message names that too when the base is `http://`. |
+| **"Unreachable: TLS handshake failed"** | Self-signed certificate: enable **Allow self-signed certificate**. If the server speaks plain HTTP, uncheck **Use HTTPS** instead — the message names that too when the attempted endpoint is `https://`. |
 | **"Sign-in failed"** | Wrong username/password. Note the app then waits 10 minutes before retrying, by design. Use **Test Connection** in the editor (or **Refresh Now**) to retry immediately. |
 | **"Temporarily banned"** | The server banned your IP. qBittorrent's default is 3600 s. Wait it out or restart qBittorrent; the app backs off for 15 minutes so it will not make it worse. |
 | **"Unexpected response"** with HTTP 403 on a non-login endpoint | The session cookie was not accepted. Usually a host-header mismatch — connect by IP, or check `WebUI/HostHeaderValidation`. |

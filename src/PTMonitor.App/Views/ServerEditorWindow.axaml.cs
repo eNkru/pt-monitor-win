@@ -1,4 +1,4 @@
-using System.ComponentModel;
+using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -20,6 +20,9 @@ public partial class ServerEditorWindow : Window
     private readonly ServerConfig? _existing;
     private readonly Guid _id;
     private bool _isTesting;
+    private bool _loadingUi = true;
+    private string _noticeHost = "";
+    private IReadOnlyList<EditorNotice> _normalizationNotices = [];
 
     public ServerEditorWindow(ServerConfig? existing)
     {
@@ -32,8 +35,6 @@ public partial class ServerEditorWindow : Window
     {
         base.OnOpened(e);
         ApplyLocalization();
-        TlsToggle.IsCheckedChanged += OnNoticeInputChanged;
-        PasswordField.TextChanged += OnNoticeInputChanged;
         Load();
     }
 
@@ -57,6 +58,8 @@ public partial class ServerEditorWindow : Window
 
     private void Load()
     {
+        _loadingUi = true;
+        _normalizationNotices = [];
         KindPicker.Items.Clear();
         KindPicker.Items.Add(ServerKind.Qbittorrent.DisplayName());
         KindPicker.Items.Add(ServerKind.Transmission.DisplayName());
@@ -86,6 +89,8 @@ public partial class ServerEditorWindow : Window
             PasswordField.Text = AppServices.Instance.Secrets.Get(_existing.Id) ?? "";
         }
 
+        _noticeHost = HostField.Text ?? "";
+        _loadingUi = false;
         RefreshNotices();
     }
 
@@ -105,35 +110,74 @@ public partial class ServerEditorWindow : Window
         IsEnabled = EnabledToggle.IsChecked == true,
     };
 
-    /// <summary>Normalises the form; shows the message on failure.</summary>
-    private ValidatedServerConfig? Validate()
+    private EffectiveServerForm EffectiveForm() => ServerConfigValidator.Evaluate(
+        ProvisionalConfig(), PortField.Text ?? "", PasswordField.Text);
+
+    /// <summary>Test and Save use exactly the state applied to the visible fields.</summary>
+    private EffectiveServerForm? Validate()
     {
-        try
+        var result = NormalizeForm();
+        if (result.Error is { } error)
         {
-            var result = ServerConfigValidator.Validate(ProvisionalConfig(), PortField.Text ?? "");
-            RefreshNotices(result.Notices);
-            HideMessage();
-            return result;
-        }
-        catch (ServerFailureException failure)
-        {
-            ShowMessage(failure.Failure.Message, isError: true);
+            ShowMessage(error.Message, isError: true);
             return null;
         }
+        HideMessage();
+        return result;
     }
 
-    /// <summary>Rebuilds the notice line: validator notices plus the plaintext warning.</summary>
-    private void RefreshNotices(IReadOnlyList<string>? validatorNotices = null)
+    private EffectiveServerForm NormalizeForm()
     {
-        var parts = EditorNotices
-            .Compose(validatorNotices, TlsToggle.IsChecked == true, PasswordField.Text)
-            .Select(L10n.S)
-            .ToList();
+        var result = EffectiveForm();
+        if (result.Error is null)
+        {
+            _loadingUi = true;
+            try
+            {
+                if (result.Notices.Count > 0) _normalizationNotices = result.Notices;
+                _noticeHost = result.Config.Host;
+                HostField.Text = result.Config.Host;
+                PortField.Text = result.Config.Port.ToString(CultureInfo.InvariantCulture);
+                TlsToggle.IsChecked = result.Config.UseTls;
+                UserField.Text = result.Config.Username;
+                PasswordField.Text = result.Password;
+            }
+            finally { _loadingUi = false; }
+        }
+        RefreshNotices();
+        return result;
+    }
+
+    private void RefreshNotices()
+    {
+        if (_loadingUi) return;
+        var form = EffectiveForm();
+        var notices = _normalizationNotices.Concat(form.Notices).Distinct()
+            .Select(notice => notice.Port is { } port
+                ? L10n.Format(notice.Key, port) : L10n.S(notice.Key)).ToArray();
+        var parts = EditorNotices.Compose(notices, form.Config.UseTls, form.Password)
+            .Select(L10n.S).ToList();
         NoticeText.IsVisible = parts.Count > 0;
         NoticeText.Text = string.Join("\n", parts);
     }
 
-    private void OnNoticeInputChanged(object? sender, EventArgs e) => RefreshNotices();
+    private void OnHostChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_loadingUi) return;
+        if (_noticeHost != (HostField.Text ?? ""))
+        {
+            _normalizationNotices = [];
+            _noticeHost = HostField.Text ?? "";
+        }
+        RefreshNotices();
+    }
+
+    private void OnHostLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (!_loadingUi) NormalizeForm();
+    }
+
+    private void OnNoticeInputChanged(object? sender, RoutedEventArgs e) => RefreshNotices();
 
     private void ShowMessage(string text, bool isError)
     {
@@ -147,6 +191,7 @@ public partial class ServerEditorWindow : Window
 
     private void OnKindChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_loadingUi) return;
         // Keep the port in step with the type, but never clobber a hand-typed one.
         var knownDefaults = new[]
         {
@@ -172,11 +217,7 @@ public partial class ServerEditorWindow : Window
         {
             var config = validated.Config;
             var insecure = validated.Config.AllowInsecureTls;
-            // A password typed into the host field (user:pass@host) is only used
-            // when the password box is empty — an explicit entry always wins.
-            var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
-                ? typed
-                : validated.PasswordFromHost ?? "";
+            var password = validated.Password;
             ITorrentClient client = config.Kind == ServerKind.Qbittorrent
                 ? new QBittorrentClient(config, password, Observe)
                 : new TransmissionClient(config, password, Observe);
@@ -209,11 +250,7 @@ public partial class ServerEditorWindow : Window
     {
         if (Validate() is not { } validated) return;
         var config = validated.Config;
-        // Same rule as Test Connection: an explicit password wins over the one
-        // parsed out of the host field.
-        var password = (PasswordField.Text ?? "") is { Length: > 0 } typed
-            ? typed
-            : validated.PasswordFromHost ?? "";
+        var password = validated.Password;
 
         var services = AppServices.Instance;
         try

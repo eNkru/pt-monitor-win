@@ -12,7 +12,7 @@
   "assignee": "Howard.J",
   "createdAt": "2026-11-01",
   "completedAt": null,
-  "branch": "security/credential-tls-hardening",
+  "branch": "bugfix/credential-tls-verification",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
