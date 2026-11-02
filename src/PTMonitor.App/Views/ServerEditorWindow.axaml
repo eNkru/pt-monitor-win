@@ -18,20 +18,20 @@
             <TextBox Grid.Row="1" Grid.Column="1" x:Name="NameField" />
 
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Host" VerticalAlignment="Center" x:Name="HostLabel" />
-            <TextBox Grid.Row="2" Grid.Column="1" x:Name="HostField" Watermark="nas.local or 192.168.1.2" />
+            <TextBox Grid.Row="2" Grid.Column="1" x:Name="HostField" TextChanged="OnHostChanged" LostFocus="OnHostLostFocus" Watermark="nas.local or 192.168.1.2" />
 
             <TextBlock Grid.Row="3" Grid.Column="0" Text="Port" VerticalAlignment="Center" x:Name="PortLabel" />
-            <TextBox Grid.Row="3" Grid.Column="1" x:Name="PortField" />
+            <TextBox Grid.Row="3" Grid.Column="1" x:Name="PortField" TextChanged="OnNoticeInputChanged" />
 
-            <CheckBox Grid.Row="4" Grid.Column="1" x:Name="TlsToggle" Content="Use HTTPS" />
+            <CheckBox Grid.Row="4" Grid.Column="1" x:Name="TlsToggle" IsCheckedChanged="OnNoticeInputChanged" Content="Use HTTPS" />
             <CheckBox Grid.Row="5" Grid.Column="1" x:Name="InsecureToggle" Content="Allow self-signed certificate" />
             <CheckBox Grid.Row="6" Grid.Column="1" x:Name="EnabledToggle" Content="Enabled" />
 
             <TextBlock Grid.Row="7" Grid.Column="0" Text="User name" VerticalAlignment="Center" x:Name="UserLabel" />
-            <TextBox Grid.Row="7" Grid.Column="1" x:Name="UserField" />
+            <TextBox Grid.Row="7" Grid.Column="1" x:Name="UserField" TextChanged="OnNoticeInputChanged" />
 
             <TextBlock Grid.Row="8" Grid.Column="0" Text="Password" VerticalAlignment="Center" x:Name="PasswordLabel" />
-            <TextBox Grid.Row="8" Grid.Column="1" x:Name="PasswordField" PasswordChar="•" />
+            <TextBox Grid.Row="8" Grid.Column="1" x:Name="PasswordField" TextChanged="OnNoticeInputChanged" PasswordChar="•" />
         </Grid>
 
         <TextBlock x:Name="NoticeText" FontSize="11" Opacity="0.6" TextWrapping="Wrap" IsVisible="False" />

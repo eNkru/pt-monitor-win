@@ -14,6 +14,128 @@ public sealed record SelfTestResult(bool IsSuccess, int Passed, string? Failure)
 /// <summary>Built-in pure-logic checks, runnable via <c>--selftest</c> and xUnit.</summary>
 public static class SelfTest
 {
+    private static async Task CredentialVerificationChecksAsync(Checks c, string directory)
+    {
+        foreach (var (host, tls, password, port, warns, invalid) in new[]
+        {
+            ("http://bob:secret@nas:8080/path", true, "", "8080", true, false),
+            ("http://nas", true, "explicit", "8080", true, false),
+            ("https://bob:secret@nas", false, "", "8080", false, false),
+            ("http://bob:secret@", true, "", "8080", true, true),
+            ("http://bob:secret@nas:bad", true, "", "8080", true, true),
+            ("http://nas", true, "explicit", "bad", true, true),
+            ("", false, "explicit", "8080", true, true),
+            ("http://nas", true, "", "8080", false, false),
+        })
+        {
+            var form = ServerConfigValidator.Evaluate(new ServerConfig(ServerKind.Qbittorrent, host)
+                { UseTls = tls }, port, password);
+            c.Expect($"form: invalid {host}/{port}", form.Error is not null, invalid);
+            c.Expect($"form: effective warning {host}", EditorNotices.Compose(null, form.Config.UseTls, form.Password)
+                .Contains(EditorNotices.PlaintextWarning), warns);
+        }
+        foreach (var (user, password, expectedUser, expectedPassword, notice) in new[]
+        {
+            ("", "", "bob", "secret", "Used the user name and password from the host field."),
+            ("alice", "", "alice", "secret", "Used the password from the host field; kept the user name field."),
+            ("", "explicit", "bob", "explicit", "Used the user name from the host field; kept the password field."),
+            ("alice", "explicit", "alice", "explicit", "Kept the credential fields; ignored credentials in the host field."),
+        })
+        {
+            var form = ServerConfigValidator.Evaluate(new ServerConfig(ServerKind.Qbittorrent,
+                "http://bob:secret@[2001:db8::1]:1234/path") { UseTls = true, Username = user }, "8080", password);
+            c.True("form: valid normalized endpoint", form.Error is null);
+            c.Expect("form: visible host", form.Config.Host, "2001:db8::1");
+            c.Expect("form: visible port", form.Config.Port, 1234);
+            c.True("form: visible TLS", !form.Config.UseTls);
+            c.Expect("form: user precedence", form.Config.Username, expectedUser);
+            c.Expect("form: password precedence", form.Password, expectedPassword);
+            c.True("form: truthful origin notice", form.Notices.Contains(new EditorNotice(notice)));
+            c.True("form: parameterized port", form.Notices.Contains(new EditorNotice("Used port %lld from the host field.", 1234)));
+            var next = ServerConfigValidator.Evaluate(form.Config, "1234", "");
+            c.Expect("form: cleared password stays empty", next.Password, "");
+            c.Expect("form: normalized state has no new imports", next.Notices.Count, 0);
+        }
+        foreach (var (raw, host, user, password) in new[]
+        {
+            ("u%40x:p%3Aw@[::1]", "::1", "u@x", "p:w"),
+            ("bob:secret@2001:db8::1", "2001:db8::1", "bob", "secret"),
+        })
+        {
+            var parsed = HostFieldParser.Parse(raw, 8080);
+            c.Expect("userinfo IPv6: host", parsed.Host, host);
+            c.Expect("userinfo IPv6: user", parsed.Username, user);
+            c.Expect("userinfo IPv6: password", parsed.Password, password);
+        }
+        foreach (var (status, method, expected) in new[]
+        {
+            (301, "POST", "GET"), (302, "POST", "GET"), (303, "POST", "GET"),
+            (303, "HEAD", "HEAD"), (303, "PUT", "GET"), (301, "PUT", "PUT"),
+            (302, "HEAD", "HEAD"), (307, "POST", "POST"), (308, "POST", "POST"),
+            (301, "GET", "GET"), (302, "GET", "GET"), (303, "GET", "GET"),
+            (307, "GET", "GET"), (308, "GET", "GET"),
+        })
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(method), "https://nas:8080/a")
+                { Content = new ByteArrayContent([1, 2]) };
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "synthetic");
+            foreach (var target in new[] { "https://nas:8080/b", "http://nas:8080/b", "https://other:8080/b", "https://nas:9091/b" })
+            {
+                using var response = new HttpResponseMessage((System.Net.HttpStatusCode)status)
+                    { Headers = { Location = new Uri(target) } };
+                c.True("redirect table: recognized", HttpTransport.TryGetRedirect(response, request, out var next, out var nextMethod));
+                c.Expect($"redirect table: {method} {status}", nextMethod.Method, expected);
+                var same = target == "https://nas:8080/b";
+                var retainsBody = method == expected;
+                c.Expect("redirect table: body policy", HttpTransport.CanFollowRedirect(request, next, nextMethod), same || !retainsBody);
+                if (!HttpTransport.CanFollowRedirect(request, next, nextMethod)) continue;
+                using var hop = HttpTransport.BuildRedirectRequest(request, next, nextMethod, [1, 2]);
+                c.Expect("redirect table: auth", hop.Headers.Authorization is not null, same);
+                c.Expect("redirect table: content", hop.Content is not null, retainsBody);
+                if (hop.Content is { } content)
+                    c.True("redirect table: replayed bytes", (await content.ReadAsByteArrayAsync()).SequenceEqual(new byte[] { 1, 2 }));
+                using var challenge = new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
+                challenge.Headers.WwwAuthenticate.Add(new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", "realm=synthetic"));
+                c.True("redirect table: 401 terminates", !HttpTransport.TryGetRedirect(challenge, hop, out _, out _));
+                if (!same)
+                {
+                    using var returned = HttpTransport.BuildRedirectRequest(hop, request.RequestUri!, HttpMethod.Get, null);
+                    c.True("redirect table: return hop cannot restore auth", returned.Headers.Authorization is null);
+                }
+            }
+        }
+        foreach (var (endpoint, error, expected) in new[]
+        {
+            ("https://nas", "SSL connection failed", true), ("https://nas", "Received an unexpected EOF", true),
+            ("http://nas", "SSL connection failed", false), ("http://nas", "Received an unexpected EOF", false),
+            ("https://nas", "connection refused", false),
+        })
+            c.Expect("TLS: plaintext hint scheme", HttpTransport.Describe(new HttpRequestException(error), new Uri(endpoint))
+                .Contains("uncheck \"Use HTTPS\""), expected);
+        var failedBackupPath = Path.Combine(directory, "failed-backup.dat");
+        File.WriteAllText(failedBackupPath, "damaged");
+        Directory.CreateDirectory(failedBackupPath + ".corrupt");
+        var failedBackupStore = new DpapiSecretStore(failedBackupPath);
+        var recoveredId = Guid.NewGuid();
+        c.True("backup: failure does not block Set", failedBackupStore.Set("new", recoveredId));
+        c.Expect("backup: failure still recovers state", failedBackupStore.State, SecretStoreState.Ok);
+        c.Expect("backup: failure still stores password", failedBackupStore.Get(recoveredId), "new");
+        foreach (var existingBackup in new[] { false, true })
+        {
+            var path = Path.Combine(directory, "backup-" + existingBackup + ".dat");
+            File.WriteAllText(path, "damaged");
+            if (existingBackup) File.WriteAllText(path + ".corrupt", "older damage");
+            var store = new DpapiSecretStore(path);
+            store.Delete(Guid.NewGuid());
+            store.DeleteAll();
+            c.Expect("backup: deletes keep unreadable state", store.State, SecretStoreState.Unreadable);
+            store.Set("new", Guid.NewGuid());
+            c.Expect("backup: Set recovers", store.State, SecretStoreState.Ok);
+            c.Expect("backup: preserved across deletes and Set", File.ReadAllText(path + ".corrupt"),
+                existingBackup ? "older damage" : "damaged");
+        }
+    }
+
     private sealed class Checks
     {
         public int Passed;
@@ -673,10 +795,10 @@ public static class SelfTest
             c.True("redirect: null uri is not the same origin", !HttpTransport.SameOrigin(null, origin));
 
             var getRequest = new HttpRequestMessage(HttpMethod.Get, origin);
-            c.True("redirect: 303 becomes GET",
+            c.True("redirect: POST 303 becomes GET",
                 HttpTransport.TryGetRedirect(
-                    new HttpResponseMessage(System.Net.HttpStatusCode.Redirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
-                    getRequest, out _, out var getMethod) && getMethod == HttpMethod.Get);
+                    new HttpResponseMessage(System.Net.HttpStatusCode.SeeOther) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
+                    new HttpRequestMessage(HttpMethod.Post, origin), out _, out var getMethod) && getMethod == HttpMethod.Get);
             c.True("redirect: 307 keeps the method",
                 HttpTransport.TryGetRedirect(
                     new HttpResponseMessage(System.Net.HttpStatusCode.TemporaryRedirect) { Headers = { Location = new Uri("https://nas.local:8080/next") } },
@@ -690,6 +812,7 @@ public static class SelfTest
             var crossHop = HttpTransport.BuildRedirectRequest(secured, new Uri("http://nas.local:8080/next"), HttpMethod.Get, null);
             c.True("redirect: same-origin hop carries the header", sameHop.Headers.Authorization is not null);
             c.True("redirect: cross-origin hop drops it", crossHop.Headers.Authorization is null);
+            await CredentialVerificationChecksAsync(c, directory);
         }
         finally
         {
