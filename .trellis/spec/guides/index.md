@@ -23,7 +23,7 @@ Neither is a skill problem. Both are "did not stop and look" problems.
 |---|---|
 | [Code Reuse](./code-reuse-thinking-guide.md) | You are about to write a helper, a table, or a constant |
 | [Cross-Layer](./cross-layer-thinking-guide.md) | A change crosses wire → model → store → UI, or settings → disk |
-| [CI Pipeline](./ci-pipeline.md) | You touch `.github/workflows/`, a gate, a release, or `scripts/build.ps1` |
+| [CI Pipeline](./ci-pipeline.md) | You touch `.github/workflows/`, a gate, a release, or a build script |
 
 ---
 
@@ -49,7 +49,7 @@ Open the **CI pipeline** guide when:
 
 - [ ] You add, remove or reorder a gate, or add a workflow/lane
 - [ ] You change a trigger, tag shape, version string, artifact name or release step
-- [ ] You change what `scripts/build.ps1` accepts or produces
+- [ ] You change what `scripts/build.ps1` / `scripts/build.sh` accept or produce
 - [ ] You add a view-model property that the UI displays
 
 ---

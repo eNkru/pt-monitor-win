@@ -89,11 +89,14 @@ enums); the app maps them to words. Putting a formatted English string in
 - `SelfTest` fixtures are recorded wire payloads held in `Diagnostics/`, away
   from any UI. Changing a payload shape means changing the fixture **and** the
   parser, in one commit.
-- `scripts/build.ps1` and `.github/workflows/build.yml` both encode the same
+- `scripts/build.ps1`, `scripts/build.sh` and `.github/workflows/build.yml` all encode the same
   gate order (restore → build → selftest → test → publish). Keep them in step.
-- `build.ps1` publishes one RID per invocation (`-Rid`, default `win-x64`); CI
-  runs the gates once and then calls it twice with `-SkipGates` (win-x64 and
-  win-arm64, cross-compiled). The packaged-CLI selftest only runs when the
+- Both build scripts publish one RID per invocation (`-Rid`/`--rid`, default
+  `win-x64`) and must stay feature-identical; `build.sh` only differs by using a
+  Linux SDK and by isolating host output, so a Linux `bin/obj` cannot reach the
+  Windows package. The packaged-CLI selftest stays Windows-only. CI
+  runs the gates once and then calls `build.ps1` twice with `-SkipGates`
+  (win-x64 and win-arm64, cross-compiled). The packaged-CLI selftest only runs when the
   RID matches the runner architecture — the pre-publish `--selftest` is the
   architecture-independent gate and must always run.
 - `app.manifest` supplies `PerMonitorV2`; the panel divides screen coordinates

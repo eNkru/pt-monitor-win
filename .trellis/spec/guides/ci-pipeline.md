@@ -120,7 +120,7 @@ Both run the same gates in the same order and package both architectures through
 
     | Producer | Why |
     |---|---|
-    | `scripts/build.ps1` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` it can see, so running it once per `-Rid` converges instead of appending |
+    | `scripts/build.ps1` / `scripts/build.sh` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` it can see, so running it once per `-Rid` converges instead of appending |
     | the `release`/`publish` job | re-derives the sums from the bytes that job is about to ship, so a format slip or a workspace leftover cannot reach the release. In `build.yml` the zips arrive through the `PTMonitor-release` artifact, so the round-trip is a real re-verification; in `branch-release.yml` they are the files just built in the same job, so the block catches format slips and a stale third zip rather than a corrupted transfer |
 
     The workflow block re-derives every line with `Get-FileHash` and fails on a

@@ -149,9 +149,9 @@ matching line of `SHA256SUMS.txt`:
 (Get-FileHash .\PTMonitor-1.0.0-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
-If you built the app yourself, `scripts\build.ps1` writes the same
-`artifacts\SHA256SUMS.txt` for your own binaries, so a self-built zip can be
-compared line by line with a released one.
+If you built the app yourself, `scripts\build.ps1` (or `scripts/build.sh`)
+writes the same `artifacts\SHA256SUMS.txt` for your own binaries, so a
+self-built zip can be compared line by line with a released one.
 
 ---
 
@@ -278,8 +278,8 @@ problem:
 
 1. `dotnet restore`
 2. `dotnet build -c Release`
-3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (296 checks)
-4. `dotnet test tests/PTMonitor.Core.Tests` (84 tests)
+3. `dotnet run --project src/PTMonitor.Cli -c Release -- --selftest` (642 checks)
+4. `dotnet test tests/PTMonitor.Core.Tests` (121 tests)
 5. `dotnet publish src/PTMonitor.App -r win-x64 --self-contained -p:PublishSingleFile=true`
 6. Re-runs `--selftest` **on the packaged CLI exe**, not just the build output
 7. Zips everything into `artifacts\PTMonitor-<version>-win-x64.zip`
@@ -309,7 +309,54 @@ The packaged-CLI selftest step runs only when the published exe matches the
 machine running the script (an ARM64 exe cannot run on an x64 host); the
 pre-publish `--selftest` gate is architecture-independent and always runs.
 
-### Option 2 — plain `dotnet` commands
+### Option 2 — the Bash script (WSL / Linux, no PowerShell)
+
+`scripts/build.sh` produces the same Windows packages from Debian or another
+Linux distribution, using a **Linux** .NET 8 SDK. Nothing has to be installed on
+the Windows side, and the resulting exe still runs there.
+
+```bash
+cd ~/sources/pt-monitor-win
+./scripts/build.sh
+```
+
+It runs the same gates in the same order as the PowerShell script, then publishes
+and packs `win-x64`:
+
+```text
+publish/win-x64/PTMonitor.exe
+publish/win-x64/cli/PTMonitor.Cli.exe
+artifacts/PTMonitor-1.0.0-win-x64.zip
+artifacts/SHA256SUMS.txt
+```
+
+Options:
+
+```bash
+./scripts/build.sh --rid win-arm64     # build the ARM64 exe instead
+./scripts/build.sh --version 1.2.3     # stamp a version
+./scripts/build.sh --skip-zip          # no zip (and no checksum) step
+./scripts/build.sh --skip-gates        # publish only (CI reuse)
+./scripts/build.sh --help              # full usage
+```
+
+Details worth knowing:
+
+- It finds the SDK on `PATH` or in `~/.dotnet` and refuses a Windows
+  `dotnet.exe` reached through WSL interop. Only a **Linux** SDK builds this.
+- If the distro has no ICU (`libicu`), the script switches the *host* build and
+tests to invariant globalization automatically. The published Windows app keeps
+normal globalization either way; to check, the embedded runtimeconfig should read
+`"System.Globalization.Invariant": false`:
+  `grep -ao 'System.Globalization.Invariant": [a-z]*' publish/win-x64/PTMonitor.exe`
+- Host build output goes to a temporary directory, so a Linux `bin/obj` never
+leaks into the Windows package. A failed gate or publish leaves the previous
+`publish/<rid>` untouched.
+- The packaged exe is not executed here (a Windows PE cannot run on Linux), so
+the pre-publish `--selftest` is the gate. Copy `PTMonitor.exe` to a local Windows
+folder before launching it — see the WSL interop notes below.
+
+### Option 3 — plain `dotnet` commands
 
 ```powershell
 dotnet build -c Release
@@ -333,14 +380,15 @@ dotnet publish src/PTMonitor.App -c Release -r win-x64 `
 > Skia/HarfBuzz binaries, and without it they are left beside the exe instead of
 > being bundled.
 
-### Option 3 — an IDE
+### Option 4 — an IDE
 
 Open `PTMonitor.sln` in Visual Studio 2022 or Rider, set `PTMonitor.App` as the
 startup project, and press <kbd>F5</kbd>.
 
-### Option 4 — building from WSL / Linux / macOS
+### Option 5 — publishing by hand from WSL / Linux / macOS
 
-Cross-targeting Windows works, because the publish is fully self-contained:
+`scripts/build.sh` is the supported path; this is the same publish spelled out.
+Cross-targeting works because the publish is fully self-contained:
 
 ```bash
 # one-time: get the SDK if you don't have it
@@ -384,7 +432,7 @@ Runs the built-in check suite and exits `0` (pass) or `1` (fail).
 
 ```powershell
 PTMonitor.Cli.exe --selftest
-# → selftest: OK (296 checks passed)
+# → selftest: OK (642 checks passed)
 ```
 
 On failure it prints every failing check, e.g.:
@@ -649,9 +697,10 @@ src/
     Diagnostics/                 SelfTest, ProbeRunner
   PTMonitor.Cli/                 headless --selftest / --probe entry point
 tests/
-  PTMonitor.Core.Tests/          xUnit suite (84 tests, mirrors the selftest)
+  PTMonitor.Core.Tests/          xUnit suite (121 tests, mirrors the selftest)
 scripts/
-  build.ps1                      restore → build → selftest → test → publish → zip
+  build.ps1                      restore → build → selftest → test → publish → zip (Windows)
+  build.sh                       the same pipeline on WSL/Linux, needing only a Linux SDK
   make-app-icon.py               draw + encode app.ico (flat Windows style)
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
 .github/workflows/build.yml      windows-latest CI: PR → gate, main → artifacts, tag → release
@@ -725,7 +774,7 @@ Exact values, so you do not have to read the source:
 
 ## Testing
 
-Two gates, both run by `build.ps1` and by CI.
+Two gates, both run by the build scripts and by CI.
 
 ### 1. In-binary check suite — `--selftest`
 
