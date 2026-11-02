@@ -322,3 +322,40 @@ No Trellis task for this one — it is one drawing routine plus three doc lines.
 ### Next Steps
 
 - Windows spot-check of the framed icon (the user has the win-x64 build)
+
+
+## Session 9: Rounded corners on the tray frame
+<!-- trellis-session: v=2 fp=tray-icon-rounded-frame -->
+
+**Date**: 2026-11-02
+**Task**: none (tweak on top of the tray-icon work)
+**Branch**: `main`
+
+### Summary
+
+User asked for "very minor round corner" on the tray border, with a screenshot of a rounded-square badge as the shape reference. The frame now has a 10 % corner radius.
+
+The bug behind the earlier ragged corners: the path radius was computed as `radius - inset`, but `inset` is the *margin* (position), not the stroke — the stroke is centred on the path, so it adds `stroke/2` outside and takes `stroke/2` inside. The correct path radius is `wanted visible radius - stroke/2`. With that fixed, a 2 px radius at 16 px renders as a clean rounded corner instead of a sub-pixel staircase.
+
+Radius chosen by eye: 0.10 of the side (1.6 px visible at 16 px, 3.2 px at 32 px). 0.14 was visibly rounder at 32 px but chopped at 16 px.
+
+Still an outline, not the filled white plate in the screenshot — the user said "border"; the filled plate was offered as a one-line change.
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs`: frame radius 0.10, path radius corrected to `radius - stroke/2`
+- `lifecycle-and-tray.md` / `README.md`: artwork text mentions the rounded frame
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed
+- [OK] Rendered through the shipped code path; 16 px and 32 px previews for all six state/theme pairs; `.ico` parsed back, 5 entries intact
+- [ ] Windows only: the rounded frame on a real taskbar
+
+### Status
+
+[OK] **Completed**

@@ -149,13 +149,16 @@ public for tests/artwork but the tray must use the cached accessors.
 
 The tray icon is **one flat monochrome glyph** — a bold down arrow over a short
 bar, in the spirit of the exe icon's sub-32 px variant but drawn separately —
-inside a hairline square frame, so it reads as a square badge in the tray. No
-tile, no fill, no second arrow, no progress meter: the floating chip already
-shows the live rates, so the tray icon is an identity mark, not a display.
+inside a hairline rounded-square frame, so it reads as a square badge in the
+tray. No tile, no fill, no second arrow, no progress meter: the floating chip
+already shows the live rates, so the tray icon is an identity mark, not a
+display.
 
-The frame is a plain square stroked with a hairline (1 px at 16 px, at most
-2 px), one pixel inside the icon edge so it is not clipped, and the glyph
-inside is shrunk to keep a clear gap.
+The frame is a rounded square stroked with a hairline (1 px at 16 px, at most
+2 px), one pixel inside the icon edge so it is not clipped. The corner radius
+is small (10 % of the side): a hairline stroke cannot render a large radius at
+16 px without the corners turning into a staircase. The glyph inside is shrunk
+to keep a clear gap.
 
 The colour follows the taskbar, not the app's accent colour:
 

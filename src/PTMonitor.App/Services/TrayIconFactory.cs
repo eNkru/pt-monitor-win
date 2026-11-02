@@ -28,10 +28,11 @@ public enum TrayState
 ///
 /// The artwork is one flat silhouette — a bold down arrow over a bar, in the
 /// spirit of the exe icon's sub-32 px variant but drawn separately — inside a
-/// hairline square frame, so the icon reads as a square badge in the tray.
-/// The whole thing is a single colour that follows the taskbar: near-black on
-/// a light taskbar, white on a dark one. The floating chip already shows the
-/// live rates, so the tray icon is an identity mark, not a meter.
+/// hairline rounded-square frame, so the icon reads as a square badge in the
+/// tray. The whole thing is a single colour that follows the taskbar:
+/// near-black on a light taskbar, white on a dark one. The floating chip
+/// already shows the live rates, so the tray icon is an identity mark, not a
+/// meter.
 ///
 /// The icon is packaged as a real multi-size .ico in memory (16/20/24/32/48 px)
 /// and handed to <see cref="WindowIcon"/> as a stream. That matters: a
@@ -65,12 +66,17 @@ public static class TrayIconFactory
     private const double BarTop = 0.71;
     private const double BarBottom = 0.82;
 
-    // The square frame around the glyph: a plain square stroked with a
+    // The square frame around the glyph: a rounded square stroked with a
     // hairline, so the icon reads as a square badge in the tray. The stroke is
     // 1 px at 16 px and never thicker than 2 px, and it sits one pixel inside
     // the icon edge so it is not clipped by it.
     private const double FrameStroke = 0.06;
     private const double FrameMargin = 1.0;
+    // The *visible* corner radius of the frame. The stroked path is inset by
+    // half the stroke, so the path radius is this minus half the stroke.
+    // Keep it small: a hairline stroke cannot render a big radius at 16 px
+    // without the corners turning into a staircase.
+    private const double FrameRadius = 0.10;
 
     // Idle is the same glyph at a lower opacity -- the hue never changes.
     private const double IdleOpacity = 0.55;
@@ -159,15 +165,18 @@ public static class TrayIconFactory
     {
         var s = (double)size;
 
-        // The square frame: a hairline square, centred on a path inset by half
-        // the stroke (so the stroke straddles the path) plus a one-pixel
-        // margin (so the frame is not clipped by the icon edge).
+        // The square frame: a hairline rounded square, centred on a path inset
+        // by half the stroke (so the stroke straddles the path) plus a
+        // one-pixel margin (so the frame is not clipped by the icon edge).
+        // The path radius is the wanted visible radius minus half the stroke:
+        // the stroke is centred on the path, so it adds that much outside.
         var stroke = Math.Clamp(Math.Round(s * FrameStroke), 1.0, 2.0);
         var inset = FrameMargin + stroke / 2;
         var path = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
+        var pathRadius = Math.Max(s * FrameRadius - stroke / 2, 0);
         context.DrawRectangle(null,
             new ImmutablePen(new ImmutableSolidColorBrush(color, opacity), stroke),
-            new RoundedRect(path, 0));
+            new RoundedRect(path, pathRadius));
 
         var brush = new ImmutableSolidColorBrush(color, opacity);
 
