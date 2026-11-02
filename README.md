@@ -42,8 +42,8 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - one flat monochrome glyph (a down arrow over a bar) that follows the
-    light/dark taskbar,
+  - one flat monochrome glyph (a down arrow over a bar, inside a hairline
+    square frame) that follows the light/dark taskbar,
   - idle — the glyph dimmed,
   - actively transferring — the glyph at full brightness,
   - every enabled server failing — the glyph in red.

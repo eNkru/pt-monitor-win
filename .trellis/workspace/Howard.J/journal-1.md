@@ -283,3 +283,42 @@ The icon is now packaged as a real multi-size `.ico` (16/20/24/32/48) built in m
 ### Next Steps
 
 - The ICO layout has no CI coverage — the App layer still has no automated gate; `InternalsVisibleTo` + a test project would close that
+
+
+## Session 8: Square frame around the tray glyph
+<!-- trellis-session: v=2 fp=tray-icon-square-frame -->
+
+**Date**: 2026-11-02
+**Task**: none (small tweak on top of 11-02-tray-icon-monochrome)
+**Branch**: `main`
+
+### Summary
+
+User liked the monochrome glyph but wanted the tray icon to read as a square. Added a hairline square frame around the arrow: plain square (sharp corners — a 0.4 px radius at 16 px only produced ragged corner pixels), 1 px at 16 px and at most 2 px, one pixel inside the icon edge so it is not clipped. The glyph was pulled in vertically (shaft top 0.12 → 0.19, bar 0.77/0.89 → 0.71/0.82) to keep a clear gap inside the frame.
+
+Tried and rejected on the way: a rounded-square frame (corner AA made a stair pattern at 16 px) and a fractional margin (the 1 px stroke landed between pixels and washed out).
+
+No Trellis task for this one — it is one drawing routine plus three doc lines.
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs`: square frame (pen, hairline) + the shrunk glyph inside it
+- `lifecycle-and-tray.md` / `README.md`: artwork description now mentions the frame
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed
+- [OK] Glyph rendered through the shipped code path (Skia headless) and previewed at 16/32 px for all six state/theme pairs; generated `.ico` parsed back, 5 entries intact
+- [ ] Windows only: the framed glyph on a real taskbar
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows spot-check of the framed icon (the user has the win-x64 build)

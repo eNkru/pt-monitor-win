@@ -27,10 +27,11 @@ public enum TrayState
 /// assets.
 ///
 /// The artwork is one flat silhouette — a bold down arrow over a bar, in the
-/// spirit of the exe icon's sub-32 px variant but drawn separately — in a
-/// single colour that follows the taskbar: near-black on a light taskbar,
-/// white on a dark one. The floating chip already shows the live rates, so
-/// the tray icon is an identity mark, not a meter.
+/// spirit of the exe icon's sub-32 px variant but drawn separately — inside a
+/// hairline square frame, so the icon reads as a square badge in the tray.
+/// The whole thing is a single colour that follows the taskbar: near-black on
+/// a light taskbar, white on a dark one. The floating chip already shows the
+/// live rates, so the tray icon is an identity mark, not a meter.
 ///
 /// The icon is packaged as a real multi-size .ico in memory (16/20/24/32/48 px)
 /// and handed to <see cref="WindowIcon"/> as a stream. That matters: a
@@ -51,18 +52,25 @@ public static class TrayIconFactory
     private static readonly int[] Sizes = [16, 20, 24, 32, 48];
 
     // Glyph geometry, as a fraction of the icon side, so one description
-    // covers every size. The arrow occupies the upper two thirds, the bar
-    // sits below it with a clear gap.
+    // covers every size. The arrow occupies the upper part, the bar sits
+    // below it with a clear gap, and both fit inside the square frame.
     private const double ShaftHalf = 0.085;
-    private const double ShaftTop = 0.12;
-    private const double ShaftBottom = 0.38;
+    private const double ShaftTop = 0.19;
+    private const double ShaftBottom = 0.41;
     private const double HeadHalf = 0.175;
-    private const double HeadBottom = 0.38;
-    private const double TipY = 0.64;
+    private const double HeadBottom = 0.41;
+    private const double TipY = 0.62;
     private const double BarLeft = 0.26;
     private const double BarRight = 0.74;
-    private const double BarTop = 0.77;
-    private const double BarBottom = 0.89;
+    private const double BarTop = 0.71;
+    private const double BarBottom = 0.82;
+
+    // The square frame around the glyph: a plain square stroked with a
+    // hairline, so the icon reads as a square badge in the tray. The stroke is
+    // 1 px at 16 px and never thicker than 2 px, and it sits one pixel inside
+    // the icon edge so it is not clipped by it.
+    private const double FrameStroke = 0.06;
+    private const double FrameMargin = 1.0;
 
     // Idle is the same glyph at a lower opacity -- the hue never changes.
     private const double IdleOpacity = 0.55;
@@ -122,7 +130,7 @@ public static class TrayIconFactory
                 ? (dark ? ErrorDark : ErrorLight)
                 : (dark ? GlyphDark : GlyphLight);
             var opacity = state == TrayState.Idle ? IdleOpacity : 1.0;
-            DrawGlyph(context, size, new ImmutableSolidColorBrush(color, opacity));
+            DrawGlyph(context, size, color, opacity);
         }
         return bitmap;
     }
@@ -147,9 +155,21 @@ public static class TrayIconFactory
 
     // MARK: - Glyph
 
-    private static void DrawGlyph(DrawingContext context, int size, IBrush brush)
+    private static void DrawGlyph(DrawingContext context, int size, Color color, double opacity)
     {
         var s = (double)size;
+
+        // The square frame: a hairline square, centred on a path inset by half
+        // the stroke (so the stroke straddles the path) plus a one-pixel
+        // margin (so the frame is not clipped by the icon edge).
+        var stroke = Math.Clamp(Math.Round(s * FrameStroke), 1.0, 2.0);
+        var inset = FrameMargin + stroke / 2;
+        var path = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
+        context.DrawRectangle(null,
+            new ImmutablePen(new ImmutableSolidColorBrush(color, opacity), stroke),
+            new RoundedRect(path, 0));
+
+        var brush = new ImmutableSolidColorBrush(color, opacity);
 
         // One arrow: a shaft that widens into a head, tip pointing down.
         var arrow = new StreamGeometry();
