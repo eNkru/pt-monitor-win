@@ -106,11 +106,11 @@ timeout, cookie container, Basic auth header, optional self-signed TLS trust,
 redirect policy, the response-size cap, and OS-error → `FailureKind`
 translation (`Describe`). A client should never construct its own `HttpClient`.
 
-`HostFieldParser` is the single owner of `(host, port)` extraction — pasted
-URLs, `host:port`, IPv6 literals, `user:pass@host`. `ServerConfigValidator`
-composes it and returns the notices the editor shows (`Notices`, plural —
-a port adjustment, a scheme adjustment and a credential adjustment can all
-apply at once) plus `PasswordFromHost`. Do not re-parse hosts anywhere else.
+`HostFieldParser` is the single owner of host/port/scheme/userinfo extraction.
+`Inspect` returns known values plus an optional error for incomplete input;
+`Parse` throws that error for strict consumers. `ServerConfigValidator.Evaluate`
+composes it into effective form state; legacy `Validate` is its throwing wrapper.
+Do not re-parse hosts in the editor.
 
 ### TLS
 
@@ -134,13 +134,20 @@ apply at once) plus `PasswordFromHost`. Do not re-parse hosts anywhere else.
   fail with a 401.
 - Credential rule: a **same-origin** hop (scheme, host and port all equal) keeps
   the `Authorization` header. Any other origin — host change, port change, or an
-  **https→http downgrade** — starts without it and is re-authenticated only if it
-  answers 401.
-- A redirect that would replay a request **body** (301/302/307/308 carrying
-  content) is not followed across origins at all, because the qBittorrent login
-  body is the password. The caller sees the 3xx and fails as a protocol error.
-- Method rewriting matches the framework: 303 always becomes GET, 301/302 do for
-  POST, 307/308 keep both method and body. `MaxRedirects` bounds the chain.
+  **https→http downgrade** — drops it and NEVER reauthenticates, even after 401.
+  No handler `Credentials` are configured. Returning to the original origin later
+  in the chain does not restore the dropped header.
+- `CanFollowRedirect` refuses cross-origin body replay; same-origin replay is
+  permitted. POST 301/302/303 becomes GET without content and may cross origins;
+  POST 307/308 retains content and cannot. The caller sees a refused 3xx:
+  qBittorrent classifies ProtocolViolation, Transmission ServerError.
+- 303 preserves HEAD, otherwise becomes GET; 301/302 rewrite POST only;
+  307/308 preserve the method. `MaxRedirects` bounds the chain.
+- Body retention depends on whether the method **changed**, not whether the next
+  method is GET. `BuildRedirectRequest` preserves an unchanged GET's content;
+  `CanFollowRedirect` therefore blocks that content across origins too. Mirror
+  GET-with-content 301/302/303/307/308 cases in both suites, asserting replayed
+  bytes within the origin and refusal across it (alongside POST→GET body removal).
 
 ### Response size
 
@@ -149,6 +156,45 @@ apply at once) plus `PasswordFromHost`. Do not re-parse hosts anywhere else.
 `Unreachable`: the server answered, it just is not a torrent client.
 
 ---
+
+## Effective editor state contract
+
+### Scope / trigger
+Pasted URLs can override both the HTTPS control and password box. Warnings,
+normalization and Test/Save must share one decision rather than drift.
+
+### Signatures
+`ServerConfigValidator.Evaluate(ServerConfig, string portText, string? password)`
+returns `EffectiveServerForm(Config, Password, Notices, Error)`.
+`EditorNotice(Key, Port?)` carries the English translation key and optional port.
+
+### Contracts
+Password is runtime-only. Non-empty explicit credential fields win. At Host
+LostFocus and Test/Save the editor applies valid normalized fields, removing
+userinfo from the visible host. Normalizing every keystroke is forbidden.
+Import notices survive normalization/password/TLS changes; a new host clears
+old notices. App translates parameterized notices with `L10n.Format`, not `S`.
+
+### Validation / error matrix
+- Valid endpoint: normalized host/port/TLS/user/password plus adjustment notices.
+- Invalid endpoint/port: Error blocks Test/Save, but known TLS/password still
+  drive `EditorNotices.Compose`; no mutation of incomplete controls.
+- Consumed host, then cleared password: remains empty, no hidden fallback.
+
+### Good / base / bad cases
+Good: HTTPS checked + `http://bob:p@nas` still warns before normalization.
+Base: plain `nas` uses the existing fields. Bad/incomplete: `http://bob:p@`
+blocks sending but still warns. `https://...` overrides an unchecked toggle.
+
+### Tests required
+Mirror effective scheme/password, precedence, partial inputs, IPv6 userinfo,
+notice metadata and repeat normalization in selftest/xUnit. Headless editor
+checks can verify event wiring; Windows rendering/DPAPI checks remain separate.
+
+### Wrong vs correct
+Wrong: warning reads only `TlsToggle`/`PasswordField` while send reads parsed URL.
+Correct: both use `Evaluate`; the editor only renders/applies that result with
+an explicit reentrancy guard.
 
 ## Test seam
 

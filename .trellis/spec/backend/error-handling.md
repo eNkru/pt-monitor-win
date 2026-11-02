@@ -39,7 +39,8 @@ public sealed record ServerFailure(FailureKind Kind, string Message)
 | Anything obtained over the network or parsed from a payload | `throw new ServerFailureException(...)` |
 | Pure formatter | never throws; clamps (`ByteRateFormatter.Rate`, `TorrentSummary.ClampedProgress`) |
 | Optional field absent or sentinel | `null` return, not an exception (`Json.Int64` → `long?`) |
-| Persistence | swallow, keep the in-memory value (see below) |
+| Settings persistence / secret deletes | swallow (see below) |
+| Secret `Set` | throw on persist failure, restore old entry, abort editor save |
 
 Every layer maps the failure once and stops:
 
@@ -76,7 +77,8 @@ Each one has a comment explaining why, and keeps the app running:
 | Place | Why |
 |---|---|
 | `SettingsStore.Persist` / `Load` | settings trouble must not kill the app; memory stays authoritative |
-| `DpapiSecretStore.Get` / `Load` / `PersistUnsafe` | an unreadable secret degrades to "no password" |
+| `DpapiSecretStore.Get` / `Load` | missing file is Absent; malformed file is Unreadable; per-entry decode still returns null (recovery unresolved) |
+| `DpapiSecretStore.PersistOrIgnore` / corrupt backup | deletes must not break row removal; backup is best-effort and never overwrites an existing copy |
 | `TransmissionClient.FreeSpaceIfDueAsync` | `free-space` may block on a hung mount; losing it is cosmetic |
 | `PanelViewModel.SafeWebUri` | an unusable host yields `about:blank` |
 | `MainPanelWindow.OpenUrl` | no browser launched is not worth a dialog |

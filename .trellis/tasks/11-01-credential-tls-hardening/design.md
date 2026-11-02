@@ -9,7 +9,7 @@
 | Certificate observation | `Core/Client/HttpTransport` + client ctor callback | `Core/Model` |
 | Secret-store state + write propagation | `Core/Store/SecretStore.cs` | UI file IO |
 | Backoff decision for unreadable secrets | `Core/Store/MonitorStore.cs` | UI |
-| Redirect credential policy | `Core/Client/HttpTransport.cs` | clients, manual redirect loop |
+| Redirect credential policy | `Core/Client/HttpTransport.cs` bounded redirect loop | clients |
 
 Hard constraint: **no new field in `settings.json`**. Everything below is
 runtime-only, so `persistence-guidelines.md` needs no shape migration — only a
@@ -98,28 +98,22 @@ downstream. Accepted — both want the same slow retry. A server that needs no
 password is never pre-empted, so a corruption does not take passwordless servers
 offline.
 
-## 3. Plaintext warning
+## 3. Plaintext warning — approved verification follow-up
 
-`ShowNotice(string?)` becomes `RefreshNotices(string? validatorNotice = null)`:
-
-```csharp
-var parts = new List<string>();
-if (validatorNotice is not null) parts.Add(validatorNotice);
-if (TlsToggle.IsChecked != true && (PasswordField.Text ?? "").Length > 0)
-    parts.Add(L10n.S("The password is sent unencrypted — enable \"Use HTTPS\" unless the server is on a network you trust."));
-NoticeText.Text = string.Join("\n", parts);
-NoticeText.IsVisible = parts.Count > 0;
-```
-
-Wired to `TlsToggle.IsCheckedChanged`, `PasswordField.TextChanged`, `Validate()`
-and `Load()`. It runs independently of the validator, so it appears before the
-form is valid. `ServerEditorWindow.Load()`'s new-server branch sets
-`TlsToggle.IsChecked = true`.
+A pure Core effective-form projection uses `HostFieldParser` for scheme,
+credentials and endpoint normalization. Warning composition uses that effective
+TLS/password, not stale controls, and tolerates incomplete/invalid endpoints.
+Host, port, username, password and TLS changes refresh notices without mutating
+controls. Host LostFocus and Test/Save apply the same projection with an explicit
+UI reentrancy guard. Import/adjustment notices survive normalization and
+password/TLS edits; host edits invalidate the previous import notice.
+New-server `Load()` still enables HTTPS. App alone localizes notices, including
+parameterized port notices.
 
 Risk: adding a server to a stock qBittorrent over HTTP 8080 now fails the first
 Test Connection with "TLS handshake failed (… enable \"allow self-signed
 certificate\" …)". That hint is wrong for the plain-HTTP case, so
-`HttpTransport.Describe` gets a downgrade hint when the scheme is `http` and the
+`HttpTransport.Describe` gets a downgrade hint when the effective scheme is `https` and the
 error is a TLS/EOF failure: "…or uncheck \"Use HTTPS\" if the server speaks plain
 HTTP."
 
@@ -166,14 +160,23 @@ public sealed record ParsedHostField(
 
 - Strip userinfo **before** the port logic (already the order today), segment on
   the first `:` inside it, `Uri.UnescapeDataString` both halves.
-- `ValidatedServerConfig.Notice` becomes `IReadOnlyList<string> Notices` (port
-  notice and credential notice can both apply). Only caller is
-  `ServerEditorWindow.ShowNotice` → `RefreshNotices`.
-- `Validate` keeps a typed user name over the parsed one:
-  `Username = typed is { Length: > 0 } ? typed : parsed.Username ?? ""`.
-- `ValidatedServerConfig` gains `string? PasswordFromHost`; `OnSave`/`OnTest` use
-  `PasswordField.Text` when non-empty, otherwise `PasswordFromHost`.
+- `ServerConfigValidator.Evaluate(config, portText, password)` returns an
+  `EffectiveServerForm` with normalized Config, runtime-only Password,
+  `EditorNotice(Key, Port?)` entries and optional Error. The legacy throwing
+  `Validate` wrapper retains `ValidatedServerConfig` for existing pure callers.
+- `HostFieldParser.Inspect` preserves known TLS/credentials alongside errors;
+  `Parse` is the strict throwing wrapper, not a separate parser.
+- Non-empty typed user/password fields win over parsed values. `OnSave`/`OnTest`
+  consume the exact effective state also used for visible normalization.
+- Visible normalization removes userinfo at Host LostFocus and Test/Save and
+  fills host, port, TLS, username and password. Explicit non-empty credentials
+  win; notices distinguish imported fields from ignored host credentials.
+  Once consumed, userinfo is removed, so clearing the password cannot restore it.
 - `EndpointParser.BaseUri` ignores userinfo, so `WebUiUri` output is unchanged.
+
+Per-entry decode failure reporting/recovery is unresolved. This follow-up does
+not implement it or claim that all corrupt ciphertext is detected. Windows
+DPAPI/trust/UI verification remains pending; preserve `verification.md` as baseline.
 
 ## 6. Bounded responses
 
@@ -202,10 +205,14 @@ decides per hop:
 | Hop | Credential |
 |---|---|
 | same origin (scheme, host, port) | `Authorization` carried over |
-| different origin, including https→http | header dropped; only a 401 re-authenticates |
-| any origin, redirect carries a request body | **not followed** — the 3xx is returned |
+| different origin, including https→http | header dropped; NEVER reauthenticate, even after 401 |
+| cross-origin hop replaying a body | **not followed** — the 3xx is returned |
+| same-origin hop replaying a body | permitted |
 
-- Method rewriting matches the framework: 303 → GET, 301/302 → GET for POST,
+- User-approved fail-closed policy supersedes the old challenge-retry proposal.
+  A refused 3xx is classified by the client (qBittorrent ProtocolViolation,
+  Transmission ServerError), not universally as a transport protocol failure.
+- Method rewriting matches the framework: 303 → GET except HEAD, 301/302 → GET for POST,
   307/308 keep method and body. `MaxRedirects = 10`, then the 3xx is returned.
 - The body rule exists because the qBittorrent login form *is* the password: a
   307/308 to another origin would replay it in clear, which is exactly the

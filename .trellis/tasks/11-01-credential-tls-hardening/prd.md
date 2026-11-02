@@ -68,14 +68,12 @@ silent.
    name and password fields, with a notice saying where they came from.
 7. **Bounded responses** — the transport refuses a body above a fixed cap and
    maps it to a protocol failure instead of buffering without limit.
-8. **Deliberate redirect credentials** — same-origin redirects keep the Basic
-   header instead of losing it; a different origin, and in particular an
-   https→http downgrade, gets a challenge round-trip rather than a preemptive
-   header. Implemented with handler-level `Credentials` + `PreAuthenticate`
-   (`HttpTransport`), no manual redirect loop and no loss of cookie handling.
-   The 307/308 body replay over a downgrade is documented, not prevented.
-   One paragraph in `.trellis/spec/backend/client-and-parser-rules.md` records
-   the resulting behaviour.
+8. **Deliberate redirect credentials** — same-origin redirects preserve Basic.
+   Cross-origin redirects, including https→http, NEVER reauthenticate, even
+   after a 401. The transport's bounded redirect loop retains cookie handling.
+   Body replay across origins is blocked; same-origin body replay is permitted.
+   POST 301/302/303 rewrites to GET without a body; 303 preserves HEAD.
+   The backend spec records these fail-closed semantics.
 
 ## Non-goals
 
@@ -91,8 +89,9 @@ silent.
       `useTls: true` and an `https://` endpoint.
 - [ ] Typing `http://nas:8080` still produces `useTls: false` plus the existing
       "Disabled HTTPS…" notice.
-- [ ] With HTTPS off and a non-empty password, the plaintext warning is visible;
-      it disappears when HTTPS is on or the password is empty.
+- [ ] With effective HTTPS off and a non-empty effective password (including
+      host userinfo), the live plaintext warning is visible even on incomplete
+      forms; it disappears with effective HTTPS on or an empty password.
 - [ ] With "Allow self-signed certificate" on, a successful Test Connection shows
       the leaf certificate's SHA-256 thumbprint.
 - [ ] With it off and a self-signed cert, the connection still fails and the
@@ -107,20 +106,34 @@ silent.
       password leaves a `secrets.dat.corrupt` copy behind.
 - [ ] `http://bob:hunter2@nas:8080/path` prefills host `nas`, port `8080`, user
       `bob`, password `hunter2`, and shows the origin notice.
-- [ ] A same-origin redirect keeps Basic auth (no 401 after the redirect); an
-      https→http redirect re-authenticates and is shown in the spec paragraph.
+- [ ] A same-origin redirect keeps Basic auth; a cross-origin or https→http
+      redirect never reauthenticates, including after 401; the spec agrees.
 - [ ] `--selftest` and the xUnit suite cover every pure function touched here
       (parser userinfo, warning composition, response cap, unreadable-secret
       message substitution).
 - [ ] `dotnet build`, `--selftest`, `dotnet test` pass.
 
+## Approved verification follow-up (2026-11-02)
+
+- Effective parsed scheme and password drive live warnings, including incomplete
+  forms. Relevant notices survive password/TLS edits.
+- At Host LostFocus and Test/Save, visibly normalize host/port/TLS and prefill
+  credentials. Explicit fields win; removing userinfo prevents a deliberately
+  cleared password from being reinserted. Notices truthfully identify imports.
+- Fix HTTPS-to-plaintext TLS/EOF guidance, port-notice localization, redirect
+  method coverage and documentation drift; add mirrored network-free regressions.
+- `verification.md` remains the unchanged baseline; record new evidence separately.
+- Per-entry unreadable-secret reporting/recovery remains **unresolved**, not
+  closed or silently excluded. Do not implement it in this focused follow-up.
+- Windows DPAPI, trust, rendered UI/scaling and normal-globalization checks are
+  **pending**. No Windows-dependent acceptance box is ticked by Linux checks.
+
 ## Notes
 
 - Fix order is mandatory: 3 (secret write) → 1 (default) → 2 (thumbprint) →
   5 (userinfo) → 4 (corruption) → 6, 7. See `implement.md`.
-- Finding 7 was originally "document only"; the mechanics above (auth cleared on
-  every redirect, body replayed on 307/308) make the cheap handler change the
-  better fix, so it now carries code.
+- Finding 7 was originally "document only"; implementation uses a bounded
+  transport redirect loop, with the approved fail-closed policy above.
 - Touches `App` and `Core`; keep the new logic in `Core` where the selftest can
   reach it.
 - Independent of `11-01-release-chain-hardening`.
