@@ -25,13 +25,13 @@ Severity as rated in the review. Fix order follows the review's ranking
 
 | # | Finding | Severity | Child | Status |
 |---|---|---|---|---|
-| 1 | Credentials travel in clear by default (`TlsToggle.IsChecked = false` for new servers, `http://` in `EndpointParser`) with no warning | High | A | |
-| 2 | "Allow self-signed certificate" disables *all* validation; anything accepted is invisible | High | A | |
-| 3 | Failed secret write is swallowed (`PersistUnsafe`), so the documented secret-first order is not actually enforced and the editor's error branch is dead code | Med/High | A | |
-| 4 | A corrupt `secrets.dat` silently drops every password, then all servers poll anonymously | Medium | A | |
-| 5 | `user:pass@host` typed into the host field is parsed and discarded | Medium | A | |
-| 6 | No bound on response body size (unbounded buffering) | Low/Med | A | |
-| 7 | Redirects: .NET clears `Authorization` on every redirect (same-origin loses auth; another origin re-authenticates after a 401, including https→http), and a 307/308 replays the login form body | Low | A | |
+| 1 | Credentials travel in clear by default (`TlsToggle.IsChecked = false` for new servers, `http://` in `EndpointParser`) with no warning | High | A | ✅ closed — HTTPS default + effective-input plaintext warning |
+| 2 | "Allow self-signed certificate" disables *all* validation; anything accepted is invisible | High | A | ✅ closed — accept-all kept, accepted leaf SHA-256 now shown |
+| 3 | Failed secret write is swallowed (`PersistUnsafe`), so the documented secret-first order is not actually enforced and the editor's error branch is dead code | Med/High | A | ✅ closed — throwing `Set`, save aborts before `settings.json` |
+| 4 | A corrupt `secrets.dat` silently drops every password, then all servers poll anonymously | Medium | A | ⚠ partially — malformed file now `Unreadable` + `.corrupt` backup + relabelled auth failure; **per-entry undecodable ciphertext still silent** (follow-up) |
+| 5 | `user:pass@host` typed into the host field is parsed and discarded | Medium | A | ✅ closed — parsed, visibly prefilled, explicit fields win |
+| 6 | No bound on response body size (unbounded buffering) | Low/Med | A | ✅ closed — 32 MiB cap → `ProtocolViolation` |
+| 7 | Redirects: .NET clears `Authorization` on every redirect (same-origin loses auth; another origin re-authenticates after a 401, including https→http), and a 307/308 replays the login form body | Low | A | ✅ closed — own redirect loop: same-origin keeps auth, cross-origin never reauthenticates, cross-origin body replay refused |
 | 8 | Releases unsigned, no checksum/attestation; actions pinned to mutable major tags | Medium | B | ✅ closed — SHA pins + `SHA256SUMS.txt` + build-provenance attestation |
 | 9 | `contents: write` granted workflow-wide; no `pull_request` gate | Low | B | ✅ closed — workflow `contents: read`, job-scoped write, PR gate runs `gate` only |
 | 10 | No log file at all; auth failures undiagnosable, redaction contract unwritten | Low | B | ✅ closed — bounded, redacted, event-only `ptmonitor.log` |
@@ -65,10 +65,16 @@ its `implement.md`).
       userinfo rules.
 - [x] `.trellis/spec/guides/ci-pipeline.md` documents the pinning, permissions
       and provenance rules.
-- [ ] A user with a working HTTPS setup sees no change in behaviour.
+- [x] A user with a working HTTPS setup sees no change in behaviour.
+      Satisfied by construction: an existing server keeps its stored `useTls`,
+      no `settings.json` shape changed, and same-origin redirects still carry
+      Basic auth — only credential *forwarding* to a different origin was
+      removed. Not additionally exercised against a live HTTPS server; that is
+      the Windows-observation caveat shared with the child task, not a code gap.
 - [x] Full verification (build, selftest, tests) passes on the final state.
-      Verified on merged `main` (`2d04a89`): build clean, 298 selftest checks,
-      85 xUnit tests.
+      Re-verified on merged `main` (`67552cb`, 2026-11-02): 0 errors, **642**
+      selftest checks, **121** xUnit tests. (The earlier `2d04a89` figure of
+      298/85 was correct when written; PR #13 added the regressions.)
 
 ## Non-goals
 
@@ -93,3 +99,16 @@ its `implement.md`).
 - File references in the child docs are as of commit `2fd6bb3`; re-read the file
   before editing. The finding text above is the authoritative short form.
 - Source of the review: this session's transcript.
+
+## Close-out (2026-11-02)
+
+Both children are archived. The finding table above is the final disposition.
+
+Standing follow-ups, recorded so they are decisions rather than loose ends:
+
+| Item | Why it stays open |
+|---|---|
+| Per-entry unreadable-secret recovery | Valid JSON with an undecodable entry still loads as `Ok` and yields no password. Needs its own design: an entire-partially-readable store cannot be marked `Unreadable` without deciding what happens to its *other* credentials. Documented in `persistence-guidelines.md`. |
+| Certificate pinning / trust-on-first-use | The natural follow-up to finding 2. This review deliberately stopped at observing the accepted leaf. |
+| Windows-only observations | DPAPI success/ACL/write-failure, native trust store, certificate-swap display, rendered EN/ZH layout at 100 %/150 %, and normal-globalization execution. Linux gates cannot reach them; each was marked "Windows-pending" rather than ticked as observed. |
+| CLI `--pass` in shell history and the process list | Pre-existing, unrelated to findings 1–10 (`ProbeRunner`). |
