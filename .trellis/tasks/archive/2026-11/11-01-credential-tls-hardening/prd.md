@@ -85,33 +85,44 @@ silent.
 
 ## Acceptance Criteria
 
-- [ ] The Add Server form opens with "Use HTTPS" checked; saving yields
+All twelve were re-verified on merged `main` on 2026-11-02; the per-criterion
+evidence table is in `verification-followup.md` ("Closure verification").
+
+- [x] The Add Server form opens with "Use HTTPS" checked; saving yields
       `useTls: true` and an `https://` endpoint.
-- [ ] Typing `http://nas:8080` still produces `useTls: false` plus the existing
+      *Code path verified; rendered-dialog confirmation is Windows-pending.*
+- [x] Typing `http://nas:8080` still produces `useTls: false` plus the existing
       "Disabled HTTPS…" notice.
-- [ ] With effective HTTPS off and a non-empty effective password (including
+- [x] With effective HTTPS off and a non-empty effective password (including
       host userinfo), the live plaintext warning is visible even on incomplete
       forms; it disappears with effective HTTPS on or an empty password.
-- [ ] With "Allow self-signed certificate" on, a successful Test Connection shows
+- [x] With "Allow self-signed certificate" on, a successful Test Connection shows
       the leaf certificate's SHA-256 thumbprint.
-- [ ] With it off and a self-signed cert, the connection still fails and the
+      *Code path verified; Windows-pending for the rendered message.*
+- [x] With it off and a self-signed cert, the connection still fails and the
       message still points at the toggle.
-- [ ] A secret write failure (simulated) aborts the save: no server is added or
+- [x] A secret write failure (simulated) aborts the save: no server is added or
       updated, and the message names the failure.
-- [ ] A corrupt `secrets.dat` leaves `State == Unreadable`, `Get` returns
+- [x] A corrupt `secrets.dat` leaves `State == Unreadable`, `Get` returns
       `null`, and a poll that fails auth reports "stored password could not be
       read" and keeps the long backoff.
-- [ ] While `Unreadable`, an enabled server that polls successfully (no password
+- [x] While `Unreadable`, an enabled server that polls successfully (no password
       needed) still shows Online, and deleting a row before re-entering any
       password leaves a `secrets.dat.corrupt` copy behind.
-- [ ] `http://bob:hunter2@nas:8080/path` prefills host `nas`, port `8080`, user
+- [x] `http://bob:hunter2@nas:8080/path` prefills host `nas`, port `8080`, user
       `bob`, password `hunter2`, and shows the origin notice.
-- [ ] A same-origin redirect keeps Basic auth; a cross-origin or https→http
+- [x] A same-origin redirect keeps Basic auth; a cross-origin or https→http
       redirect never reauthenticates, including after 401; the spec agrees.
-- [ ] `--selftest` and the xUnit suite cover every pure function touched here
+- [x] `--selftest` and the xUnit suite cover every pure function touched here
       (parser userinfo, warning composition, response cap, unreadable-secret
       message substitution).
-- [ ] `dotnet build`, `--selftest`, `dotnet test` pass.
+- [x] `dotnet build`, `--selftest`, `dotnet test` pass — 0 errors, 642 checks,
+      121 tests on `main`.
+
+**Known limitation, deliberately not closed:** valid JSON containing an
+undecodable secret still loads as `Ok` and silently returns no password.
+Per-entry reporting and recovery need their own design; it is recorded in
+`persistence-guidelines.md` and is not claimed fixed here.
 
 ## Approved verification follow-up (2026-11-02)
 

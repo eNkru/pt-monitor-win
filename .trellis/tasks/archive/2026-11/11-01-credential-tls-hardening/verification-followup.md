@@ -286,3 +286,63 @@ certificate-swap display, Preferences corruption/deletion rendering, layout at
 decode reporting/recovery still requires its own agreed design. Headless Linux
 control tests and loopback probes do not close those gates. No AC boxes, task or
 parent closure, commits, pushes, PRs or archival were performed by this review.
+
+## Closure verification — 2026-11-02
+
+Independent re-run on `main` after PR #13 merged (`67552cb`), plus the two
+commits after it (`068dbb5` build script, `60d5713` task archive) — neither
+touches `src/`. Linux x64, SDK 8.0.427, `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`
+with isolated `--artifacts-path /tmp/close-verif`.
+
+| Gate | Result |
+|---|---|
+| `dotnet build PTMonitor.sln -c Release -t:Rebuild` | **0 errors**, 69 warnings |
+| `PTMonitor.Cli --selftest` | **642 checks passed**, exit 0 |
+| `dotnet test` | **121 passed**, 0 failed, 0 skipped |
+
+The 69 warnings are the same set the earlier reports recorded (CS8602, CA1416,
+AVLN3001) from a clean rebuild; no new warning was introduced by this work.
+
+### Acceptance criteria
+
+Evidence is from merged code on `main`, not from the branch that was reviewed.
+
+| # | AC | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Add Server opens HTTPS-checked; saves `useTls: true` | **Met (code)** | `ServerEditorWindow.axaml.cs:73` sets `TlsToggle.IsChecked = true` in the new-server branch; save writes the validated config |
+| 2 | `http://nas:8080` still wins with the Disabled-HTTPS notice | **Met** | `HostFieldParser` scheme override + `L10n` notice key; `SelfTest`/xUnit scheme rows |
+| 3 | Plaintext warning follows effective TLS/password, incl. incomplete forms | **Met** | `EditorNotices.Compose` on `ServerConfigValidator.Evaluate` output; `CredentialVerificationTests.WarningUsesEffectiveInputsEvenWhenInvalid` (8 rows) |
+| 4 | Insecure mode shows accepted leaf SHA-256 on a successful Test | **Met (code)** | `HttpTransport.cs:62-64` callback → `ServerEditorWindow.axaml.cs:229` `cert SHA-256` message |
+| 5 | Strict mode still fails, message points at the toggle | **Met** | `HttpTransport` validation callback absent unless `AllowInsecureTls`; loopback probe in the reports |
+| 6 | Failed secret write aborts the save and names the failure | **Met** | `OnSave` writes the secret first, catches, logs, shows the message, `return`s before `Settings.Add/Update` |
+| 7 | Corrupt file → `Unreadable`, `Get` null, auth relabelled, long backoff | **Met for malformed files** | `SecretStore.cs:163`; `MonitorStore.cs:274`; `SelfTest.cs:759`; 600 s credential backoff unchanged |
+| 8 | Passwordless server stays Online; delete leaves `.corrupt` | **Met** | `PreserveUnreadableCopy` (`SecretStore.cs:196-210`) runs on every persist; `PreferencesWindow.axaml.cs:93` banner |
+| 9 | `http://bob:hunter2@nas:8080/path` visibly prefills all four fields | **Met** | `NormalizationIsVisibleSafeAndHonest` asserts host/port/TLS/user/password + both notices, IPv6 row included |
+| 10 | Same-origin keeps Basic; cross-origin/downgrade never reauthenticates | **Met** | `HttpTransport.cs:227` `CanFollowRedirect`, `:240` strips `Authorization`; `SelfTest` redirect table incl. 401 termination |
+| 11 | Both suites cover every pure function touched | **Met** | selftest + xUnit rows for userinfo, warning, cap, classification, redirect methods/body |
+| 12 | build / selftest / test pass | **Met** | table above |
+
+Two criteria are marked "Met (code)" rather than "Met (observed)": the HTTPS
+default and the certificate thumbprint need a rendered Windows dialog to confirm
+end to end. The code path is present and unit-covered, but no Windows observation
+exists. That distinction is recorded rather than blurred.
+
+### Explicitly not claimed
+
+- **Per-entry secret recovery.** Valid JSON holding an undecodable entry still
+  loads as `Ok` and returns no password. AC 7 is satisfied for a malformed file,
+  not for damaged ciphertext inside a valid one. Recorded in
+  `persistence-guidelines.md` and left open by the PRD.
+- **Windows DPAPI, trust store, layout/scaling, normal-globalization execution.**
+  Still unobserved; the DPAPI path only executes on Windows.
+- **`11-02-tray-fix-deploy-verify`'s soak.** Out of scope here, and archived
+  separately by user decision.
+
+### Parent close-out
+
+Cross-child criterion "a user with a working HTTPS setup sees no change in
+behaviour" is satisfied by construction for the request path: same-origin auth is
+preserved (`CanFollowRedirect`), only cross-origin credential *forwarding* was
+removed, and no `settings.json` shape changed — an existing server keeps its
+`useTls`. It was not additionally exercised against a real HTTPS server; that is
+the same Windows-observation caveat as above, not a code gap.
