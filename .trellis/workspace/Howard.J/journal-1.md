@@ -416,3 +416,85 @@ note), so no doc change was needed.
 - If the warning ever matters for distribution: buy an OV/EV cert or use Azure
   Trusted Signing, then wire optional signing into `scripts/build.sh` and
   `scripts/build.ps1` (one env var for the PFX) — the scripts do not exist yet.
+
+## Session 11: Floating widget right-click menu and system cursor
+<!-- trellis-session: v=2 fp=widget-context-menu -->
+
+**Date**: 2026-11-03
+**Task**: `11-03-floating-widget-context-menu` (archived)
+**Branch**: `main`
+
+### Summary
+
+Two tweaks to the floating speed chip, both asked for together.
+
+The hand-drawn open-hand cursor is gone; the chip uses the system hand cursor
+(`new Cursor(StandardCursorType.Hand)`). The drawn one existed because
+Avalonia's `Hand` is a pointing finger rather than the macOS open hand — the
+user wanted the system look, so `Services/CursorFactory.cs` was deleted
+outright (its only consumer was the chip; a second cursor style nobody uses is
+dead weight).
+
+Right-clicking the chip now opens a context menu with three items: open the
+first enabled server's web console in the default browser, hide the chip
+(persisted, so the tray toggle is the way back), and quit the agent.
+
+Details worth keeping:
+
+- The menu is built in code-behind, not XAML. The first header names the
+  server (`Open qBittorrent web UI`) and the item is disabled when nothing is
+  configured — neither is expressible in XAML, so `Control.ContextMenu` +
+  `ItemsSource` it is. The click handlers stay one-liners into `AppServices`.
+- The URL is `ServerConfig.WebUiUri()` (qBittorrent at the root, Transmission
+  under `/transmission/web/`, https when TLS is on) — the model already owned
+  it; the tray/panel never re-derive it. Opening moved into
+  `Services/UrlLauncher` so the panel row button and the menu share one path.
+- A right-click cannot disturb the click/drag gesture: Avalonia's
+  `Control.OnPointerReleased` raises `ContextRequested` only when the initial
+  press was the right button, and the chip's `OnPointerPressed` returns early
+  for anything but the left one.
+- Two new `L10n` keys in both tables (`Hide floating speed window`,
+  `Open web console`); the latter is the disabled-state header only.
+
+Known Windows caveat, left documented rather than guessed at: the chip window
+is `ShowActivated=False` and Avalonia hosts the menu in a non-activating
+popup (`MA_NOACTIVATE`), so a click on *another application* may leave the
+menu standing; clicking the chip dismisses it. If that grates, the fix is a
+borderless window like `MainPanelWindow` (closes on `Deactivated`) instead of
+a `ContextMenu`. Also noted: Avalonia 11.3.2 has no `TrayIcon` right-click
+event at all (`Clicked` is left-button only, the Win32 backend shows the
+native menu on right button), so "right-click the tray icon" was not an
+option without a global hook.
+
+### Main Changes
+
+- `Views/FloatingSpeedWindow.axaml.cs`: system hand cursor, `BuildMenu()`,
+  `RefreshMenu()` from `ApplyLocalization`
+- `Services/AppServices.cs`: `OpenFirstServerWebConsole()`,
+  `HideFloatingSpeedWindow()`
+- `Services/UrlLauncher.cs` (new): one owner for "open in the default
+  browser"; `MainPanelWindow.OnOpenWebUi` now calls it
+- `Services/CursorFactory.cs` (deleted), `Services/L10n.cs` (2 keys)
+- Specs (`lifecycle-and-tray`, `component-guidelines`, `directory-structure`)
+  and `README.md` updated
+
+### Git Commits
+
+- `0d6ebcd` feat(widget): right-click menu and system hand cursor
+
+### Testing
+
+- [OK] `dotnet build -c Release` 0 errors
+- [OK] `--selftest` 642 checks; `dotnet test` 121 passed
+- [OK] `scripts/build.sh --invariant`: win-x64 publish + ZIP
+- [ ] Windows only: menu opens, browser target, hide, quit, cursor shape
+
+### Status
+
+[OK] **Complete — Windows pass pending**
+
+### Next Steps
+
+- User to run the five-step manual pass in the archived PRD and report back;
+  if the leave-open caveat bites, swap the `ContextMenu` for a borderless
+  window.
