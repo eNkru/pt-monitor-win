@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "check that the chip section matches the shipped behaviour after the cursor and menu change"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "what can be verified here and what must be verified on Windows"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "check every new menu header exists in both language tables"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check the data flow from SettingsStore/Servers to the menu header and the URL"}

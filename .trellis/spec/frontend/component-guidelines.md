@@ -90,6 +90,11 @@ if ((sender as Control)?.DataContext is not TorrentRowViewModel row) return;
 - Re-entrancy guards are explicit fields (`_isTesting`, `_loadingUi`).
 - Never wire a handler in code that XAML could declare.
 
+A **context menu** is the exception: when its items are dynamic (a header that
+names a server, an enabled state that follows the configuration) XAML cannot
+express it, so the menu is built in code-behind and assigned to
+`Control.ContextMenu`. `FloatingSpeedWindow.BuildMenu` is the example.
+
 ---
 
 ## Accessibility

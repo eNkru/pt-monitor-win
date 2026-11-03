@@ -337,6 +337,32 @@ public sealed class AppServices
         _ = Monitor.RefreshNowAsync();
     }
 
+    /// <summary>
+    /// Opens the web console of the first enabled server in the default
+    /// browser. The URL is the one the model owns
+    /// (<see cref="ServerConfig.WebUiUri"/>): qBittorrent serves it at the
+    /// root, Transmission under /transmission/web/.
+    /// </summary>
+    public void OpenFirstServerWebConsole()
+    {
+        var server = Settings.Servers.FirstOrDefault(candidate => candidate.IsEnabled);
+        if (server is null) return;
+        Uri uri;
+        try { uri = server.WebUiUri(); }
+        catch
+        {
+            // An unusable host silently does nothing (the menu item stays).
+            return;
+        }
+        UrlLauncher.Open(uri);
+    }
+
+    /// <summary>
+    /// Hides the floating speed widget and remembers the choice, so it stays
+    /// hidden across restarts. The tray menu toggle brings it back.
+    /// </summary>
+    public void HideFloatingSpeedWindow() => Settings.SetShowFloatingSpeeds(false);
+
     public void Quit()
     {
         _quitRequested = true;

@@ -87,6 +87,8 @@ public static class L10n
         ["Poll every %lld seconds"] = "每 %lld 秒轮询一次",
         ["Show speeds in the tray tooltip"] = "在托盘提示中显示速度",
         ["Show floating speed window"] = "显示悬浮速度窗口",
+        ["Hide floating speed window"] = "隐藏悬浮速度窗口",
+        ["Open web console"] = "打开网页控制台",
         ["Floating display"] = "悬浮窗显示",
         ["Numbers"] = "数字",
         ["Graph"] = "速度图",

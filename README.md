@@ -224,6 +224,14 @@ aggregate rates as the panel and `—` when no server is online.
 - **Click** — opens the panel (the chip stays visible).
 - **Drag** — moves the chip; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed.
+- **Right-click** — opens a small menu:
+  - **Open <server> web UI** — the first configured server's web console in the
+    default browser (`http://host:port/` for qBittorrent,
+    `http://host:port/transmission/web/` for Transmission). Disabled when no
+    server is configured.
+  - **Hide floating speed window** — hides the chip and remembers the choice;
+    the tray menu toggle brings it back.
+  - **Quit PT Monitor** — quits the agent.
 - **Toggle** — tray menu → *Show floating speed window*, or the matching
   Preferences checkbox. Off by default.
 
@@ -683,7 +691,7 @@ src/
       L10n.cs                    English + zh-Hans string tables
       TrayIconFactory.cs         tray icons drawn at runtime (no binary assets)
       IcoEncoder.cs              .ico container writer for the tray icon
-      CursorFactory.cs           open-hand cursor drawn at runtime
+      UrlLauncher.cs             opens a URL in the default browser
     ViewModels/
       PanelViewModel.cs          sections, rows, expansion, aggregate, filters
     Views/

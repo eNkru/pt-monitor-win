@@ -30,6 +30,7 @@ AppServices.Initialize();
 | `Deactivated` on the panel | `Hide()` |
 | `Escape` / `Cancel` | `Hide()` |
 | Click on the floating chip | `ShowPanel()` (show + activate) |
+| Right-click the floating chip | context menu: open the first server's web console / hide the chip / quit |
 | X / `Close()` on a window | the window closes; the process stays in the tray (`OnExplicitShutdown`). `PreferencesWindow` clears its cached reference via its `Closed` handler. The panel has no close button (borderless) — it hides on deactivate/Esc. |
 | Tray menu → Quit | `Quit()` |
 
@@ -113,12 +114,18 @@ that way unless the design genuinely needs transparency.
   `Border` sets `Background="Transparent"` purely as a hit-test surface — a
   `Border`/`Grid` with a null background does not receive pointer events in its
   empty areas, so without it only the digits would be draggable.
-- Cursor: `Services/CursorFactory.OpenHand()` draws a 32 px open-hand cursor at
-  runtime — the macOS grab-hand look (white body, dark outline, fanned fingers,
-  slight lean, rounded wrist, hot spot on the index fingertip) — and the window
-  assigns it. Windows/Avalonia's `StandardCursorType.Hand` is the pointing
-  finger, not an open hand, and there is no standard open-hand cursor to ask
-  for, so it is drawn like the tray icons, with no binary asset.
+- Cursor: the **system hand cursor** (`new Cursor(StandardCursorType.Hand)`).
+  The app draws no cursor of its own — `Services/CursorFactory.cs` and the
+  hand-drawn open hand were removed on purpose (the user asked for the system
+  cursor). Do not reintroduce a drawn cursor asset.
+- Right-click opens a `ContextMenu` on the chip with three items: **open web
+  console** (the first *enabled* server's `ServerConfig.WebUiUri()`, opened
+  through `Services/UrlLauncher`), **hide the floating speed window**
+  (`Settings.SetShowFloatingSpeeds(false)` — persisted, so the chip stays
+  hidden across restarts; the tray toggle brings it back) and **quit** (`Quit()`).
+  The menu is built in code-behind: the first item's header names the server
+  and is disabled when there is none, which XAML cannot express. A right-click
+  never reaches the click path — only the left button sets `_pressed`.
 - `Place()` restores `FloatingPositionX/Y` when the point still lands on a
   screen's work area, otherwise docks to the primary work area's bottom-right
   (±12 px gap), then clamps. The position is written back once per drag.
@@ -213,5 +220,6 @@ change to one has to be repeated in the other.
 - A timer that is not stopped on close, or `Task.Delay` in the UI thread.
 - Blocking `.Result`/`.Wait()` in a click handler.
 - Adding an icon file instead of drawing it.
+- Drawing a cursor of your own — the system cursor is used.
 - Handing the tray a `RenderTargetBitmap` instead of a `.ico` stream (that
   path drops the alpha channel).

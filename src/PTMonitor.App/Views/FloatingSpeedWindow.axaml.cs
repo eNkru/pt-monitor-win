@@ -9,7 +9,8 @@ namespace PTMonitor.App.Views;
 
 /// <summary>
 /// Optional always-on-top chip with the aggregate down/up rates. A click opens
-/// the panel, a drag moves the chip and persists the new position.
+/// the panel, a drag moves the chip and persists the new position, a
+/// right-click opens a menu (web console / hide / quit).
 /// </summary>
 public partial class FloatingSpeedWindow : Window
 {
@@ -21,12 +22,29 @@ public partial class FloatingSpeedWindow : Window
     private bool _pressed;
     private bool _dragged;
 
+    // The menu is built in code: the first item names the server it opens and
+    // is disabled when there is none, which XAML cannot express.
+    private readonly MenuItem _openWebConsoleItem = new();
+    private readonly MenuItem _hideItem = new();
+    private readonly MenuItem _quitItem = new();
+
     public FloatingSpeedWindow()
     {
         InitializeComponent();
-        // Open-hand cursor across the whole square: Avalonia's standard "Hand"
-        // is a pointing finger, which reads as a link rather than "grab me".
-        Cursor = CursorFactory.OpenHand();
+        // The system hand cursor: the OS owns the shape, the app does not.
+        Cursor = new Cursor(StandardCursorType.Hand);
+        BuildMenu();
+    }
+
+    private void BuildMenu()
+    {
+        _openWebConsoleItem.Click += (_, _) => AppServices.Instance.OpenFirstServerWebConsole();
+        _hideItem.Click += (_, _) => AppServices.Instance.HideFloatingSpeedWindow();
+        _quitItem.Click += (_, _) => AppServices.Instance.Quit();
+        Chip.ContextMenu = new ContextMenu
+        {
+            ItemsSource = new object[] { _openWebConsoleItem, _hideItem, new Separator(), _quitItem },
+        };
     }
 
     protected override void OnOpened(EventArgs e)
@@ -36,7 +54,7 @@ public partial class FloatingSpeedWindow : Window
         Place();
     }
 
-    /// <summary>Re-applies the localized title and tooltip after a language change.</summary>
+    /// <summary>Re-applies the localized title, tooltip and menu after a language change.</summary>
     public void RefreshLocalization() => ApplyLocalization();
 
     /// <summary>Writes the aggregate rates; an offline aggregate renders a dash.</summary>
@@ -159,5 +177,22 @@ public partial class FloatingSpeedWindow : Window
         UpArrow.Text = ByteRateFormatter.UpArrow;
         GraphDownArrow.Text = ByteRateFormatter.DownArrow;
         GraphUpArrow.Text = ByteRateFormatter.UpArrow;
+        RefreshMenu();
+    }
+
+    /// <summary>
+    /// Refreshes the menu headers. The first one names the server it opens,
+    /// so it follows the configuration and not only the language.
+    /// </summary>
+    private void RefreshMenu()
+    {
+        var server = AppServices.Instance.Settings.Servers
+            .FirstOrDefault(candidate => candidate.IsEnabled);
+        _openWebConsoleItem.Header = server is null
+            ? L10n.S("Open web console")
+            : L10n.OpenInWebUi(server.DisplayName);
+        _openWebConsoleItem.IsEnabled = server is not null;
+        _hideItem.Header = L10n.S("Hide floating speed window");
+        _quitItem.Header = L10n.S("Quit PT Monitor");
     }
 }

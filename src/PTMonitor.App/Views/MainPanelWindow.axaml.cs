@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -178,20 +177,8 @@ public partial class MainPanelWindow : Window
     private void OnOpenWebUi(object? sender, RoutedEventArgs e)
     {
         if ((sender as Avalonia.Controls.Control)?.DataContext is not TorrentRowViewModel row) return;
-        OpenUrl(row.WebUiUri);
+        UrlLauncher.Open(row.WebUiUri);
         e.Handled = true; // the button's click must not also toggle the row
-    }
-
-    private static void OpenUrl(Uri uri)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
-        }
-        catch (Exception)
-        {
-            // An unusable host silently does nothing (the row itself still works).
-        }
     }
 
     private void OnAddServer(object? sender, RoutedEventArgs e) => AppServices.Instance.ShowPreferences();
