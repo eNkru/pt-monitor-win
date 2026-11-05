@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-11-02
+- **Total Sessions**: 12
+- **Last Active**: 2026-11-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~244 | Active |
+| `journal-1.md` | ~545 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-11-06 | Launch timeline and tray-icon-first startup | `f7d1390`, `845b480` | `main` |
 | 6 | 2026-11-02 | Close the security review and the tray deploy task | - | `main` |
 | 5 | 2026-11-02 | Housekeeping: retire the merged security/release-chain-hardening branch | - | `main` |
 | 4 | 2026-11-02 | Floating chip: show the aggregate rates over the speed graph | `88ab12e`, `9d7a41c` | `main` |

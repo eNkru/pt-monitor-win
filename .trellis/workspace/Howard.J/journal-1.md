@@ -498,3 +498,48 @@ option without a global hook.
 - User to run the five-step manual pass in the archived PRD and report back;
   if the leave-open caveat bites, swap the `ContextMenu` for a borderless
   window.
+
+
+## Session 12: Launch timeline and tray-icon-first startup
+<!-- trellis-session: v=2 fp=f19504dab95515a8 -->
+
+**Date**: 2026-11-06
+**Task**: Launch timeline and tray-icon-first startup
+**Branch**: `main`
+
+### Summary
+
+The agent now measures its own launch and puts the tray icon in front of the startup path; the packaging decision waits for the Windows timeline.
+
+### Main Changes
+
+- New Core/Diagnostics/StartupTrace: one launch timeline per start, written as a single 'startup: timeline' line through the existing log sink
+- AppServices constructor reordered so the tray icon is set before the secret store, the monitor and the optional windows; the floating chip and first-run Preferences are posted at Background priority
+- Phase order pinned to the constructor order in the selftest and the xUnit mirror, so the offsets cannot go non-monotonic
+- PTMonitor.Core grants InternalsVisibleTo to the test project, keeping the StartupTrace clock seam internal
+- Specs (lifecycle-and-tray, logging-guidelines, frontend index) and README updated; both build scripts record why ReadyToRun is not enabled
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f7d1390` | feat(startup): launch timeline and tray-icon-first startup |
+| `845b480` | chore(task): plan the startup and runtime performance work |
+
+### Testing
+
+- [OK] [OK] dotnet build -c Release: 0 errors
+- [OK] [OK] --selftest: 648 checks passed
+- [OK] [OK] dotnet test: 126 passed
+- [OK] [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] [ ] Windows only: launch timeline, tray icon, floating chip, first-run preferences, 30 s clean log
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User runs the published build on the target machine and pastes the 'startup: timeline' line; the packaging decision (folder layout / ReadyToRun / no change) follows from it
+- Windows manual pass: total <= 1500 ms, the chip appears, first-run preferences opens, the process survives 30 s
+- Child task 11-05-runtime-polling-performance stays in planning: the hidden-panel rebuild and the per-poll payload
