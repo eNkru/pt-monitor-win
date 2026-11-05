@@ -1,0 +1,29 @@
+{
+  "id": "performance-startup-runtime",
+  "name": "performance-startup-runtime",
+  "title": "Startup and runtime performance",
+  "description": "Make the agent launch faster and cut its idle CPU/network cost: measure the real startup cost, fix the packaging and startup path, and stop the hidden panel from rebuilding on every poll.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-05-runtime-polling-performance",
+    "11-05-launch-path-performance"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

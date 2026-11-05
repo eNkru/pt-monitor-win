@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "App lifecycle and tray-icon contract — the launch path this child changes lives here"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Threading rules: what may run on the UI thread and what must be posted to the dispatcher"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "The one-file log sink and its redaction contract — the startup timeline is written there"}
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "Publish options, build scripts and the Windows packaging contract"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where new App-layer files belong"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "App-layer verification limits (no automated gate) — shapes what can be checked here"}
