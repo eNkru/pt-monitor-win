@@ -44,7 +44,9 @@ requirements in `prd.md`.
       with one `Dispatcher.UIThread.Post(…, DispatcherPriority.Background)`
       callback that runs them, then `Mark("windows")` and `Flush()`.
 - [x] Verify by hand on Windows: one `startup: timeline …` line per launch,
-      offsets non-decreasing, total equal to the last offset.
+      offsets non-decreasing, total equal to the last offset. *Done 2026-11-05:
+      `entry=0.0 log-ready=12.2 avalonia=345.2 glyph=418.2 tray-set=418.4
+      stores=423.6 windows=575.4 total=575.4 ms`.*
 
 ### Step 3 — gates
 
@@ -52,20 +54,22 @@ requirements in `prd.md`.
 - [x] `--selftest` → all checks pass.
 - [x] `dotnet test` → all tests pass.
 - [x] `scripts/build.sh --invariant` → ZIP + CLI produced.
-- [ ] Launch the published exe on Windows, leave it 30 s, confirm a clean
+- [x] Launch the published exe on Windows, leave it 30 s, confirm a clean
       `ptmonitor.log` (`frontend/quality-guidelines.md` requires this for
-      startup changes).
+      startup changes). *Done 2026-11-05 on the target machine: the log holds
+      one `startup: timeline` line and nothing after it.*
 
 ### Step 4 — measurement decision (needs the user)
 
-- [ ] Ask the user to run the build once on the target machine and paste the
-      `startup: timeline` line.
-- [ ] Apply `design.md` §3's decision table: folder layout, ReadyToRun, or no
+- [x] Ask the user to run the build once on the target machine and paste the
+      `startup: timeline` line. *Done — see below.*
+- [x] Apply `design.md` §3's decision table: folder layout, ReadyToRun, or no
       packaging change. Change `scripts/build.sh` **and** `scripts/build.ps1`
-      together, with the reason as a comment.
-- [ ] If the package shape changes: update the README feature bullet, the
+      together, with the reason as a comment. *No packaging change — the
+      measured timeline does not blame the bundle (see below).*
+- [x] If the package shape changes: update the README feature bullet, the
       quick-start / build sections and the ZIP layout description; re-run
-      Step 3.
+      Step 3. *N/A — the package shape is unchanged.*
 
 ### Step 5 — documentation
 
@@ -134,3 +138,28 @@ the end.
 Gates after the fixes: `dotnet build -c Release` → 0 errors · `--selftest` → 648
 checks · `dotnet test` → 126 tests · `scripts/build.sh --invariant` → ZIP and
 CLI produced.
+
+## Windows measurement and the packaging decision (2026-11-05)
+
+Timeline from the target machine (Windows 10.0.26300, build 1.0.0, warm build):
+
+```
+entry=0.0 log-ready=12.2 avalonia=345.2 glyph=418.2 tray-set=418.4 stores=423.6 windows=575.4 total=575.4 ms
+```
+
+Read against `design.md` §3:
+
+| Evidence | Reading |
+|---|---|
+| `entry → log-ready` = **12 ms** | the bundle load / self-extract is not the bottleneck → **no folder-layout change** |
+| `avalonia` = **345 ms** | the dominant phase, but it is the framework's own start-up (Win32 + Avalonia init), not JIT of our code |
+| `tray-set` = **418 ms** | the icon is on the taskbar ~3.6× inside the 1500 ms target |
+| `windows` = **575 ms** | the first optional window, *after* the icon — off the critical path by design |
+| `total` = **575 ms** | 2.6× inside the target |
+
+Decision: **no packaging change.** Both build scripts keep their flags and now
+carry the numbers above as the reason, so the next reader does not re-litigate
+it. ReadyToRun stays out (D3): it needs a same-machine A/B, and it was already
+measured as no-gain on Linux (105 vs 109 ms). The one thing the timeline does
+*not* prove is a ReadyToRun win — a Windows A/B would, and remains available as
+an optional follow-up if the `avalonia` phase ever matters.

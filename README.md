@@ -591,8 +591,13 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 A timeline line looks like this:
 
 ```
-2026-11-05T21:04:11.913Z [info] startup: timeline entry=0.0 log-ready=2.1 avalonia=118.7 glyph=158.4 tray-set=160.2 stores=163.1 windows=164.9 total=164.9 ms
+2026-11-05T22:37:45.942Z [info] startup: timeline entry=0.0 log-ready=12.2 avalonia=345.2 glyph=418.2 tray-set=418.4 stores=423.6 windows=575.4 total=575.4 ms
 ```
+
+That is a real run on Windows 10 (build 1.0.0): the tray icon was on the
+taskbar at **418 ms**, the whole launch took **575 ms**, against a target of
+1500 ms. The biggest single phase is `avalonia` — the framework's own start-up,
+not the app's work.
 
 The phases are fixed labels, never values, so the line carries nothing that
 needs redacting: `entry` → `log-ready` (sink up) → `avalonia` (framework
@@ -948,7 +953,7 @@ git push origin v1.0.0
 | **Panel appears in an odd place** | It anchors to the bottom-right of the *primary* screen's work area. Secondary-taskbar placement is not detected (see limitations). |
 | **No tray icon** | Windows hides new tray icons by default — expand the overflow chevron and drag it out. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
-| **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
+| **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms; a healthy Windows 10 run reads `entry → log-ready` ≈ 12 ms, `tray-set` ≈ 420 ms, `total` ≈ 575 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
 | **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
 
 Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see

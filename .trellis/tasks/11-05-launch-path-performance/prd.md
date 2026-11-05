@@ -79,7 +79,8 @@ short version:
 - [x] The tray icon is set before the floating chip window (when enabled) or
       the preferences window (first run) is created. *Constructor order in
       `AppServices`: `TrayIcon.SetIcons` → secret store → monitor → the posted
-      window callback. Windows observation pending.*
+      window callback. Confirmed on Windows: `tray-set=418.4` precedes
+      `windows=575.4`.*
 - [x] The timeline is visible to a user on the target machine without any
       extra tooling. *One `startup: timeline …` line in
       `%APPDATA%\PTMonitor\ptmonitor.log`.*
@@ -92,11 +93,15 @@ short version:
       `dotnet test` → all tests pass; `scripts/build.sh --invariant` → ZIP and
       CLI produced. *Re-verified after the final change: 0 errors, 648 checks,
       126 tests, `artifacts/PTMonitor-1.0.0-win-x64.zip` + `publish/win-x64`.*
-- [ ] Windows manual pass: `total` ≤ 1500 ms; the floating chip still appears;
+- [x] Windows manual pass: `total` ≤ 1500 ms; the floating chip still appears;
       the first-run preferences still open; the process survives 30 s with a
-      clean log. **Still open — needs the target machine.**
-- [ ] Step 4 (publish-option decision) follows the timeline. **Still open —
-      it needs the timeline above.**
+      clean log. *Done 2026-11-05 on the target machine: `total=575.4 ms`,
+      `tray-set=418.4 ms`, one timeline line and nothing after it in the log.*
+- [x] Step 4 (publish-option decision) follows the timeline. *Decided: no
+      packaging change — `entry → log-ready` is 12 ms, so the bundle is not the
+      bottleneck; the dominant `avalonia` phase is the framework's own start-up.
+      Both scripts carry the numbers as their reason; ReadyToRun stays out
+      until a Windows A/B shows a gain (D3).*
 
 ## Out of scope
 

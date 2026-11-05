@@ -38,6 +38,11 @@ AppServices.Initialize();
   with cumulative, non-decreasing offsets and a `total`. No lock — every mark
   runs on the UI thread. The phase order mirrors the constructor order; keep the
   two in step or the offsets stop being monotonic.
+- The measured baseline (Windows 10, build 1.0.0, 2026-11-05): `log-ready` at
+  12 ms, `avalonia` at 345 ms, `tray-set` at 418 ms, `total` at 575 ms — the
+  tray icon is visible well inside the 1500 ms target, and the dominant cost is
+  the framework's own start-up, not the app's work. A regression hunt starts at
+  the phase that grew against this baseline, not at the total.
 - `Initialize()` is idempotent; `Instance` is assigned before anything that can
   re-enter.
 
