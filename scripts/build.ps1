@@ -48,6 +48,10 @@ if (-not $SkipGates) {
 }
 
 Write-Host "==> dotnet publish $Rid (self-contained)" -ForegroundColor Cyan
+# Packaging options are evidence-driven, not habit: a single self-extracting exe
+# (Avalonia needs IncludeNativeLibrariesForSelfExtract). No PublishReadyToRun --
+# measured on Linux 2026-11-05 with no startup gain (105 vs 109 ms), so only add
+# it after a Windows A/B of the same build. Keep this identical to build.sh.
 dotnet publish src/PTMonitor.App -c Release -r $Rid `
     --self-contained true `
     -p:PublishSingleFile=true `

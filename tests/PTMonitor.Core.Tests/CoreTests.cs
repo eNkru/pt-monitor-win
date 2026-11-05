@@ -237,6 +237,94 @@ public class LogTests
     }
 }
 
+/// <summary>
+/// <see cref="StartupTrace"/> is process-global (the clock especially), so it
+/// shares the non-parallel logging collection with <see cref="Log"/>.
+/// </summary>
+[Collection("log")]
+public class StartupTraceTests
+{
+    [Fact]
+    public void EmptyListRendersAZeroTimeline() =>
+        Assert.Equal("entry=0.0 total=0.0 ms", StartupTrace.Format([], 0));
+
+    [Fact]
+    public void RendersInFixedCausalOrderWithOneDecimal() =>
+        Assert.Equal("entry=0.0 avalonia=2.5 windows=12.5 custom=1.0 total=12.5 ms", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("windows", 12.5),
+                new StartupMark("avalonia", 2.5),
+                new StartupMark("custom", 1),
+            ], 12.5));
+
+    [Fact]
+    public void RealLaunchOrderStaysChronological() =>
+        Assert.Equal("entry=0.0 glyph=158.4 tray-set=160.2 stores=163.1 total=163.1 ms", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("stores", 163.1),
+                new StartupMark("tray-set", 160.2),
+                new StartupMark("glyph", 158.4),
+            ], 163.1));
+
+    [Fact]
+    public void MarkWithoutBeginIsSilent()
+    {
+        var directory = Directory.CreateTempSubdirectory("ptmonitor-startup-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            StartupTrace.Reset();
+
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            Log.Shutdown();
+            StartupTrace.Reset();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FlushWritesOneLineAndIsIdempotent()
+    {
+        var directory = Directory.CreateTempSubdirectory("ptmonitor-startup-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            StartupTrace.Reset();
+
+            var elapsed = 0.0;
+            StartupTrace.Clock = () => elapsed += 1.5;
+            StartupTrace.Begin();
+            StartupTrace.Mark("log-ready");
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+            StartupTrace.Flush();
+            StartupTrace.Mark("windows");
+            Log.Shutdown();
+
+            var lines = File.ReadAllLines(path);
+            Assert.Single(lines);
+            Assert.EndsWith(
+                "startup: timeline entry=0.0 log-ready=1.5 avalonia=3.0 total=3.0 ms", lines[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            Log.Shutdown();
+            StartupTrace.Reset();
+            Directory.Delete(directory, true);
+        }
+    }
+}
+
 public class HostFieldParserTests
 {
     [Theory]

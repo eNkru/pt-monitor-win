@@ -14,9 +14,30 @@ AppServices.Initialize();
 ```
 
 - There is no main window and closing the last window must not exit.
-- `AppServices`'s constructor builds the `TrayIcon`, attaches the native menu,
-  starts monitoring and, when `Settings.Servers.Count == 0`, opens Preferences
-  (first-run path).
+- `AppServices`'s constructor is ordered so the tray icon exists before
+  anything that can block or paint: `Instance` → `Settings` → `L10n.SetLanguage`
+  → the floating ticker → the tray icon and its glyph → `TrayIcon.SetIcons` →
+  the secret store (DPAPI) → `MonitorStore` → the theme/`StatusesChanged` hooks
+  and `Settings.Changed` → `UpdateTray()`/`Monitor.Start()` → the `Clicked`
+  handler.
+- The two optional windows are **posted**, not created inline: one
+  `Dispatcher.UIThread.Post(…, DispatcherPriority.Background)` runs
+  `SyncFloatingWindow()` and, when `Settings.Servers.Count == 0`, the first-run
+  Preferences. `Background` priority lets the icon's first frame and the message
+  loop win the queue, so neither window can delay the icon.
+- The order carries invariants — re-read them before "tidying" it:
+  `_trayIcon` must exist before `Settings.Changed += OnSettingsChanged`
+  (`OnSettingsChanged` assigns `_trayIcon.Menu`), `Secrets` must exist before
+  `new MonitorStore(...)`, `Monitor` before `UpdateTray()`/`StatusesChanged`/
+  `Start()`, and `_floatingTicker` before anything that can call
+  `SyncFloatingWindow()`.
+- The launch path writes a **timeline** (`Core/Diagnostics/StartupTrace`):
+  `Begin()` in `Program.Main` before `Log.Initialize`, one `Mark` per phase
+  (`log-ready`, `avalonia`, `glyph`, `tray-set`, `stores`, `windows`), and one
+  `Flush()` in the posted callback. One `startup: timeline …` line per launch,
+  with cumulative, non-decreasing offsets and a `total`. No lock — every mark
+  runs on the UI thread. The phase order mirrors the constructor order; keep the
+  two in step or the offsets stop being monotonic.
 - `Initialize()` is idempotent; `Instance` is assigned before anything that can
   re-enter.
 

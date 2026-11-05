@@ -538,7 +538,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 |---|---|---|
 | `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
-| `ptmonitor.log` | startup line, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
+| `ptmonitor.log` | startup line, launch timeline, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
 
 - The settings file is written atomically (temp file + move), so a crash cannot
   truncate it. A corrupt or older payload is treated as "not configured" rather
@@ -583,7 +583,23 @@ Everything lives under `%APPDATA%\PTMonitor\`:
   the same way logs once, not once per 2-second poll;
 - secret-store trouble (unreadable file, preserved `.corrupt` copy, failed
   write), TLS certificates accepted under "allow self-signed certificate" (with
-  the SHA-256 thumbprint), and settings writes that failed.
+  the SHA-256 thumbprint), and settings writes that failed;
+- one **launch timeline** per start, with named phases and their offsets from
+  process entry, ending in a `total`. It exists to be pasted into a performance
+  report — see [Troubleshooting](#troubleshooting).
+
+A timeline line looks like this:
+
+```
+2026-11-05T21:04:11.913Z [info] startup: timeline entry=0.0 log-ready=2.1 avalonia=118.7 glyph=158.4 tray-set=160.2 stores=163.1 windows=164.9 total=164.9 ms
+```
+
+The phases are fixed labels, never values, so the line carries nothing that
+needs redacting: `entry` → `log-ready` (sink up) → `avalonia` (framework
+initialised) → `glyph` (tray icon rendered) → `tray-set` (icon on the taskbar) →
+`stores` (secret store loaded, DPAPI) → `windows` (first optional window).
+Offsets are cumulative and non-decreasing. Only one line is written per launch,
+at the end, when the launch is done.
 
 It is capped at 512 KiB plus one rotated predecessor (`ptmonitor.log.1`), so the
 pair never exceeds ~1 MiB. Nothing else is logged: no passwords, no auth
@@ -932,6 +948,7 @@ git push origin v1.0.0
 | **Panel appears in an odd place** | It anchors to the bottom-right of the *primary* screen's work area. Secondary-taskbar placement is not detected (see limitations). |
 | **No tray icon** | Windows hides new tray icons by default — expand the overflow chevron and drag it out. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
+| **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
 | **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
 
 Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see

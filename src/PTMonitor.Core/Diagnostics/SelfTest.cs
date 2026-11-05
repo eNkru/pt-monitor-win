@@ -228,6 +228,7 @@ public static class SelfTest
             await StoreChecks(checks);
             await ClientChecks(checks);
             await LogChecks(checks);
+            StartupTraceChecks(checks);
         }
         catch (Exception exception)
         {
@@ -931,6 +932,70 @@ public static class SelfTest
         finally
         {
             Log.Shutdown();
+            try { Directory.Delete(directory, true); } catch { }
+        }
+    }
+
+    private static void StartupTraceChecks(Checks c)
+    {
+        // The renderer is pure and pinned exactly: fixed causal order even when
+        // the marks arrive out of order, one decimal, total last. An empty list
+        // must render rather than throw.
+        c.Expect("startup: empty list renders a zero timeline", StartupTrace.Format([], 0), "entry=0.0 total=0.0 ms");
+        c.Expect("startup: fixed order and shape", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("windows", 12.5),
+                new StartupMark("avalonia", 2.5),
+                new StartupMark("custom", 1),
+            ], 12.5), "entry=0.0 avalonia=2.5 windows=12.5 custom=1.0 total=12.5 ms");
+        // The real launch order must stay chronological: the constructor sets the
+        // icon (glyph, tray-set) before DPAPI (stores), so stores is the later
+        // offset and belongs after tray-set, not before glyph.
+        c.Expect("startup: real launch order stays chronological", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("stores", 163.1),
+                new StartupMark("tray-set", 160.2),
+                new StartupMark("glyph", 158.4),
+            ], 163.1), "entry=0.0 glyph=158.4 tray-set=160.2 stores=163.1 total=163.1 ms");
+
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-startup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            StartupTrace.Reset();
+
+            // No Begin: a Mark and a Flush must leave the sink untouched, so the
+            // CLI and the suite stay free of startup lines.
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+            c.True("startup: silent without begin", !File.Exists(path));
+
+            // A deterministic counter instead of the stopwatch.
+            var elapsed = 0.0;
+            StartupTrace.Clock = () => elapsed += 1.5;
+            StartupTrace.Begin();
+            StartupTrace.Mark("log-ready");
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+            // Idempotent: the second call must not add a line, and a Mark after
+            // it must stay silent.
+            StartupTrace.Flush();
+            StartupTrace.Mark("windows");
+            Log.Shutdown();
+
+            var lines = File.ReadAllLines(path);
+            c.Expect("startup: one line per launch", lines.Length, 1);
+            c.True("startup: timeline line", lines[0].EndsWith(
+                "startup: timeline entry=0.0 log-ready=1.5 avalonia=3.0 total=3.0 ms", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Log.Shutdown();
+            StartupTrace.Reset();
             try { Directory.Delete(directory, true); } catch { }
         }
     }

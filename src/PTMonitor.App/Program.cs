@@ -14,10 +14,16 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // First statement, before the sink exists: the launch timeline measures
+        // from the earliest point a managed app can observe. Only a clock read,
+        // no Avalonia (that comes after BuildAvaloniaApp).
+        StartupTrace.Begin();
+
         // The log is always on: a sink enabled after the fact cannot diagnose a
         // crash that already happened. It is event-only and size-capped, so the
         // cost stays bounded (see Core/Diagnostics/Log.cs).
         Log.Initialize(AppPaths.LogFile);
+        StartupTrace.Mark("log-ready");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => LogCrash("appdomain", e.ExceptionObject as Exception);
         // NOT Dispatcher.UIThread here: touching it before the platform is
         // initialised creates the dispatcher with the default (unsupported)

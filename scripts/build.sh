@@ -108,6 +108,11 @@ fi
 # Stage both outputs together so a failed CLI publish cannot replace a good app.
 # Separate Windows intermediates prevent local invariant test outputs leaking in.
 out="$work/output/$rid"
+# Packaging options are evidence-driven, not habit: a single self-extracting
+# exe (Avalonia needs IncludeNativeLibrariesForSelfExtract). No PublishReadyToRun
+# -- measured on Linux 2026-11-05 with no startup gain (105 vs 109 ms), so only
+# add it after a Windows A/B of the same build. Keep this identical to
+# scripts/build.ps1.
 publish_options=(-c Release -r "$rid" --self-contained true
     -p:PublishSingleFile=true -p:InvariantGlobalization=false "-p:Version=$version"
     --artifacts-path "$work/windows")

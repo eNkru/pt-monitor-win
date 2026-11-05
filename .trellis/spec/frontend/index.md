@@ -50,8 +50,8 @@ Namespaces follow folders (`PTMonitor.App.Views`, `.ViewModels`, `.Services`).
 It owns the stores, the monitor, the tray icon and both windows, and exposes
 `Instance`.
 
-- `Instance` is assigned first in the constructor, because the first-run
-  preferences window opens synchronously from it and reaches back.
+- `Instance` is assigned first in the constructor, before anything that can
+  re-enter (the first-run preferences window is posted from it and reaches back).
 - `Initialize()` is idempotent.
 - Windows and view-models reach dependencies through `AppServices.Instance`;
   there is no DI container.
