@@ -543,3 +543,53 @@ The agent now measures its own launch and puts the tray icon in front of the sta
 - User runs the published build on the target machine and pastes the 'startup: timeline' line; the packaging decision (folder layout / ReadyToRun / no change) follows from it
 - Windows manual pass: total <= 1500 ms, the chip appears, first-run preferences opens, the process survives 30 s
 - Child task 11-05-runtime-polling-performance stays in planning: the hidden-panel rebuild and the per-poll payload
+
+
+## Session 13: Close the launch-path performance child
+<!-- trellis-session: v=2 fp=6c1f4a0d92be7711 -->
+
+**Date**: 2026-11-06
+**Task**: Launch path and packaging performance (11-05-launch-path-performance)
+**Branch**: `main`
+
+### Summary
+
+The Windows timeline came back from the target machine, so the packaging
+decision could be made on evidence instead of habit. Result: no packaging
+change, and the child task is finished.
+
+### Main Changes
+
+- Recorded the measured timeline in the task artifacts, the README and the
+  lifecycle spec: tray icon visible at 418 ms, total 575 ms, against the
+  1500 ms target; entry->log-ready is 12 ms, so the self-extracting bundle is
+  not the bottleneck
+- Packaging decision: no change. Both build scripts keep their flags and now
+  carry the measurement as their reason; ReadyToRun stays out until a Windows
+  A/B of the same build shows a gain (D3)
+- The README's timeline example is the real Windows line, and the troubleshooting
+  row now names the healthy offsets
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd62b3d` | docs(startup): record the Windows launch timeline and the packaging decision |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 648 checks passed
+- [OK] dotnet test: 126 passed
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] Windows: total 575 ms <= 1500 ms, tray icon at 418 ms, clean log
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Child `11-05-runtime-polling-performance` is still in planning: the
+  hidden-panel rebuild and the per-poll payload (needs design.md + implement.md)
+- Optional: a Windows ReadyToRun A/B, only if the avalonia phase ever matters
