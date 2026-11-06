@@ -1,5 +1,11 @@
 # Solid tray glyph without frame
 
+> **Revised during review** (see [Revision history](#revision-history)): the
+> artwork shipped as a **fixed** mark — a bright white rounded tile with the
+> arrow-over-bar knocked out of it in the dark ink — the same in the light and
+> the dark theme. The requirements below are the ones the task started with;
+> the acceptance criteria record what actually shipped.
+
 ## Goal
 
 The system-tray icon (bottom-right corner of the taskbar) must read as one
@@ -46,12 +52,12 @@ the icon is still drawn at runtime and packed as a real multi-size `.ico`.
 
 ## Acceptance Criteria
 
-- [x] The tray icon is one solid arrow-over-bar silhouette with a transparent
-      background — no frame, no tile, no outline.
+- [x] The tray icon is one flat mark with no frame, no outline and no
+      tile-in-the-app-icon sense: a bold down arrow over a short bar.
 - [x] The glyph is scaled about the icon centre so it fills the tile, and
       stays legible at 16 px.
-- [x] The glyph is near-black on a light taskbar and white on a dark taskbar;
-      idle is dimmed, error is red; the theme switch still redraws the icon.
+- [x] Idle is dimmed, active is full opacity, error is red; the states stay
+      distinguishable.
 - [x] The tray icon is still delivered as a multi-size `.ico` (16/20/24/32/48)
       built in memory, with straight-alpha pixels; the container parses back
       into the expected five entries.
@@ -60,8 +66,27 @@ the icon is still drawn at runtime and packed as a real multi-size `.ico`.
       tray itself cannot run here).
 - [x] `.trellis/spec/frontend/lifecycle-and-tray.md` and `README.md` describe
       the new artwork.
-- [ ] Manual check on Windows (needs the user): the tray shows a solid bright
-      arrow-over-bar on a dark taskbar, with no leftover outline.
+- [ ] Manual check on Windows (needs the user): the tray shows the bright
+      tile with the dark arrow knocked out of it, on both a light and a dark
+      taskbar.
+
+## Revision history
+
+The artwork changed twice while the task was open, both times on the user's
+request after looking at the rendered previews:
+
+1. **No frame, colour follows the taskbar** — the hairline frame was dropped
+   and the glyph kept the taskbar colour (commit `5ecd251`).
+2. **Colours reversed** — the glyph moved into a bright tile and took the
+   dark ink; the error took the dark red (commit `9ac0834`).
+3. **Fixed in every theme** — the icon no longer follows the taskbar at all:
+   the same white tile with the dark arrow in the light and the dark theme.
+   The theme dimension was removed from `TrayIconFactory`, from the icon
+   cache and from `AppServices.UpdateTray`, and the
+   `ActualThemeVariantChanged` hook with it (commit `ab6e561`).
+
+The shipped requirement is therefore: **one fixed mark — a white rounded tile
+with the arrow knocked out of it in the dark ink — identical in both themes.**
 
 ## Notes
 
