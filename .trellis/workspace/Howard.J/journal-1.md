@@ -672,3 +672,43 @@ all of them are fixed.
   pass (including: open and close the panel five times, the scope must fall
   back to the summary every time)
 - Parent task 11-05-performance-startup-runtime is then 2/2 and can be archived
+
+
+## Session 15: Solid tray glyph without a frame
+<!-- trellis-session: v=2 fp=e45f413e99359d3b -->
+
+**Date**: 2026-11-06
+**Task**: Solid tray glyph without a frame
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+The user runs Windows in dark mode and asked to invert the system-tray icon (bottom-right corner): drop the outline, make the whole piece bright. Read it as 'no frame, one solid fill' -- a literal colour swap would vanish on a dark taskbar. Removed the hairline rounded-square frame from TrayIconFactory, scaled the arrow-over-bar glyph 1.25x about the icon centre so it fills the tile, and updated the tray spec and README. Verified on this box: build clean, 692 selftest checks, 150 tests, in-memory .ico still parses into five straight-alpha entries, and the glyph was rendered to preview PNGs (artifacts/tray-preview/) and reviewed. The Windows manual check (solid bright arrow-over-bar on a dark taskbar) is still open.
+
+### Main Changes
+
+- src/PTMonitor.App/Services/TrayIconFactory.cs: frame constants and draw call removed; GlyphScale = 1.25 scales the arrow and bar about the icon centre
+- .trellis/spec/frontend/lifecycle-and-tray.md: artwork section no longer describes a framed badge
+- README.md: the tray-icon feature bullet
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ecd251` | feat(tray): draw the tray glyph as one solid piece without a frame |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] rendered preview PNGs at 16/20/24/32/48 px for both themes and all three states
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows manual check: the tray shows one solid bright arrow-over-bar on a dark taskbar, no leftover outline
