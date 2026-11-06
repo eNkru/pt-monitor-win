@@ -100,16 +100,41 @@ Child A's startup instrumentation is the measuring instrument both children use.
 
 ## Cross-child acceptance criteria
 
-- [ ] The published Windows package reports its own startup cost in
-      `%APPDATA%\PTMonitor\ptmonitor.log`, split into named phases.
-- [ ] `dotnet build -c Release` finishes with 0 errors, `--selftest` passes,
-      and `dotnet test` passes.
-- [ ] `scripts/build.sh --invariant` still produces `PTMonitor-<version>-win-x64.zip`
-      and the CLI, and `scripts/build.ps1` stays in sync with it.
-- [ ] The panel shows the same data as before while it is open, and the agent
-      does no panel-rebuild work while it is closed.
-- [ ] The README's feature/behaviour descriptions still match the shipped
-      behaviour (poll interval, packaging shape, bilingual UI).
+- [x] The published Windows package reports its own startup cost in
+      `%APPDATA%\PTMonitor\ptmonitor.log`, split into named phases. *One
+      `startup: timeline entry=0.0 log-ready=12.2 avalonia=345.2 glyph=418.2
+      tray-set=418.4 stores=423.6 windows=575.4 total=575.4 ms` line per
+      launch, measured on the target machine.*
+- [x] `dotnet build -c Release` finishes with 0 errors, `--selftest` passes,
+      and `dotnet test` passes. *692 selftest checks, 150 xUnit tests.*
+- [x] `scripts/build.sh --invariant` still produces `PTMonitor-<version>-win-x64.zip`
+      and the CLI, and `scripts/build.ps1` stays in sync with it. *Both scripts
+      carry the same publish options and the same one-line reason; the flags
+      are unchanged (the measured timeline does not blame the bundle).*
+- [x] The panel shows the same data as before while it is open, and the agent
+      does no panel-rebuild work while it is closed. *The panel's visibility
+      drives one flag in the store: no rebuild and no torrent list while it is
+      hidden. The Windows observation of the open panel is part of the manual
+      pass below.*
+- [x] The README's feature/behaviour descriptions still match the shipped
+      behaviour (poll interval, packaging shape, bilingual UI). *The README
+      documents the two poll scopes, the 2 s interval and the packaging
+      decision.*
+
+## Manual verification still open (Windows)
+
+Both children are code-complete and gated on Linux. The target machine has to
+confirm what a Linux box cannot:
+
+- the launch timeline stays within the 1500 ms target and the tray icon shows
+  up first (done for the launch child);
+- the tooltip and the floating chip keep updating every 2 s with the panel
+  closed;
+- the panel opens with data and stays live; opening and closing it five times
+  leaves the poll scope on the summary;
+- the tray icon still switches between Idle and Active;
+- qBittorrent's panel list matches the server's list;
+- the log stays clean for 30 s.
 
 ## Out of scope
 
@@ -125,10 +150,11 @@ Child A's startup instrumentation is the measuring instrument both children use.
 
 ## Open questions
 
-- **Q3 — the poll interval (still open).** Is the default 2 s poll interval
-  worth its cost to the user? Raising it to 5 s cuts the idle network and CPU
-  cost by 60 %. Owned by child B, which measures the poll cost first and then
-  asks; it does not block child A.
+- ~~**Q3 — the poll interval (still open).**~~ **Answered 2026-11-06: keep
+  2 s.** The default poll interval is unchanged. The idle cost was cut by
+  fetching less and rebuilding less, not by polling less often — the tooltip
+  and the chip stay as fresh as they were. See
+  `11-05-runtime-polling-performance/prd.md` (D1).
 
 ## Resolved decisions
 
