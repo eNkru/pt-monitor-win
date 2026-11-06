@@ -27,12 +27,11 @@ public enum TrayState
 /// assets.
 ///
 /// The artwork is one flat silhouette — a bold down arrow over a bar, in the
-/// spirit of the exe icon's sub-32 px variant but drawn separately — inside a
-/// hairline rounded-square frame, so the icon reads as a square badge in the
-/// tray. The whole thing is a single colour that follows the taskbar:
-/// near-black on a light taskbar, white on a dark one. The floating chip
-/// already shows the live rates, so the tray icon is an identity mark, not a
-/// meter.
+/// spirit of the exe icon's sub-32 px variant but drawn separately. There is
+/// no frame, no tile and no outline: the whole piece is one solid colour
+/// that follows the taskbar — near-black on a light taskbar, white on a dark
+/// one. The floating chip already shows the live rates, so the tray icon is
+/// an identity mark, not a meter.
 ///
 /// The icon is packaged as a real multi-size .ico in memory (16/20/24/32/48 px)
 /// and handed to <see cref="WindowIcon"/> as a stream. That matters: a
@@ -54,7 +53,8 @@ public static class TrayIconFactory
 
     // Glyph geometry, as a fraction of the icon side, so one description
     // covers every size. The arrow occupies the upper part, the bar sits
-    // below it with a clear gap, and both fit inside the square frame.
+    // below it with a clear gap. The fractions describe the unscaled drawing:
+    // the glyph itself is scaled about the icon centre (see GlyphScale).
     private const double ShaftHalf = 0.085;
     private const double ShaftTop = 0.19;
     private const double ShaftBottom = 0.41;
@@ -66,17 +66,10 @@ public static class TrayIconFactory
     private const double BarTop = 0.71;
     private const double BarBottom = 0.82;
 
-    // The square frame around the glyph: a rounded square stroked with a
-    // hairline, so the icon reads as a square badge in the tray. The stroke is
-    // 1 px at 16 px and never thicker than 2 px, and it sits one pixel inside
-    // the icon edge so it is not clipped by it.
-    private const double FrameStroke = 0.06;
-    private const double FrameMargin = 1.0;
-    // The *visible* corner radius of the frame. The stroked path is inset by
-    // half the stroke, so the path radius is this minus half the stroke.
-    // Keep it small: a hairline stroke cannot render a big radius at 16 px
-    // without the corners turning into a staircase.
-    private const double FrameRadius = 0.10;
+    // The glyph fills the icon: there is no frame around it any more, so it
+    // is scaled up about the centre to keep the mark legible at the 16 px
+    // the taskbar asks for.
+    private const double GlyphScale = 1.25;
 
     // Idle is the same glyph at a lower opacity -- the hue never changes.
     private const double IdleOpacity = 0.55;
@@ -165,18 +158,10 @@ public static class TrayIconFactory
     {
         var s = (double)size;
 
-        // The square frame: a hairline rounded square, centred on a path inset
-        // by half the stroke (so the stroke straddles the path) plus a
-        // one-pixel margin (so the frame is not clipped by the icon edge).
-        // The path radius is the wanted visible radius minus half the stroke:
-        // the stroke is centred on the path, so it adds that much outside.
-        var stroke = Math.Clamp(Math.Round(s * FrameStroke), 1.0, 2.0);
-        var inset = FrameMargin + stroke / 2;
-        var path = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
-        var pathRadius = Math.Max(s * FrameRadius - stroke / 2, 0);
-        context.DrawRectangle(null,
-            new ImmutablePen(new ImmutableSolidColorBrush(color, opacity), stroke),
-            new RoundedRect(path, pathRadius));
+        // The glyph is drawn at its nominal fractions and scaled about the
+        // icon centre, so the whole mark fills the tile.
+        double X(double v) => (0.5 + (v - 0.5) * GlyphScale) * s;
+        double Y(double v) => (0.5 + (v - 0.5) * GlyphScale) * s;
 
         var brush = new ImmutableSolidColorBrush(color, opacity);
 
@@ -184,20 +169,20 @@ public static class TrayIconFactory
         var arrow = new StreamGeometry();
         using (var geometry = arrow.Open())
         {
-            geometry.BeginFigure(new Point((0.5 - ShaftHalf) * s, ShaftTop * s), true);
-            geometry.LineTo(new Point((0.5 + ShaftHalf) * s, ShaftTop * s));
-            geometry.LineTo(new Point((0.5 + ShaftHalf) * s, ShaftBottom * s));
-            geometry.LineTo(new Point((0.5 + HeadHalf) * s, HeadBottom * s));
-            geometry.LineTo(new Point(0.5 * s, TipY * s));
-            geometry.LineTo(new Point((0.5 - HeadHalf) * s, HeadBottom * s));
-            geometry.LineTo(new Point((0.5 - ShaftHalf) * s, ShaftBottom * s));
+            geometry.BeginFigure(new Point(X(0.5 - ShaftHalf), Y(ShaftTop)), true);
+            geometry.LineTo(new Point(X(0.5 + ShaftHalf), Y(ShaftTop)));
+            geometry.LineTo(new Point(X(0.5 + ShaftHalf), Y(ShaftBottom)));
+            geometry.LineTo(new Point(X(0.5 + HeadHalf), Y(HeadBottom)));
+            geometry.LineTo(new Point(X(0.5), Y(TipY)));
+            geometry.LineTo(new Point(X(0.5 - HeadHalf), Y(HeadBottom)));
+            geometry.LineTo(new Point(X(0.5 - ShaftHalf), Y(ShaftBottom)));
             geometry.EndFigure(true);
         }
         context.DrawGeometry(brush, null, arrow);
 
         // The bar below the tip.
-        var height = (BarBottom - BarTop) * s;
-        var bar = new Rect(BarLeft * s, BarTop * s, (BarRight - BarLeft) * s, height);
+        var height = (BarBottom - BarTop) * s * GlyphScale;
+        var bar = new Rect(X(BarLeft), Y(BarTop), (BarRight - BarLeft) * s * GlyphScale, height);
         context.DrawRectangle(brush, null, new RoundedRect(bar, height / 2));
     }
 
