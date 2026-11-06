@@ -22,5 +22,7 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "stale_build_incident": "publish/win-x64/PTMonitor.exe was 10 s older than the artwork commit; the user reported 'still the old icon'. Republished and documented in frontend/quality-guidelines.md."
+  }
 }
