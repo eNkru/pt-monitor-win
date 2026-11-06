@@ -712,3 +712,44 @@ The user runs Windows in dark mode and asked to invert the system-tray icon (bot
 ### Next Steps
 
 - Windows manual check: the tray shows one solid bright arrow-over-bar on a dark taskbar, no leftover outline
+
+
+## Session 16: One fixed tray mark in every theme
+<!-- trellis-session: v=2 fp=835a0453df80d534 -->
+
+**Date**: 2026-11-06
+**Task**: One fixed tray mark in every theme
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+Follow-up to 11-06: the user picked the 'bright tile, dark arrow' artwork and asked for it regardless of the theme colour. The theme dimension is gone from the whole tray factory: Icon(TrayState), BuildIco(TrayState), Render(size, TrayState), a cache keyed by state alone, and a fixed palette (tile #FFFFFF, ink #1F1F1F, error #C42B1C). AppServices lost _trayDark and CurrentTheme(), the ActualThemeVariantChanged subscription (an OS theme switch cannot change the icon any more) and UpdateTray now assigns the icon on a state change only -- the 11-01 crash-prevention rule still holds. Stale 'the tray follows the taskbar' claims fixed in the spec, the README (feature bullet and the macOS-porting table) and the make-app-icon.py docstring. Two trellis-check passes: the second found only stale docs, all fixed.
+
+### Main Changes
+
+- src/PTMonitor.App/Services/TrayIconFactory.cs: no theme parameter; fixed palette; the tile is always drawn
+- src/PTMonitor.App/Services/AppServices.cs: _trayDark/CurrentTheme removed, theme hook removed, assign on a state change
+- .trellis/spec/frontend/lifecycle-and-tray.md: artwork, colour table, theme section, constructor order
+- README.md and scripts/make-app-icon.py: the artwork description
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab6e561` | feat(tray): use the same tray icon in every theme |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+- [OK] in-memory .ico: five 32-bit entries (16/20/24/32/48), straight alpha
+- [OK] rendered previews identical in both themes (artifacts/tray-preview/final/)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows manual check: the bright tile with the dark arrow reads on both a light and a dark taskbar
