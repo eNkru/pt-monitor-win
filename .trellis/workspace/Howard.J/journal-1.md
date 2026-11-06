@@ -593,3 +593,82 @@ change, and the child task is finished.
 - Child `11-05-runtime-polling-performance` is still in planning: the
   hidden-panel rebuild and the per-poll payload (needs design.md + implement.md)
 - Optional: a Windows ReadyToRun A/B, only if the avalonia phase ever matters
+
+
+## Session 14: The idle agent stops working for nobody
+<!-- trellis-session: v=2 fp=9d3f1c7ab42e056 -->
+
+**Date**: 2026-11-06
+**Task**: Steady-state runtime performance (11-05-runtime-polling-performance)
+**Branch**: `main`
+
+### Summary
+
+The second child of the performance parent: the running agent no longer
+rebuilds a panel nobody can see, and no longer pulls the whole torrent list
+from every server on every poll. Two review rounds found four real defects;
+all of them are fixed.
+
+### Main Changes
+
+- Core/Model/PollDetail: `Summary` (rates, counts, connection state, free
+  space) and `Full` (with the torrent list). `ITorrentClient` takes the scope.
+- MonitorStore: one volatile demand flag, a pure `DetailFor` rule, an
+  `AsyncSignal` that interrupts a normal poll interval, and the last full list
+  per server, so a summary poll never empties the panel.
+- qBittorrent: the summary scope sends the last `rid` (the server reports only
+  the changes), the full scope asks for everything (the panel shows exactly
+  what the server has), the merge is a pure function with a superset-based
+  self-heal, and a full re-sync every 5 minutes repairs any drift.
+- Transmission: the summary poll is one `session-stats` request instead of two.
+- App: `PanelViewModel.IsPanelVisible` gates both rebuild triggers and drives
+  the demand; the panel's freshness timer stops with the panel.
+- scripts/fake-qbittorrent.mjs speaks the rid protocol, so the probe against
+  the stub proves the delta path end to end.
+
+### Review findings and fixes
+
+- **H1** — the demand wake-up interrupted the 600 s auth backoff: opening and
+  closing the panel five times would have earned a qBittorrent IP ban. The
+  backoff wait is never interruptible now, and both suites assert that a
+  failing server is polled once while the demand toggles.
+- **H2** — the panel's rows came from the merged delta, so a server that does
+  not report progress-only changes would have frozen the progress bars. The
+  full scope asks for everything; the delta is used for the summary scope only.
+- **F1** — the sticky signal delivered the wake-up twice (two whole-library
+  downloads per panel open). One signal now ends exactly one wait.
+- **F2** — the backoff was detected by magnitude; it is decided by the failure
+  kind now (`MonitorStore.HasBackoff`).
+- **F3** — the self-heal rule could lose a torrent; it is a superset test now.
+- Plus the smaller ones: the tracker fallback is merged, Transmission's scope
+  rule is a pure function, the probe prints the full snapshot and the summary,
+  and the wording in the PRD, the specs and the README no longer overclaims.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f0b5709` | feat(runtime): poll only what is on screen and rebuild only a visible panel |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors (one pre-existing CS8602)
+- [OK] --selftest: 692 checks passed (44 new)
+- [OK] dotnet test: 150 passed (24 new)
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] qBittorrent stub: rid=0 full, then the delta; the merged summary
+      (`totalTorrents` 1 of 2, the delta's speed); WebAPI 4.6 and 5.2 alike
+- [ ] Windows only: the tooltip and chip keep updating, the panel opens with
+      data and stays live, the tray icon still switches Idle/Active, qBittorrent's
+      list matches the server's, the log stays clean for 30 s
+
+### Status
+
+[OK] **Completed — Windows pass pending**
+
+### Next Steps
+
+- User runs the published build on the target machine and reports the manual
+  pass (including: open and close the panel five times, the scope must fall
+  back to the summary every time)
+- Parent task 11-05-performance-startup-runtime is then 2/2 and can be archived
