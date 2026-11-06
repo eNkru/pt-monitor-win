@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray ownership, icon assignment rule, artwork description, packaging rules"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "App layer has no automated gate; the manual checks that replace it"}
