@@ -216,7 +216,7 @@ public class LogTests
     /// <summary>Fails every poll and reports each attempt, so a test can count ticks.</summary>
     private sealed class CountingClient(Action onPoll) : ITorrentClient
     {
-        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
         {
             onPoll();
             return Task.FromException<TransferSnapshot>(
@@ -229,11 +229,114 @@ public class LogTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
+    /// <summary>Records the scope every poll asked for and returns a canned snapshot.</summary>
+    private sealed class ScopeRecordingClient(
+        Action<PollDetail> onPoll,
+        Func<PollDetail, TransferSnapshot>? snapshot = null) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
+        {
+            onPoll(detail);
+            return Task.FromResult(snapshot?.Invoke(detail) ?? new TransferSnapshot { Detail = detail });
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private static string TempDirectory()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-log-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         return directory;
+    }
+}
+
+/// <summary>
+/// <see cref="StartupTrace"/> is process-global (the clock especially), so it
+/// shares the non-parallel logging collection with <see cref="Log"/>.
+/// </summary>
+[Collection("log")]
+public class StartupTraceTests
+{
+    [Fact]
+    public void EmptyListRendersAZeroTimeline() =>
+        Assert.Equal("entry=0.0 total=0.0 ms", StartupTrace.Format([], 0));
+
+    [Fact]
+    public void RendersInFixedCausalOrderWithOneDecimal() =>
+        Assert.Equal("entry=0.0 avalonia=2.5 windows=12.5 custom=1.0 total=12.5 ms", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("windows", 12.5),
+                new StartupMark("avalonia", 2.5),
+                new StartupMark("custom", 1),
+            ], 12.5));
+
+    [Fact]
+    public void RealLaunchOrderStaysChronological() =>
+        Assert.Equal("entry=0.0 glyph=158.4 tray-set=160.2 stores=163.1 total=163.1 ms", StartupTrace.Format(
+            [
+                new StartupMark("entry", 0),
+                new StartupMark("stores", 163.1),
+                new StartupMark("tray-set", 160.2),
+                new StartupMark("glyph", 158.4),
+            ], 163.1));
+
+    [Fact]
+    public void MarkWithoutBeginIsSilent()
+    {
+        var directory = Directory.CreateTempSubdirectory("ptmonitor-startup-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            StartupTrace.Reset();
+
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            Log.Shutdown();
+            StartupTrace.Reset();
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void FlushWritesOneLineAndIsIdempotent()
+    {
+        var directory = Directory.CreateTempSubdirectory("ptmonitor-startup-").FullName;
+        try
+        {
+            var path = Path.Combine(directory, "ptmonitor.log");
+            Log.Initialize(path);
+            StartupTrace.Reset();
+
+            var elapsed = 0.0;
+            StartupTrace.Clock = () => elapsed += 1.5;
+            StartupTrace.Begin();
+            StartupTrace.Mark("log-ready");
+            StartupTrace.Mark("avalonia");
+            StartupTrace.Flush();
+            StartupTrace.Flush();
+            StartupTrace.Mark("windows");
+            Log.Shutdown();
+
+            var lines = File.ReadAllLines(path);
+            Assert.Single(lines);
+            Assert.EndsWith(
+                "startup: timeline entry=0.0 log-ready=1.5 avalonia=3.0 total=3.0 ms", lines[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            Log.Shutdown();
+            StartupTrace.Reset();
+            Directory.Delete(directory, true);
+        }
     }
 }
 
@@ -444,8 +547,389 @@ public class MonitorStoreTests
 
     private sealed class StubClient : ITorrentClient
     {
-        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken) =>
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken) =>
             throw new ServerFailureException(FailureKind.Unreachable, "stub");
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// The two poll scopes: what the loops ask for, what the qBittorrent library
+/// merges into, and what the store keeps when the list is not fetched.
+/// </summary>
+public class PollScopeTests
+{
+    private const string FullUpdate = """
+    {
+      "rid": 7, "full_update": true,
+      "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+      "torrents": {
+        "aaa": { "state": "downloading" },
+        "bbb": { "state": "uploading" }
+      }
+    }
+    """;
+
+    private const string Delta = """
+    {
+      "rid": 8,
+      "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+      "torrents": { "aaa": { "state": "pausedDL" } },
+      "torrents_removed": [ "bbb" ]
+    }
+    """;
+
+    private const string BiggerThanTheLibrary = """
+    {
+      "rid": 9,
+      "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+      "torrents": {
+        "ccc": { "state": "downloading" },
+        "ddd": { "state": "downloading" },
+        "eee": { "state": "downloading" }
+      }
+    }
+    """;
+
+    private const string CoversTheLibrary = """
+    {
+      "rid": 12,
+      "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+      "torrents": {
+        "aaa": { "state": "downloading" },
+        "bbb": { "state": "downloading" },
+        "ccc": { "state": "downloading" }
+      }
+    }
+    """;
+
+    [Theory]
+    [InlineData(false, PollDetail.Summary)]
+    [InlineData(true, PollDetail.Full)]
+    public void TheScopeFollowsTheDemand(bool demand, PollDetail expected) =>
+        Assert.Equal(expected, MonitorStore.DetailFor(demand));
+
+    [Fact]
+    public void AFullUpdateReplacesTheLibrary()
+    {
+        var parsed = Parse(FullUpdate, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        Assert.Equal(2, parsed.Snapshot.TotalTorrents);
+        Assert.Equal(2, parsed.Snapshot.ActiveTorrents);
+        Assert.Equal(7, parsed.Rid);
+        Assert.Equal(2, parsed.Snapshot.Torrents.Count);
+    }
+
+    [Fact]
+    public void ADeltaAppliesChangesAndRemovals()
+    {
+        var full = Parse(FullUpdate, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        var merged = Parse(Delta, PollDetail.Full, full.State, false);
+        Assert.Equal(1, merged.Snapshot.TotalTorrents);
+        Assert.Equal(0, merged.Snapshot.ActiveTorrents);
+        Assert.Equal(200, merged.Snapshot.DownSpeed);
+        Assert.Equal(ConnectionState.Connected, merged.Snapshot.ConnectionState);
+    }
+
+    [Fact]
+    public void TheSummaryCarriesTheCountsButNoList()
+    {
+        var full = Parse(FullUpdate, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        var summary = Parse(Delta, PollDetail.Summary, full.State, false);
+        Assert.Empty(summary.Snapshot.Torrents);
+        Assert.Equal(1, summary.Snapshot.TotalTorrents);
+        Assert.Equal(PollDetail.Summary, summary.Snapshot.Detail);
+    }
+
+    [Fact]
+    public void ABiggerMapThatMissesATorrentIsADelta()
+    {
+        var full = Parse(FullUpdate, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        var bigger = Parse(BiggerThanTheLibrary, PollDetail.Full, full.State, false);
+        // The library keeps the torrent the map does not mention: treating the
+        // map as a full set would lose it.
+        Assert.Equal(5, bigger.Snapshot.TotalTorrents);
+    }
+
+    [Fact]
+    public void AMapThatCoversTheLibraryIsTheWholeLibrary()
+    {
+        var full = Parse(FullUpdate, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        var covering = Parse(CoversTheLibrary, PollDetail.Full, full.State, false);
+        Assert.Equal(3, covering.Snapshot.TotalTorrents);
+    }
+
+    [Fact]
+    public async Task ThePollAsksForTheScopeThePanelNeeds()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            settings.Add(new ServerConfig(ServerKind.Qbittorrent, "192.168.1.2", 8080) { Name = "NAS" });
+            settings.SetPollInterval(1);
+
+            var scopes = new List<PollDetail>();
+            var polled = new SemaphoreSlim(0);
+            using var monitor = new MonitorStore(settings, new InMemorySecretStore(),
+                (config, password) => new ScopeRecordingClient(detail =>
+                {
+                    lock (scopes) scopes.Add(detail);
+                    polled.Release();
+                }));
+            try
+            {
+                monitor.Start();
+                Assert.True(await polled.WaitAsync(TimeSpan.FromSeconds(10)));
+                Assert.Equal(PollDetail.Summary, scopes[0]);
+
+                monitor.SetListDemand(true);
+                Assert.True(await polled.WaitAsync(TimeSpan.FromSeconds(10)));
+                // The scope is not pinned to an index: a slow machine may poll
+                // once more before the demand lands.
+                lock (scopes)
+                {
+                    Assert.Contains(PollDetail.Full, scopes.Skip(1));
+                }
+                Assert.True(monitor.ListDemand);
+            }
+            finally
+            {
+                await monitor.StopAsync();
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task ABackoffIsNotInterruptedByTheDemand()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            settings.Add(new ServerConfig(ServerKind.Qbittorrent, "192.168.1.4", 8080) { Name = "NAS" });
+            settings.SetPollInterval(1);
+
+            var attempts = new int[1];
+            var secondAttempt = new TaskCompletionSource();
+            var attempted = new SemaphoreSlim(0);
+            using var monitor = new MonitorStore(settings, new InMemorySecretStore(),
+                (config, password) => new FailingClient(ServerFailure.Auth("wrong password"), () =>
+                {
+                    if (Interlocked.Increment(ref attempts[0]) >= 2) secondAttempt.TrySetResult();
+                    attempted.Release();
+                }));
+            try
+            {
+                monitor.Start();
+                Assert.True(await attempted.WaitAsync(TimeSpan.FromSeconds(10)));
+                monitor.SetListDemand(true);
+                monitor.SetListDemand(false);
+                // A broken implementation would poll again at once; the wait
+                // gives it the chance to show that.
+                var again = await Task.WhenAny(secondAttempt.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+                Assert.NotEqual(secondAttempt.Task, again);
+                Assert.Equal(1, attempts[0]);
+            }
+            finally
+            {
+                await monitor.StopAsync();
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task ASignalIsNotLostBetweenTwoWaits()
+    {
+        var signal = new AsyncSignal();
+        signal.Signal();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await signal.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
+
+        var waking = new AsyncSignal();
+        var wait = waking.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        waking.Signal();
+        var woken = await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.Equal(wait, woken);
+    }
+
+    [Fact]
+    public async Task OneSignalEndsOneWait()
+    {
+        var signal = new AsyncSignal();
+        signal.Signal();
+        await signal.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        var after = System.Diagnostics.Stopwatch.StartNew();
+        await signal.WaitAsync(TimeSpan.FromMilliseconds(300), CancellationToken.None);
+        Assert.True(after.Elapsed >= TimeSpan.FromMilliseconds(250));
+    }
+
+    [Theory]
+    [InlineData(PollDetail.Summary, false)]
+    [InlineData(PollDetail.Full, true)]
+    public void OnlyTheFullScopeAsksForTheTorrentList(PollDetail detail, bool expected) =>
+        Assert.Equal(expected, TransmissionClient.NeedsTorrentList(detail));
+
+    [Theory]
+    [InlineData(FailureKind.Auth, true)]
+    [InlineData(FailureKind.Banned, true)]
+    [InlineData(FailureKind.Unreachable, false)]
+    [InlineData(FailureKind.ProtocolViolation, false)]
+    public void OnlyTheHardFailuresBackOff(FailureKind kind, bool expected) =>
+        Assert.Equal(expected, MonitorStore.HasBackoff(kind));
+
+    [Fact]
+    public void NoFailureDoesNotBackOff() => Assert.False(MonitorStore.HasBackoff(null));
+
+    [Theory]
+    [InlineData(PollDetail.Full, false, 5, 0, 0)]
+    [InlineData(PollDetail.Summary, true, 5, 0, 0)]
+    [InlineData(PollDetail.Summary, false, 5, 0, 5)]
+    [InlineData(PollDetail.Summary, false, 5, 6, 0)]
+    public void TheRidAsksForEverythingOrForTheChanges(
+        PollDetail detail, bool libraryEmpty, int lastRid, int minutesSinceFullSync, int expected)
+    {
+        var now = DateTimeOffset.UnixEpoch;
+        Assert.Equal(expected, QBittorrentClient.NextRid(
+            detail, libraryEmpty, lastRid, now.AddMinutes(minutesSinceFullSync), now, TimeSpan.FromMinutes(5)));
+    }
+
+    [Fact]
+    public void TheTrackerFallbackSurvivesADelta()
+    {
+        var withTracker = """
+        {
+          "rid": 10, "full_update": true,
+          "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+          "trackers": { "https://tracker.example/announce": [ "aaa" ] },
+          "torrents": { "aaa": { "state": "downloading" } }
+        }
+        """;
+        var tracked = Parse(withTracker, PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        Assert.Equal("https://tracker.example/announce", tracked.State.Trackers.GetValueOrDefault("aaa"));
+
+        var withoutTrackers = """
+        {
+          "rid": 11,
+          "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+          "torrents": { "aaa": { "state": "downloading" } }
+        }
+        """;
+        var kept = Parse(withoutTrackers, PollDetail.Full, tracked.State, false);
+        Assert.Equal("https://tracker.example/announce", kept.State.Trackers.GetValueOrDefault("aaa"));
+    }
+
+    [Fact]
+    public async Task ASummaryPollKeepsTheList()
+    {
+        var directory = TempDirectory();
+        try
+        {
+            var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var server = new ServerConfig(ServerKind.Qbittorrent, "192.168.1.3", 8080) { Name = "NAS" };
+            settings.Add(server);
+            settings.SetPollInterval(1);
+
+            var full = new TransferSnapshot
+            {
+                DownSpeed = 100,
+                TotalTorrents = 2,
+                Detail = PollDetail.Full,
+                Torrents =
+                [
+                    new TorrentSummary { Id = "aaa", Name = "one" },
+                    new TorrentSummary { Id = "bbb", Name = "two" },
+                ],
+            };
+            var summary = new TransferSnapshot { DownSpeed = 999, TotalTorrents = 2, Detail = PollDetail.Summary };
+            var published = new SemaphoreSlim(0);
+            using var monitor = new MonitorStore(settings, new InMemorySecretStore(),
+                (config, password) => new ScopeRecordingClient(
+                    recorded => { },
+                    detail => detail == PollDetail.Full ? full : summary));
+            // Only the online states count: the reconcile publishes the
+            // "connecting" state before the first poll.
+            monitor.StatusesChanged += (_, _) =>
+            {
+                if (monitor.Statuses.Values.Any(state => state is ServerStatus.Online)) published.Release();
+            };
+            try
+            {
+                monitor.SetListDemand(true);
+                monitor.Start();
+                Assert.True(await published.WaitAsync(TimeSpan.FromSeconds(10)));
+
+                monitor.SetListDemand(false);
+                Assert.True(await published.WaitAsync(TimeSpan.FromSeconds(10)));
+
+                var status = Assert.IsType<ServerStatus.Online>(monitor.Statuses[server.Id]);
+                Assert.Equal(2, status.Value.Torrents.Count);
+                Assert.Equal(PollDetail.Summary, status.Value.Detail);
+                Assert.Equal(999, status.Value.DownSpeed);
+            }
+            finally
+            {
+                await monitor.StopAsync();
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static QBittorrentParser.QbMainData Parse(
+        string json,
+        PollDetail detail,
+        QBittorrentParser.QbLibraryState current,
+        bool forceFull) =>
+        QBittorrentParser.ParseMainData(
+            System.Text.Encoding.UTF8.GetBytes(json),
+            new WebApiVersion(2, 11, 2),
+            detail,
+            current,
+            forceFull);
+
+    private static string TempDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "ptmonitor-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    /// <summary>Records the scope every poll asked for and returns a canned snapshot.</summary>
+    private sealed class ScopeRecordingClient(
+        Action<PollDetail> onPoll,
+        Func<PollDetail, TransferSnapshot>? snapshot = null) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
+        {
+            onPoll(detail);
+            return Task.FromResult(snapshot?.Invoke(detail) ?? new TransferSnapshot { Detail = detail });
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>Fails every poll with a given cause, so a test can count the attempts.</summary>
+    private sealed class FailingClient(ServerFailure failure, Action? onPoll = null) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
+        {
+            onPoll?.Invoke();
+            return Task.FromException<TransferSnapshot>(new ServerFailureException(failure));
+        }
+
         public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

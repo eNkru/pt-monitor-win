@@ -32,6 +32,13 @@
 // Expected: a JSON snapshot and exit 0. Wrong credentials must report
 // "auth failed" (not "banned") for the first 5 attempts, and only then
 // "banned". Repeat with WEBAPI=5.2 — the outcome must be identical.
+//
+// The maindata endpoint speaks the rid protocol: the first request (rid=0)
+// gets the whole library, every later request gets only what changed. The
+// probe polls twice -- once for the list, once for the summary -- so the
+// answer it prints comes from a merged delta: one torrent left, one removed,
+// and the doubled download speed of the delta response. The stub's log must
+// not contain "UNEXPECTED rid".
 
 import http from "node:http";
 
@@ -44,6 +51,7 @@ const port = Number(process.argv[2] ?? 18080);
 
 let failCount = 0;
 let banned = false;
+let lastIssuedRid = 0;
 
 const server = http.createServer((request, response) => {
   const log = (message) => process.stderr.write(`stub: ${message}\n`);
@@ -113,20 +121,56 @@ const server = http.createServer((request, response) => {
   } else if (url.pathname.startsWith("/api/v2/sync/maindata")) {
     const a = "a".repeat(40);
     const b = "b".repeat(40);
-    respond(200, JSON.stringify({
-      rid: 1,
-      full_update: true,
-      torrents: {
-        [a]: { hash: a, name: "t1", state: "downloading" },
-        [b]: { hash: b, name: "t2", state: "stalledUP" },
-      },
-      server_state: {
-        dl_info_speed: 1258291,
-        up_info_speed: 348160,
-        connection_status: "connected",
-        free_space_on_disk: 442918502400,
-      },
-    }));
+    // The rid protocol: rid=0 (or none) is a full update, every later rid
+    // gets only the torrents that changed plus the ones that are gone. The
+    // client merges the deltas into its library, so the counts stay exact
+    // without the whole library in every response. An unknown rid gets a full
+    // update, exactly like a real server.
+    const rid = Number(url.searchParams.get("rid") ?? 0);
+    const serverState = {
+      dl_info_speed: 1258291,
+      up_info_speed: 348160,
+      connection_status: "connected",
+      free_space_on_disk: 442918502400,
+    };
+    const deltaServerState = {
+      ...serverState,
+      dl_info_speed: 2516582,
+    };
+    if (rid === 0) {
+      lastIssuedRid = 2;
+      log(`maindata -> full update (rid=${lastIssuedRid})`);
+      respond(200, JSON.stringify({
+        rid: lastIssuedRid,
+        full_update: true,
+        torrents: {
+          [a]: { hash: a, name: "t1", state: "downloading" },
+          [b]: { hash: b, name: "t2", state: "stalledUP" },
+        },
+        server_state: serverState,
+      }));
+    } else if (rid === lastIssuedRid) {
+      lastIssuedRid = rid + 1;
+      log(`maindata -> delta (rid=${lastIssuedRid})`);
+      respond(200, JSON.stringify({
+        rid: lastIssuedRid,
+        torrents: { [a]: { hash: a, name: "t1", state: "uploading" } },
+        torrents_removed: [b],
+        server_state: deltaServerState,
+      }));
+    } else {
+      log(`maindata -> UNEXPECTED rid ${rid} (expected ${lastIssuedRid}); full update`);
+      lastIssuedRid = 2;
+      respond(200, JSON.stringify({
+        rid: lastIssuedRid,
+        full_update: true,
+        torrents: {
+          [a]: { hash: a, name: "t1", state: "downloading" },
+          [b]: { hash: b, name: "t2", state: "stalledUP" },
+        },
+        server_state: serverState,
+      }));
+    }
   } else {
     respond(404, "not found");
   }

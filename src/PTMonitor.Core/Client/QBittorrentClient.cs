@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using PTMonitor.Core.Model;
@@ -96,14 +97,22 @@ public static class QBittorrentParser
         return seconds;
     }
 
-    public static List<TorrentSummary> Summaries(JsonObject torrents, JsonObject? trackers = null)
+    public static List<TorrentSummary> Summaries(JsonObject torrents, JsonObject? trackers = null) =>
+        SummariesWithFallback(torrents, TrackersByHash(trackers));
+
+    /// <summary>
+    /// Parses the torrent map with an already inverted tracker map. The merged
+    /// library needs the fallback without re-inverting it for every delta.
+    /// </summary>
+    public static List<TorrentSummary> SummariesWithFallback(
+        JsonObject torrents,
+        IReadOnlyDictionary<string, string>? fallbackTrackers)
     {
-        var fallbackTrackers = TrackersByHash(trackers);
         var result = new List<TorrentSummary>(torrents.Count);
         foreach (var (hash, value) in torrents)
         {
             if (value is not JsonObject entry) continue;
-            var announce = Json.String(entry["tracker"]) ?? fallbackTrackers.GetValueOrDefault(hash);
+            var announce = Json.String(entry["tracker"]) ?? fallbackTrackers?.GetValueOrDefault(hash);
             result.Add(new TorrentSummary
             {
                 Id = hash,
@@ -173,45 +182,172 @@ public static class QBittorrentParser
         return string.IsNullOrEmpty(category) ? null : category;
     }
 
-    public static TransferSnapshot Snapshot(byte[] data, WebApiVersion? webApiVersion, DateTimeOffset? fetchedAt = null)
+    public static TransferSnapshot Snapshot(byte[] data, WebApiVersion? webApiVersion, DateTimeOffset? fetchedAt = null) =>
+        ParseMainData(data, webApiVersion, PollDetail.Full, QbLibraryState.Empty, true, fetchedAt).Snapshot;
+
+    /// <summary>
+    /// The merged library of one qBittorrent server: the torrents, the tracker
+    /// fallback and the last server state. The client keeps it between polls,
+    /// so a delta response only has to carry what changed.
+    /// </summary>
+    public sealed record QbLibraryState(
+        IReadOnlyDictionary<string, TorrentSummary> Library,
+        IReadOnlyDictionary<string, string> Trackers,
+        JsonObject? ServerState)
+    {
+        public static QbLibraryState Empty { get; } = new(
+            new Dictionary<string, TorrentSummary>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            null);
+    }
+
+    /// <summary>What one <c>sync/maindata</c> response says.</summary>
+    public sealed record QbMainData(int Rid, bool FullUpdate, QbLibraryState State, TransferSnapshot Snapshot);
+
+    /// <summary>
+    /// Merges a response into the library. A full update replaces everything; a
+    /// delta applies the changed entries and drops the removed ones.
+    ///
+    /// A map that holds **every** torrent of the current library is the whole
+    /// library, even when the server did not label it as a full update — that
+    /// is the self-heal. The test is a superset, not a size: a delta that is
+    /// bigger than the library but misses a torrent is a delta, and treating it
+    /// as a full set would lose the missing torrent.
+    /// </summary>
+    public static QbLibraryState MergeLibrary(
+        QbLibraryState current,
+        JsonObject? torrents,
+        JsonArray? removedTorrents,
+        JsonObject? trackers,
+        JsonObject? serverState,
+        bool fullUpdate)
+    {
+        var parsed = torrents is null
+            ? new List<TorrentSummary>()
+            : SummariesWithFallback(torrents, TrackersByHash(trackers));
+        var parsedIds = parsed.Select(summary => summary.Id).ToHashSet(StringComparer.Ordinal);
+        var coversLibrary = current.Library.Count == 0
+            || current.Library.Keys.All(id => parsedIds.Contains(id));
+        var full = fullUpdate || coversLibrary;
+        var library = full
+            ? new Dictionary<string, TorrentSummary>(StringComparer.Ordinal)
+            : new Dictionary<string, TorrentSummary>(current.Library, StringComparer.Ordinal);
+        foreach (var summary in parsed) library[summary.Id] = summary;
+        if (removedTorrents is not null)
+        {
+            foreach (var node in removedTorrents)
+            {
+                if (Json.String(node) is { } id) library.Remove(id);
+            }
+        }
+
+        // The tracker fallback is merged, not replaced: a delta carries only
+        // the announce URLs of the torrents it mentions, and the others still
+        // need theirs for the site label.
+        var mergedTrackers = new Dictionary<string, string>(current.Trackers, StringComparer.Ordinal);
+        if (full)
+        {
+            var fresh = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (trackers is not null)
+            {
+                foreach (var (hash, url) in TrackersByHash(trackers)) fresh[hash] = url;
+            }
+            // The old entries survive for the torrents that are still there.
+            foreach (var (hash, url) in current.Trackers)
+            {
+                if (library.ContainsKey(hash)) fresh.TryAdd(hash, url);
+            }
+            mergedTrackers = fresh;
+        }
+        else if (trackers is not null)
+        {
+            foreach (var (hash, url) in TrackersByHash(trackers)) mergedTrackers[hash] = url;
+        }
+        if (removedTorrents is not null)
+        {
+            foreach (var node in removedTorrents)
+            {
+                if (Json.String(node) is { } id) mergedTrackers.Remove(id);
+            }
+        }
+
+        return new QbLibraryState(
+            library,
+            mergedTrackers,
+            serverState ?? current.ServerState);
+    }
+
+    /// <summary>
+    /// Parses one <c>sync/maindata</c> response into the merged library and the
+    /// snapshot the caller asked for. <paramref name="forceFull"/> marks the
+    /// request that asked for everything (<c>rid=0</c>), which the server
+    /// answers with the whole library.
+    /// </summary>
+    public static QbMainData ParseMainData(
+        byte[] data,
+        WebApiVersion? webApiVersion,
+        PollDetail detail,
+        QbLibraryState current,
+        bool forceFull,
+        DateTimeOffset? fetchedAt = null)
     {
         var root = Json.Object(data);
-        if (root["server_state"] is not JsonObject serverState)
+        var rid = (int)(Json.Int64(root["rid"]) ?? 0);
+        var fullUpdate = forceFull || (Json.Bool(root["full_update"]) ?? false);
+        var serverState = root["server_state"] as JsonObject;
+        if (serverState is null && current.ServerState is null)
             throw new ServerFailureException(FailureKind.ProtocolViolation,
                 "sync/maindata response is missing server_state");
 
+        var state = MergeLibrary(
+            current,
+            root["torrents"] as JsonObject,
+            root["torrents_removed"] as JsonArray,
+            root["trackers"] as JsonObject,
+            serverState,
+            fullUpdate);
+
         long? freeSpace = null;
         if (webApiVersion is { } version && version >= WebApiVersion.V2_1_1)
-            freeSpace = Json.Int64(serverState["free_space_on_disk"]);
+            freeSpace = Json.Int64(state.ServerState?["free_space_on_disk"]);
 
-        var torrents = root["torrents"] as JsonObject ?? [];
-        var summaries = Summaries(torrents, root["trackers"] as JsonObject);
-        var active = summaries.Count(summary =>
+        var active = state.Library.Values.Count(summary =>
             summary.State is TorrentState.Downloading or TorrentState.Seeding or TorrentState.Stalled);
 
-        return new TransferSnapshot
+        var snapshot = new TransferSnapshot
         {
-            DownSpeed = Json.Int64(serverState["dl_info_speed"]) ?? 0,
-            UpSpeed = Json.Int64(serverState["up_info_speed"]) ?? 0,
+            DownSpeed = Json.Int64(state.ServerState?["dl_info_speed"]) ?? 0,
+            UpSpeed = Json.Int64(state.ServerState?["up_info_speed"]) ?? 0,
             ActiveTorrents = active,
-            TotalTorrents = torrents.Count,
+            TotalTorrents = state.Library.Count,
             FreeSpace = freeSpace,
-            ConnectionState = ConnectionStateFrom(Json.String(serverState["connection_status"])),
+            ConnectionState = ConnectionStateFrom(Json.String(state.ServerState?["connection_status"])),
             FetchedAt = fetchedAt ?? DateTimeOffset.Now,
-            Torrents = TorrentSummary.Sorted(summaries),
+            Torrents = detail == PollDetail.Full ? TorrentSummary.Sorted(state.Library.Values) : [],
+            Detail = detail,
         };
+        return new QbMainData(rid, fullUpdate, state, snapshot);
     }
 }
 
 /// <summary>qBittorrent WebUI API v2 client.</summary>
 public sealed class QBittorrentClient : ITorrentClient
 {
+    /// <summary>
+    /// How often the library is fetched from scratch. The deltas in between
+    /// carry only what changed; a full re-sync now and then repairs any drift.
+    /// </summary>
+    public static readonly TimeSpan FullSyncInterval = TimeSpan.FromMinutes(5);
+
     private readonly ServerConfig _config;
     private readonly string _password;
     private readonly HttpTransport _transport;
     private readonly SemaphoreSlim _loginLock = new(1, 1);
     private WebApiVersion? _cachedWebApiVersion;
     private bool _loggedIn;
+    private int _rid;
+    private QBittorrentParser.QbLibraryState _state = QBittorrentParser.QbLibraryState.Empty;
+    private DateTimeOffset _lastFullSync = DateTimeOffset.MinValue;
 
     public QBittorrentClient(ServerConfig config, string? password, Action<string>? onCertificateAccepted = null)
     {
@@ -220,14 +356,47 @@ public sealed class QBittorrentClient : ITorrentClient
         _transport = new HttpTransport(config, password, onCertificateAccepted);
     }
 
-    public async Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
     {
         await EnsureLoggedInAsync(cancellationToken);
         var version = await GetWebApiVersionAsync(cancellationToken);
+        // The rid decides what the server sends: 0 asks for everything, the
+        // last rid asks only for the changes.
+        var rid = NextRid(detail, _state.Library.Count == 0, _rid, DateTimeOffset.Now, _lastFullSync, FullSyncInterval);
         var response = await AuthorizedGetAsync("/api/v2/sync/maindata",
-            [new KeyValuePair<string, string>("rid", "0")], cancellationToken);
+            [new KeyValuePair<string, string>("rid", rid.ToString(CultureInfo.InvariantCulture))], cancellationToken);
         CheckStatus(response, "sync/maindata");
-        return QBittorrentParser.Snapshot(response.Body, version);
+        var parsed = QBittorrentParser.ParseMainData(response.Body, version, detail, _state, rid == 0);
+        _state = parsed.State;
+        if (parsed.Rid > 0) _rid = parsed.Rid;
+        if (parsed.FullUpdate) _lastFullSync = DateTimeOffset.Now;
+        return parsed.Snapshot;
+    }
+
+    /// <summary>
+    /// The rid the next request carries.
+    ///
+    /// The **full** scope always asks for everything (<c>rid=0</c>): the panel
+    /// shows the list, and it has to show exactly what the server has — a
+    /// delta only reports what the server considers changed, and that must not
+    /// decide what a progress bar shows.
+    ///
+    /// The **summary** scope asks for the changes since the last rid, so the
+    /// payload follows the churn instead of the library size. A full re-sync
+    /// every <see cref="FullSyncInterval"/> repairs any drift.
+    /// </summary>
+    public static int NextRid(
+        PollDetail detail,
+        bool libraryEmpty,
+        int lastRid,
+        DateTimeOffset now,
+        DateTimeOffset lastFullSync,
+        TimeSpan fullSyncInterval)
+    {
+        if (detail == PollDetail.Full) return 0;
+        if (libraryEmpty) return 0;
+        if (now - lastFullSync >= fullSyncInterval) return 0;
+        return lastRid;
     }
 
     public async Task<string> TestConnectionAsync(CancellationToken cancellationToken)

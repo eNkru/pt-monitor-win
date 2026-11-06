@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using PTMonitor.Core.Client;
 using PTMonitor.Core.Diagnostics;
@@ -34,41 +35,60 @@ public sealed class AppServices
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
     private MenuBarState? _trayState;
+    private bool? _trayDark;
     private bool _quitRequested;
 
     private AppServices()
     {
-        // Assign first: the first-run preferences window opens synchronously from
-        // this constructor and reaches back through AppServices.Instance.
+        // Assign first: the first-run preferences window (now posted, but built
+        // from a callback that can run as soon as the loop pumps) reaches back
+        // through AppServices.Instance.
         Instance = this;
 
         Settings = new SettingsStore(AppPaths.SettingsFile);
-        Secrets = new DpapiSecretStore(AppPaths.SecretsFile);
-        Monitor = new MonitorStore(Settings, Secrets, ClientFactory);
-        // Second half of the startup event (Program.cs logs version, OS and the
-        // data directory): the secret store is created here, so its state is
-        // only known now.
-        Log.Info("startup", $"secret store: {Secrets.State}");
-
+        // Before BuildMenu below: the menu titles are localized.
         L10n.SetLanguage(Settings.AppLanguage);
-        Settings.Changed += OnSettingsChanged;
 
         // Graph mode samples once a second so the line rolls even while the
         // rates are steady (StatusesChanged only fires on a real change).
         _floatingTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _floatingTicker.Tick += (_, _) => PushFloatingSample();
 
+        // The tray icon is the app, so it gets set before everything that can
+        // block (DPAPI) or paint (windows). That is the whole launch target.
         _trayIcon = new TrayIcon
         {
-            Icon = TrayIconFactory.Idle(),
+            Icon = TrayIconFactory.Icon(TrayState.Idle, CurrentTheme()),
             ToolTipText = "PT Monitor",
             Menu = BuildMenu(),
         };
+        StartupTrace.Mark("glyph");
         TrayIcon.SetIcons(GetApp(), [_trayIcon]);
+        StartupTrace.Mark("tray-set");
+
+        // The secret store follows the icon on purpose: DPAPI is the last thing
+        // that used to sit in front of a visible tray. Second half of the
+        // startup event (Program.cs logs version, OS and the data directory):
+        // the store is created here, so its state is only known now.
+        Secrets = new DpapiSecretStore(AppPaths.SecretsFile);
+        StartupTrace.Mark("stores");
+        Log.Info("startup", $"secret store: {Secrets.State}");
+
+        Monitor = new MonitorStore(Settings, Secrets, ClientFactory);
+
+        // The tray glyph follows the taskbar, so it has to be redrawn when the
+        // OS switches between light and dark. Avalonia's Win32 backend reports
+        // that as WM_SETTINGCHANGE/"ImmersiveColorSet". Next to the icon it
+        // affects.
+        if (Application.Current is { } app)
+            app.ActualThemeVariantChanged += (_, _) => UpdateTray();
 
         // Poll loops publish from a thread-pool thread; tray updates must
         // reach the UI thread (see .trellis/spec/frontend/state-management.md).
         Monitor.StatusesChanged += (_, _) => Dispatcher.UIThread.Post(UpdateTray);
+        // Only now: OnSettingsChanged assigns _trayIcon.Menu and calls through
+        // the ticker and the monitor, and all three exist by this point.
+        Settings.Changed += OnSettingsChanged;
         UpdateTray();
         Monitor.Start();
 
@@ -76,13 +96,19 @@ public sealed class AppServices
         // opens the native menu above).
         _trayIcon.Clicked += (_, _) => TogglePanel();
 
-        SyncFloatingWindow();
-
-        if (Settings.Servers.Count == 0)
-        {
-            // First run: open the preferences directly (AC4).
-            ShowPreferences();
-        }
+        // Optional windows are off the critical path: posted at Background
+        // priority so the icon's first frame and the message loop win the
+        // queue. First-run Preferences still opens unconditionally -- the
+        // server count is read now, not at construction time.
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                SyncFloatingWindow();
+                if (Settings.Servers.Count == 0) ShowPreferences();
+                StartupTrace.Mark("windows");
+                StartupTrace.Flush();
+            },
+            DispatcherPriority.Background);
     }
 
     public static void Initialize()
@@ -163,29 +189,46 @@ public sealed class AppServices
         SyncFloatingWindow();
     }
 
+    /// <summary>
+    /// The OS light/dark variant. The app requests the default variant, so
+    /// this follows the Windows setting -- and the taskbar with it.
+    /// </summary>
+    private static ThemeVariant CurrentTheme() =>
+        Application.Current?.ActualThemeVariant ?? ThemeVariant.Light;
+
     private void UpdateTray()
     {
         var state = Monitor.MenuBarState;
+        var dark = CurrentTheme() == ThemeVariant.Dark;
         // Only touch Icon on a real transition. Reassigning it every poll drew a
         // new bitmap (never disposed) and rebuilt the native icon each time --
         // ~1800/hour at the default 2 s interval -- until CreateIcon failed and
         // the exception took the process down (event log 1026).
-        if (state != _trayState)
+        if (state != _trayState || dark != _trayDark)
         {
+            // The pair is recorded *before* the assignment on purpose: a failed
+            // assignment must not be retried on every poll, or the native icon
+            // would be rebuilt over and over -- the churn that crashed the app
+            // (event log 1026, .trellis/tasks/11-01-tray-icon-crash). The icon
+            // is refreshed on the next real transition instead.
             _trayState = state;
+            _trayDark = dark;
             try
             {
-                _trayIcon.Icon = state switch
-                {
-                    MenuBarState.Error => TrayIconFactory.Error(),
-                    MenuBarState.Active => TrayIconFactory.Active(),
-                    _ => TrayIconFactory.Idle(),
-                };
+                _trayIcon.Icon = TrayIconFactory.Icon(
+                    state switch
+                    {
+                        MenuBarState.Error => TrayState.Error,
+                        MenuBarState.Active => TrayState.Active,
+                        _ => TrayState.Idle,
+                    },
+                    dark ? ThemeVariant.Dark : ThemeVariant.Light);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 // The icon is cosmetic: keep the previous one and stay alive.
                 // A failure here must never terminate the agent.
+                Log.Warn("tray", $"tray icon update failed: {exception.Message}");
             }
         }
 
@@ -254,7 +297,7 @@ public sealed class AppServices
     {
         if (_panel is { IsVisible: true } visible)
         {
-            visible.Hide();
+            visible.HidePanel();
             return;
         }
         ShowPanel();
@@ -292,7 +335,7 @@ public sealed class AppServices
 
     public void HidePanel()
     {
-        if (_panel is { IsVisible: true } panel) panel.Hide();
+        if (_panel is { IsVisible: true } panel) panel.HidePanel();
     }
 
     public void ShowPreferences()
@@ -311,6 +354,32 @@ public sealed class AppServices
     {
         _ = Monitor.RefreshNowAsync();
     }
+
+    /// <summary>
+    /// Opens the web console of the first enabled server in the default
+    /// browser. The URL is the one the model owns
+    /// (<see cref="ServerConfig.WebUiUri"/>): qBittorrent serves it at the
+    /// root, Transmission under /transmission/web/.
+    /// </summary>
+    public void OpenFirstServerWebConsole()
+    {
+        var server = Settings.Servers.FirstOrDefault(candidate => candidate.IsEnabled);
+        if (server is null) return;
+        Uri uri;
+        try { uri = server.WebUiUri(); }
+        catch
+        {
+            // An unusable host silently does nothing (the menu item stays).
+            return;
+        }
+        UrlLauncher.Open(uri);
+    }
+
+    /// <summary>
+    /// Hides the floating speed widget and remembers the choice, so it stays
+    /// hidden across restarts. The tray menu toggle brings it back.
+    /// </summary>
+    public void HideFloatingSpeedWindow() => Settings.SetShowFloatingSpeeds(false);
 
     public void Quit()
     {

@@ -70,8 +70,22 @@ public static class ProbeRunner
             client = options.Kind == ServerKind.Qbittorrent
                 ? new QBittorrentClient(config, options.Password)
                 : new TransmissionClient(config, options.Password);
-            var snapshot = await client.FetchSnapshotAsync(CancellationToken.None);
-            Console.Out.WriteLine(Encode(snapshot, config));
+            // Two polls: the first asks for the whole list, the second for the
+            // summary. The second one answers with the server's delta
+            // (qBittorrent), so it proves that the client keeps the rid and
+            // merges the changes. A failure there is reported but does not
+            // fail the probe -- the first snapshot is still a valid answer.
+            var snapshot = await client.FetchSnapshotAsync(PollDetail.Full, CancellationToken.None);
+            TransferSnapshot? summary = null;
+            try
+            {
+                summary = await client.FetchSnapshotAsync(PollDetail.Summary, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"probe: the summary poll failed: {exception.Message}");
+            }
+            Console.Out.WriteLine(Encode(snapshot, summary, config));
             return 0;
         }
         catch (ServerFailureException failure)
@@ -149,7 +163,15 @@ public static class ProbeRunner
         return new Options(kind.Value, host, port ?? kind.Value.DefaultPort(), username, password, useTls, allowInsecureTls);
     }
 
-    public static string Encode(TransferSnapshot snapshot, ServerConfig config)
+    public static string Encode(TransferSnapshot snapshot, ServerConfig config) =>
+        Encode(snapshot, null, config);
+
+    /// <summary>
+    /// The probe prints the full snapshot (with the list) and, when the second
+    /// poll answered, the summary's counters next to it -- that pair is what
+    /// proves the delta path.
+    /// </summary>
+    public static string Encode(TransferSnapshot snapshot, TransferSnapshot? summary, ServerConfig config)
     {
         var root = new JsonObject
         {
@@ -163,6 +185,7 @@ public static class ProbeRunner
             },
             ["snapshot"] = new JsonObject
             {
+                ["scope"] = snapshot.Detail.ToString().ToLowerInvariant(),
                 ["downSpeed"] = snapshot.DownSpeed,
                 ["upSpeed"] = snapshot.UpSpeed,
                 ["activeTorrents"] = snapshot.ActiveTorrents,
@@ -182,6 +205,18 @@ public static class ProbeRunner
                 }).ToArray()),
             },
         };
+        if (summary is not null)
+        {
+            root["summary"] = new JsonObject
+            {
+                ["scope"] = summary.Detail.ToString().ToLowerInvariant(),
+                ["downSpeed"] = summary.DownSpeed,
+                ["upSpeed"] = summary.UpSpeed,
+                ["activeTorrents"] = summary.ActiveTorrents,
+                ["totalTorrents"] = summary.TotalTorrents,
+                ["fetchedAt"] = summary.FetchedAt.ToUniversalTime().ToString("O"),
+            };
+        }
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 }

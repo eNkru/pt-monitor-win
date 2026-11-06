@@ -14,6 +14,7 @@
 | Expanded row, freshness text, section list | `PanelViewModel` | view-model properties |
 | Form contents, `_isTesting`, `_loadingUi` | the window's code-behind | fields |
 | Which tray icon/window is shown | `AppServices` | private fields |
+| What the polls have to fetch (the list or the summary only) | `MonitorStore` | `Monitor.ListDemand`, set from `PanelViewModel.IsPanelVisible` |
 
 No state is duplicated across these. A view-model never caches a server list it
 read from settings — it re-reads on each `Rebuild`.
@@ -48,8 +49,8 @@ AppServices.Instance.Settings.SetAppLanguage(item.Language);
   ```
 
 - `Settings.Changed` drives everything downstream: `MonitorStore.Reconcile`,
-  `PanelViewModel.Rebuild`, `AppServices.OnSettingsChanged` (language + menu
-  rebuild + tray refresh).
+  `PanelViewModel.Rebuild` (only while the panel is on screen),
+  `AppServices.OnSettingsChanged` (language + menu rebuild + tray refresh).
 
 ---
 

@@ -126,21 +126,45 @@ public sealed class TransmissionClient : ITorrentClient
         }
     }
 
-    public async Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
     {
+        // session-stats already carries the rates and the counts: the summary
+        // needs nothing else. The torrent list is only asked for when the
+        // panel shows it.
         var stats = await RpcAsync("session-stats", null, cancellationToken);
-        var snapshot = TransmissionParser.SnapshotFromSessionStats(stats);
+        var baseSnapshot = TransmissionParser.SnapshotFromSessionStats(stats);
 
-        var torrentArguments = await RpcAsync("torrent-get",
-            new JsonObject { ["fields"] = new JsonArray(TransmissionParser.TorrentFields.Select(f => JsonValue.Create(f)).ToArray()) },
-            cancellationToken);
-        if (torrentArguments["torrents"] is JsonArray list)
-            snapshot.Torrents = TorrentSummary.Sorted(TransmissionParser.Summaries(list));
+        var torrents = new List<TorrentSummary>();
+        if (NeedsTorrentList(detail))
+        {
+            var torrentArguments = await RpcAsync("torrent-get",
+                new JsonObject { ["fields"] = new JsonArray(TransmissionParser.TorrentFields.Select(f => JsonValue.Create(f)).ToArray()) },
+                cancellationToken);
+            if (torrentArguments["torrents"] is JsonArray list)
+                torrents = TorrentSummary.Sorted(TransmissionParser.Summaries(list));
+        }
 
-        if (await FreeSpaceIfDueAsync(cancellationToken) is { } freeSpace)
-            snapshot.FreeSpace = freeSpace;
-        return snapshot;
+        var freeSpace = await FreeSpaceIfDueAsync(cancellationToken);
+        return new TransferSnapshot
+        {
+            DownSpeed = baseSnapshot.DownSpeed,
+            UpSpeed = baseSnapshot.UpSpeed,
+            ActiveTorrents = baseSnapshot.ActiveTorrents,
+            TotalTorrents = baseSnapshot.TotalTorrents,
+            FreeSpace = freeSpace ?? baseSnapshot.FreeSpace,
+            ConnectionState = baseSnapshot.ConnectionState,
+            FetchedAt = baseSnapshot.FetchedAt,
+            Torrents = torrents,
+            Detail = detail,
+        };
     }
+
+    /// <summary>
+    /// Whether a scope needs the torrent list. The summary scope does not: the
+    /// panel is the only thing that shows it, and the list is the expensive
+    /// part of the poll.
+    /// </summary>
+    public static bool NeedsTorrentList(PollDetail detail) => detail == PollDetail.Full;
 
     public async Task<string> TestConnectionAsync(CancellationToken cancellationToken)
     {

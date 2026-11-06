@@ -42,10 +42,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - idle — dimmed arrows on the light tile, empty progress pill,
-  - actively transferring — solid blue down arrow, 62 % filled pill (the
-    app-icon artwork proper),
-  - every enabled server failing — red arrows, full pill, red tile outline.
+  - one flat monochrome glyph (a down arrow over a bar, inside a hairline
+    rounded-square frame) that follows the light/dark taskbar,
+  - idle — the glyph dimmed,
+  - actively transferring — the glyph at full brightness,
+  - every enabled server failing — the glyph in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Floating speed chip (opt-in)** — a small always-on-top readout, either
   numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
@@ -223,6 +224,14 @@ aggregate rates as the panel and `—` when no server is online.
 - **Click** — opens the panel (the chip stays visible).
 - **Drag** — moves the chip; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed.
+- **Right-click** — opens a small menu:
+  - **Open <server> web UI** — the first configured server's web console in the
+    default browser (`http://host:port/` for qBittorrent,
+    `http://host:port/transmission/web/` for Transmission). Disabled when no
+    server is configured.
+  - **Hide floating speed window** — hides the chip and remembers the choice;
+    the tray menu toggle brings it back.
+  - **Quit PT Monitor** — quits the agent.
 - **Toggle** — tray menu → *Show floating speed window*, or the matching
   Preferences checkbox. Off by default.
 
@@ -443,7 +452,11 @@ selftest: FAILED — qb eta: valid: expected 3600, got nil | …
 
 ### `--probe`
 
-Fetches one snapshot from one server and prints it as JSON.
+Fetches one snapshot from one server and prints it as JSON. It polls twice —
+once for the whole list, once for the summary — so the answer also proves that
+the qBittorrent client keeps the `rid` and merges the server's delta. The
+`snapshot` is the full poll (with the torrent list); the `summary` object next
+to it carries the counters of the second poll.
 
 ```powershell
 PTMonitor.Cli.exe --probe qbittorrent --host 192.168.1.2 --port 8080 --user admin --pass secret
@@ -501,7 +514,13 @@ server banned this IP":
   ban uses — this is what makes the distinction matter),
 - 5 failed logins → IP ban for the rest of the process,
 - `WEBAPI=5.2` switches to the 5.2 login shapes (`204` success / `401` wrong
-  credentials) instead of 4.6's (`200 "Ok."` / `200 "Fails."`).
+  credentials) instead of 4.6's (`200 "Ok."` / `200 "Fails."`),
+- `/api/v2/sync/maindata` speaks the **rid protocol**: the first request
+  (`rid=0`) gets the whole library, every later request gets only what
+  changed. The probe polls twice — once for the list, once for the summary —
+  so the printed `summary` comes from a merged delta: one torrent left, one
+  removed, and the delta's download speed. The stub's log must not contain
+  `UNEXPECTED rid`.
 
 ```powershell
 node scripts\fake-qbittorrent.mjs 18080
@@ -529,7 +548,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 |---|---|---|
 | `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
-| `ptmonitor.log` | startup line, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
+| `ptmonitor.log` | startup line, launch timeline, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
 
 - The settings file is written atomically (temp file + move), so a crash cannot
   truncate it. A corrupt or older payload is treated as "not configured" rather
@@ -574,7 +593,28 @@ Everything lives under `%APPDATA%\PTMonitor\`:
   the same way logs once, not once per 2-second poll;
 - secret-store trouble (unreadable file, preserved `.corrupt` copy, failed
   write), TLS certificates accepted under "allow self-signed certificate" (with
-  the SHA-256 thumbprint), and settings writes that failed.
+  the SHA-256 thumbprint), and settings writes that failed;
+- one **launch timeline** per start, with named phases and their offsets from
+  process entry, ending in a `total`. It exists to be pasted into a performance
+  report — see [Troubleshooting](#troubleshooting).
+
+A timeline line looks like this:
+
+```
+2026-11-05T22:37:45.942Z [info] startup: timeline entry=0.0 log-ready=12.2 avalonia=345.2 glyph=418.2 tray-set=418.4 stores=423.6 windows=575.4 total=575.4 ms
+```
+
+That is a real run on Windows 10 (build 1.0.0): the tray icon was on the
+taskbar at **418 ms**, the whole launch took **575 ms**, against a target of
+1500 ms. The biggest single phase is `avalonia` — the framework's own start-up,
+not the app's work.
+
+The phases are fixed labels, never values, so the line carries nothing that
+needs redacting: `entry` → `log-ready` (sink up) → `avalonia` (framework
+initialised) → `glyph` (tray icon rendered) → `tray-set` (icon on the taskbar) →
+`stores` (secret store loaded, DPAPI) → `windows` (first optional window).
+Offsets are cumulative and non-decreasing. Only one line is written per launch,
+at the end, when the launch is done.
 
 It is capped at 512 KiB plus one rotated predecessor (`ptmonitor.log.1`), so the
 pair never exceeds ~1 MiB. Nothing else is logged: no passwords, no auth
@@ -649,12 +689,13 @@ loop(server):
     client = factory(server, secret(server.id))   # built once, keeps auth state
     forever:
         interval = settings.pollInterval
+        detail = summary | full                   # full only while the panel is open
         try:
-            publish(online(client.fetchSnapshot()))
+            publish(online(client.fetchSnapshot(detail)))
         catch auth   → publish(failed); interval = max(interval, 600s)
         catch banned → publish(failed); interval = max(interval, 900s)
         catch other  → publish(failed); interval = interval
-        sleep(interval)
+        sleep(interval)                           # a scope change interrupts it
 ```
 
 - Results are compared before publishing (`IsEquivalent`, which **ignores**
@@ -663,6 +704,26 @@ loop(server):
   It deliberately rebuilds even when only the password changed, because a
   password edit is invisible in `ServerConfig`.
 - Disabled servers are never contacted — the client factory is not even invoked.
+
+#### What a closed panel costs
+
+The poll interval stays at **2 seconds** — the speeds in the tooltip and on the
+floating chip are always that fresh. What changes is the *work* behind the poll:
+
+- **qBittorrent** — while the panel is closed the app sends the last `rid` the
+  server handed out, so the server reports only the torrents that changed
+  instead of the whole library on every poll. The counts stay exact. A full
+  re-sync every 5 minutes repairs any drift.
+- **Transmission** — the summary poll asks only for `session-stats` (rates and
+  counts). The torrent list is fetched only while the panel is on screen.
+- **The panel itself** — a hidden panel is not rebuilt. The window is cached
+  and only hidden, so before this change every 2-second poll re-created the
+  whole row list for a window nobody could see.
+
+With the panel open, the behaviour is the one you had: the full list is
+fetched and the panel stays live. Opening the panel shows the current numbers
+immediately and the fresh list within a fraction of a second; the list it shows
+before that is the last one it fetched, never an invented one.
 
 ---
 
@@ -681,6 +742,8 @@ src/
       AppServices.cs             composition root: stores, tray icon, windows
       L10n.cs                    English + zh-Hans string tables
       TrayIconFactory.cs         tray icons drawn at runtime (no binary assets)
+      IcoEncoder.cs              .ico container writer for the tray icon
+      UrlLauncher.cs             opens a URL in the default browser
     ViewModels/
       PanelViewModel.cs          sections, rows, expansion, aggregate, filters
     Views/
@@ -921,6 +984,7 @@ git push origin v1.0.0
 | **Panel appears in an odd place** | It anchors to the bottom-right of the *primary* screen's work area. Secondary-taskbar placement is not detected (see limitations). |
 | **No tray icon** | Windows hides new tray icons by default — expand the overflow chevron and drag it out. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
+| **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms; a healthy Windows 10 run reads `entry → log-ready` ≈ 12 ms, `tray-set` ≈ 420 ms, `total` ≈ 575 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
 | **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
 
 Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see
@@ -961,7 +1025,7 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + tile/arrows/pill artwork drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat monochrome glyph that follows the light/dark taskbar, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
 | `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, drawn from scratch in the Windows flat style by `scripts/make-app-icon.py` — deliberately **not** a port of the macOS artwork |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |

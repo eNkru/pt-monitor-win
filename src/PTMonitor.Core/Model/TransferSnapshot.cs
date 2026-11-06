@@ -21,6 +21,14 @@ public sealed class TransferSnapshot
     public ConnectionState ConnectionState { get; init; } = ConnectionState.Unknown;
     public DateTimeOffset FetchedAt { get; init; } = DateTimeOffset.Now;
     public List<TorrentSummary> Torrents { get; set; } = [];
+
+    /// <summary>
+    /// What this snapshot carries: <see cref="PollDetail.Summary"/> means the
+    /// torrent list is not part of it (the counts are), <see cref="PollDetail.Full"/>
+    /// means the list is there. The store keeps the last full list, so a
+    /// summary snapshot never erases what the panel shows.
+    /// </summary>
+    public PollDetail Detail { get; init; } = PollDetail.Full;
 }
 
 public enum AppLanguage

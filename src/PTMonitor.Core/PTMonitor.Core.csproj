@@ -10,4 +10,11 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
 
+  <!-- The xUnit suite drives the internal test seams (StartupTrace.Clock).
+       Without this the seam would have to be public, and a public mutable
+       static clock is exactly the kind of state the specs forbid. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PTMonitor.Core.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using PTMonitor.App.Services;
+using PTMonitor.Core.Diagnostics;
 
 namespace PTMonitor.App;
 
@@ -16,6 +17,10 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // First statement here too: this is where the Avalonia UI thread starts
+        // for real, so the mark cannot be taken any earlier.
+        StartupTrace.Mark("avalonia");
+
         // Subscribed here, not in Program.Main: by this point the platform has
         // installed its real dispatcher. Touching Dispatcher.UIThread earlier
         // pins the default implementation and Dispatcher.MainLoop throws

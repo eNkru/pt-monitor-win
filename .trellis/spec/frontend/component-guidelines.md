@@ -90,6 +90,11 @@ if ((sender as Control)?.DataContext is not TorrentRowViewModel row) return;
 - Re-entrancy guards are explicit fields (`_isTesting`, `_loadingUi`).
 - Never wire a handler in code that XAML could declare.
 
+A **context menu** is the exception: when its items are dynamic (a header that
+names a server, an enabled state that follows the configuration) XAML cannot
+express it, so the menu is built in code-behind and assigned to
+`Control.ContextMenu`. `FloatingSpeedWindow.BuildMenu` is the example.
+
 ---
 
 ## Accessibility
@@ -127,10 +132,10 @@ sits on top of live data.
 - A binding with no `x:DataType`.
 - A `<Styles>` block inside a window.
 - A resource dictionary or theme file.
-- Binary *tray icon* assets — tray icons are drawn at runtime from the same
-  tile/arrows/pill geometry as the exe icon (see `TrayIconFactory`). The single
-  committed binary asset is the exe icon `src/PTMonitor.App/app.ico`, embedded
-  via `<ApplicationIcon>` and drawn by `scripts/make-app-icon.py`; do not add
-  image assets for anything else.
+- Binary *tray icon* assets — tray icons are drawn at runtime from vector
+  geometry and packaged into an in-memory `.ico` (see `TrayIconFactory` and
+  `IcoEncoder`). The single committed binary asset is the exe icon
+  `src/PTMonitor.App/app.ico`, embedded via `<ApplicationIcon>` and drawn by
+  `scripts/make-app-icon.py`; do not add image assets for anything else.
 - Hard-coded user-facing text in XAML without an `x:Name` (see
   [localization](./localization.md)).

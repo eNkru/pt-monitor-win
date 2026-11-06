@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality gate and what can be verified without a Windows box"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend quality gate: selftest and xUnit must stay green"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "The startup timeline must obey the log sink contract (events only, redaction)"}
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "Build scripts and the Windows packaging contract must stay in sync"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Startup timing spans Core diagnostics and the App layer — check the data flow"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid a second timing/logging mechanism next to the existing one"}

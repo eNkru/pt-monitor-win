@@ -17,7 +17,8 @@ src/PTMonitor.App/
     AppServices.cs           composition root: stores, tray, windows, quit
     L10n.cs                  en + zh-Hans string tables
     TrayIconFactory.cs       tray icons drawn as vectors at runtime
-    CursorFactory.cs         open-hand cursor drawn at runtime
+    IcoEncoder.cs            .ico container writer for the tray icon
+    UrlLauncher.cs           opens a URL in the default browser
   ViewModels/
     PanelViewModel.cs        sections, rows, expansion, aggregate, filters
   Views/

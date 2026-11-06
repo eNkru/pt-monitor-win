@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "The client/parser rules this change rewrites: two poll scopes per client and a pure merge function"}
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "The poll loops, the volatile demand flag and the wake-up signal"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Threading rules: what may run on the UI thread and what must be posted to the dispatcher"}
+{"file": ".trellis/spec/frontend/viewmodel-guidelines.md", "reason": "The panel view model rules this change rewrites: the visibility gate and the rebuild policy"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "The panel window lifecycle: shown, hidden and cached"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "The Core gate: every behaviour change needs a selftest case and an xUnit mirror"}

@@ -242,3 +242,433 @@ Archived the tray deploy task by user decision (no soak; the fix is merged and h
 ### Next Steps
 
 - Windows observations (DPAPI, trust, rendered UI) and a design for per-entry secret recovery remain the only substantive gaps
+
+
+## Session 7: Monochrome, theme-aware tray icon
+<!-- trellis-session: v=2 fp=tray-icon-monochrome -->
+
+**Date**: 2026-11-02
+**Task**: 11-02-tray-icon-monochrome
+**Branch**: `main`
+
+### Summary
+
+Replaced the tray artwork (light tile + ring + arrow pair + progress pill) with one flat monochrome glyph — a bold down arrow over a short bar — that follows the OS light/dark taskbar. The floating chip already shows the rates, so the tray is an identity mark, not a meter. Idle = 55 % opacity, active = full, error = red; one geometry for all three.
+
+The icon is now packaged as a real multi-size `.ico` (16/20/24/32/48) built in memory, because Avalonia's `WindowIcon(Bitmap)` path on Win32 ends in `CreateIconIndirect` with `fIcon = FALSE`: a 1-bit AND mask, no alpha, hard edges, and one bitmap downscaled to the taskbar size. The theme comes from `Application.ActualThemeVariant` (the app requests the default variant, so it is the OS setting) and the icon is redrawn on `ActualThemeVariantChanged`, which Avalonia's Win32 backend raises on `WM_SETTINGCHANGE`/"ImmersiveColorSet".
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs` rewritten: glyph drawing, straight-alpha BGRA extraction, per-(state, theme) icon cache
+- `Services/IcoEncoder.cs` added: `.ico` container writer (32-bit BGRA entries, `biHeight = 2×h`, empty AND mask)
+- `Services/AppServices.cs`: icon keyed by (state, theme), theme-change subscription, warn-level logging on failure
+- Specs + README + `scripts/make-app-icon.py` docstring: the tray and the exe icon are different drawings now
+- `scripts/make-app-icon.py` still reproduces `app.ico` byte-for-byte (verified with `cmp`)
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed; `scripts/build.sh` published the win-x64 package
+- [OK] Tray glyph rendered through the shipped code path on this Linux box (Skia headless) and previewed as PNG for all six state/theme pairs
+- [OK] Generated `.ico` parsed back by an independent parser: 5 entries, correct offsets, `biHeight = 2×h`, empty AND mask, straight alpha
+- [ ] Windows only: the icon on a real light and dark taskbar (the tray cannot run here)
+
+### Status
+
+[OK] **Completed** (Windows spot-check left to the user)
+
+### Next Steps
+
+- The ICO layout has no CI coverage — the App layer still has no automated gate; `InternalsVisibleTo` + a test project would close that
+
+
+## Session 8: Square frame around the tray glyph
+<!-- trellis-session: v=2 fp=tray-icon-square-frame -->
+
+**Date**: 2026-11-02
+**Task**: none (small tweak on top of 11-02-tray-icon-monochrome)
+**Branch**: `main`
+
+### Summary
+
+User liked the monochrome glyph but wanted the tray icon to read as a square. Added a hairline square frame around the arrow: plain square (sharp corners — a 0.4 px radius at 16 px only produced ragged corner pixels), 1 px at 16 px and at most 2 px, one pixel inside the icon edge so it is not clipped. The glyph was pulled in vertically (shaft top 0.12 → 0.19, bar 0.77/0.89 → 0.71/0.82) to keep a clear gap inside the frame.
+
+Tried and rejected on the way: a rounded-square frame (corner AA made a stair pattern at 16 px) and a fractional margin (the 1 px stroke landed between pixels and washed out).
+
+No Trellis task for this one — it is one drawing routine plus three doc lines.
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs`: square frame (pen, hairline) + the shrunk glyph inside it
+- `lifecycle-and-tray.md` / `README.md`: artwork description now mentions the frame
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed
+- [OK] Glyph rendered through the shipped code path (Skia headless) and previewed at 16/32 px for all six state/theme pairs; generated `.ico` parsed back, 5 entries intact
+- [ ] Windows only: the framed glyph on a real taskbar
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows spot-check of the framed icon (the user has the win-x64 build)
+
+
+## Session 9: Rounded corners on the tray frame
+<!-- trellis-session: v=2 fp=tray-icon-rounded-frame -->
+
+**Date**: 2026-11-02
+**Task**: none (tweak on top of the tray-icon work)
+**Branch**: `main`
+
+### Summary
+
+User asked for "very minor round corner" on the tray border, with a screenshot of a rounded-square badge as the shape reference. The frame now has a 10 % corner radius.
+
+The bug behind the earlier ragged corners: the path radius was computed as `radius - inset`, but `inset` is the *margin* (position), not the stroke — the stroke is centred on the path, so it adds `stroke/2` outside and takes `stroke/2` inside. The correct path radius is `wanted visible radius - stroke/2`. With that fixed, a 2 px radius at 16 px renders as a clean rounded corner instead of a sub-pixel staircase.
+
+Radius chosen by eye: 0.10 of the side (1.6 px visible at 16 px, 3.2 px at 32 px). 0.14 was visibly rounder at 32 px but chopped at 16 px.
+
+Still an outline, not the filled white plate in the screenshot — the user said "border"; the filled plate was offered as a one-line change.
+
+### Main Changes
+
+- `Services/TrayIconFactory.cs`: frame radius 0.10, path radius corrected to `radius - stroke/2`
+- `lifecycle-and-tray.md` / `README.md`: artwork text mentions the rounded frame
+
+### Git Commits
+
+- (see git log for this session's commit)
+
+### Testing
+
+- [OK] Release build 0 errors; selftest 642 checks; xUnit 121 passed
+- [OK] Rendered through the shipped code path; 16 px and 32 px previews for all six state/theme pairs; `.ico` parsed back, 5 entries intact
+- [ ] Windows only: the rounded frame on a real taskbar
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 10: Code signing — investigated, declined
+<!-- trellis-session: v=2 fp=signing-probe -->
+
+**Date**: 2026-11-02
+**Task**: none (dropped by user decision)
+**Branch**: `main`
+
+### Summary
+
+User asked how to remove the "Publisher: Unknown publisher" warning on the
+unsigned release. Probed the whole path on this box and then dropped it after
+the cost became clear. Nothing in the repo changed.
+
+What the probe established (no residue left behind — the probe cert was
+removed from `Cert:\CurrentUser\My`, the Root store was never written to, the
+temp files are gone):
+
+- `New-SelfSignedCertificate -Type CodeSigningCert` + `Set-AuthenticodeSignature`
+  works from WSL through `powershell.exe` interop; the exe signs and gets a
+  DigiCert timestamp. No Windows SDK / `signtool.exe` needed.
+- `osslsigncode` is not installed here and `sudo` needs a password, so the
+  Linux build script cannot sign on its own.
+- A self-signed cert only removes the warning on machines that import its
+  public part into the trusted-root store. Third parties still see "Unknown
+  publisher", so it does not solve the published-download case.
+
+Real fix for everyone: a CA-issued code-signing certificate (OV/EV), Azure
+Trusted Signing, or SignPath Foundation for an accepted open-source project.
+EV gets SmartScreen reputation immediately; OV takes days/weeks.
+
+The README already states the unsigned situation accurately (the SmartScreen
+troubleshooting entry and the "Signing needs a code-signing certificate"
+note), so no doc change was needed.
+
+### Main Changes
+
+- None. The idea was dropped before it was implemented.
+
+### Git Commits
+
+- (none)
+
+### Testing
+
+- [OK] Probe only: signing + timestamping verified via `Get-AuthenticodeSignature`; trust-anchor step deliberately not left installed
+
+### Status
+
+[OK] **Dropped by user decision**
+
+### Next Steps
+
+- If the warning ever matters for distribution: buy an OV/EV cert or use Azure
+  Trusted Signing, then wire optional signing into `scripts/build.sh` and
+  `scripts/build.ps1` (one env var for the PFX) — the scripts do not exist yet.
+
+## Session 11: Floating widget right-click menu and system cursor
+<!-- trellis-session: v=2 fp=widget-context-menu -->
+
+**Date**: 2026-11-03
+**Task**: `11-03-floating-widget-context-menu` (archived)
+**Branch**: `main`
+
+### Summary
+
+Two tweaks to the floating speed chip, both asked for together.
+
+The hand-drawn open-hand cursor is gone; the chip uses the system hand cursor
+(`new Cursor(StandardCursorType.Hand)`). The drawn one existed because
+Avalonia's `Hand` is a pointing finger rather than the macOS open hand — the
+user wanted the system look, so `Services/CursorFactory.cs` was deleted
+outright (its only consumer was the chip; a second cursor style nobody uses is
+dead weight).
+
+Right-clicking the chip now opens a context menu with three items: open the
+first enabled server's web console in the default browser, hide the chip
+(persisted, so the tray toggle is the way back), and quit the agent.
+
+Details worth keeping:
+
+- The menu is built in code-behind, not XAML. The first header names the
+  server (`Open qBittorrent web UI`) and the item is disabled when nothing is
+  configured — neither is expressible in XAML, so `Control.ContextMenu` +
+  `ItemsSource` it is. The click handlers stay one-liners into `AppServices`.
+- The URL is `ServerConfig.WebUiUri()` (qBittorrent at the root, Transmission
+  under `/transmission/web/`, https when TLS is on) — the model already owned
+  it; the tray/panel never re-derive it. Opening moved into
+  `Services/UrlLauncher` so the panel row button and the menu share one path.
+- A right-click cannot disturb the click/drag gesture: Avalonia's
+  `Control.OnPointerReleased` raises `ContextRequested` only when the initial
+  press was the right button, and the chip's `OnPointerPressed` returns early
+  for anything but the left one.
+- Two new `L10n` keys in both tables (`Hide floating speed window`,
+  `Open web console`); the latter is the disabled-state header only.
+
+Known Windows caveat, left documented rather than guessed at: the chip window
+is `ShowActivated=False` and Avalonia hosts the menu in a non-activating
+popup (`MA_NOACTIVATE`), so a click on *another application* may leave the
+menu standing; clicking the chip dismisses it. If that grates, the fix is a
+borderless window like `MainPanelWindow` (closes on `Deactivated`) instead of
+a `ContextMenu`. Also noted: Avalonia 11.3.2 has no `TrayIcon` right-click
+event at all (`Clicked` is left-button only, the Win32 backend shows the
+native menu on right button), so "right-click the tray icon" was not an
+option without a global hook.
+
+### Main Changes
+
+- `Views/FloatingSpeedWindow.axaml.cs`: system hand cursor, `BuildMenu()`,
+  `RefreshMenu()` from `ApplyLocalization`
+- `Services/AppServices.cs`: `OpenFirstServerWebConsole()`,
+  `HideFloatingSpeedWindow()`
+- `Services/UrlLauncher.cs` (new): one owner for "open in the default
+  browser"; `MainPanelWindow.OnOpenWebUi` now calls it
+- `Services/CursorFactory.cs` (deleted), `Services/L10n.cs` (2 keys)
+- Specs (`lifecycle-and-tray`, `component-guidelines`, `directory-structure`)
+  and `README.md` updated
+
+### Git Commits
+
+- `0d6ebcd` feat(widget): right-click menu and system hand cursor
+
+### Testing
+
+- [OK] `dotnet build -c Release` 0 errors
+- [OK] `--selftest` 642 checks; `dotnet test` 121 passed
+- [OK] `scripts/build.sh --invariant`: win-x64 publish + ZIP
+- [ ] Windows only: menu opens, browser target, hide, quit, cursor shape
+
+### Status
+
+[OK] **Complete — Windows pass pending**
+
+### Next Steps
+
+- User to run the five-step manual pass in the archived PRD and report back;
+  if the leave-open caveat bites, swap the `ContextMenu` for a borderless
+  window.
+
+
+## Session 12: Launch timeline and tray-icon-first startup
+<!-- trellis-session: v=2 fp=f19504dab95515a8 -->
+
+**Date**: 2026-11-06
+**Task**: Launch timeline and tray-icon-first startup
+**Branch**: `main`
+
+### Summary
+
+The agent now measures its own launch and puts the tray icon in front of the startup path; the packaging decision waits for the Windows timeline.
+
+### Main Changes
+
+- New Core/Diagnostics/StartupTrace: one launch timeline per start, written as a single 'startup: timeline' line through the existing log sink
+- AppServices constructor reordered so the tray icon is set before the secret store, the monitor and the optional windows; the floating chip and first-run Preferences are posted at Background priority
+- Phase order pinned to the constructor order in the selftest and the xUnit mirror, so the offsets cannot go non-monotonic
+- PTMonitor.Core grants InternalsVisibleTo to the test project, keeping the StartupTrace clock seam internal
+- Specs (lifecycle-and-tray, logging-guidelines, frontend index) and README updated; both build scripts record why ReadyToRun is not enabled
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f7d1390` | feat(startup): launch timeline and tray-icon-first startup |
+| `845b480` | chore(task): plan the startup and runtime performance work |
+
+### Testing
+
+- [OK] [OK] dotnet build -c Release: 0 errors
+- [OK] [OK] --selftest: 648 checks passed
+- [OK] [OK] dotnet test: 126 passed
+- [OK] [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] [ ] Windows only: launch timeline, tray icon, floating chip, first-run preferences, 30 s clean log
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User runs the published build on the target machine and pastes the 'startup: timeline' line; the packaging decision (folder layout / ReadyToRun / no change) follows from it
+- Windows manual pass: total <= 1500 ms, the chip appears, first-run preferences opens, the process survives 30 s
+- Child task 11-05-runtime-polling-performance stays in planning: the hidden-panel rebuild and the per-poll payload
+
+
+## Session 13: Close the launch-path performance child
+<!-- trellis-session: v=2 fp=6c1f4a0d92be7711 -->
+
+**Date**: 2026-11-06
+**Task**: Launch path and packaging performance (11-05-launch-path-performance)
+**Branch**: `main`
+
+### Summary
+
+The Windows timeline came back from the target machine, so the packaging
+decision could be made on evidence instead of habit. Result: no packaging
+change, and the child task is finished.
+
+### Main Changes
+
+- Recorded the measured timeline in the task artifacts, the README and the
+  lifecycle spec: tray icon visible at 418 ms, total 575 ms, against the
+  1500 ms target; entry->log-ready is 12 ms, so the self-extracting bundle is
+  not the bottleneck
+- Packaging decision: no change. Both build scripts keep their flags and now
+  carry the measurement as their reason; ReadyToRun stays out until a Windows
+  A/B of the same build shows a gain (D3)
+- The README's timeline example is the real Windows line, and the troubleshooting
+  row now names the healthy offsets
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd62b3d` | docs(startup): record the Windows launch timeline and the packaging decision |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 648 checks passed
+- [OK] dotnet test: 126 passed
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] Windows: total 575 ms <= 1500 ms, tray icon at 418 ms, clean log
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Child `11-05-runtime-polling-performance` is still in planning: the
+  hidden-panel rebuild and the per-poll payload (needs design.md + implement.md)
+- Optional: a Windows ReadyToRun A/B, only if the avalonia phase ever matters
+
+
+## Session 14: The idle agent stops working for nobody
+<!-- trellis-session: v=2 fp=9d3f1c7ab42e056 -->
+
+**Date**: 2026-11-06
+**Task**: Steady-state runtime performance (11-05-runtime-polling-performance)
+**Branch**: `main`
+
+### Summary
+
+The second child of the performance parent: the running agent no longer
+rebuilds a panel nobody can see, and no longer pulls the whole torrent list
+from every server on every poll. Two review rounds found four real defects;
+all of them are fixed.
+
+### Main Changes
+
+- Core/Model/PollDetail: `Summary` (rates, counts, connection state, free
+  space) and `Full` (with the torrent list). `ITorrentClient` takes the scope.
+- MonitorStore: one volatile demand flag, a pure `DetailFor` rule, an
+  `AsyncSignal` that interrupts a normal poll interval, and the last full list
+  per server, so a summary poll never empties the panel.
+- qBittorrent: the summary scope sends the last `rid` (the server reports only
+  the changes), the full scope asks for everything (the panel shows exactly
+  what the server has), the merge is a pure function with a superset-based
+  self-heal, and a full re-sync every 5 minutes repairs any drift.
+- Transmission: the summary poll is one `session-stats` request instead of two.
+- App: `PanelViewModel.IsPanelVisible` gates both rebuild triggers and drives
+  the demand; the panel's freshness timer stops with the panel.
+- scripts/fake-qbittorrent.mjs speaks the rid protocol, so the probe against
+  the stub proves the delta path end to end.
+
+### Review findings and fixes
+
+- **H1** — the demand wake-up interrupted the 600 s auth backoff: opening and
+  closing the panel five times would have earned a qBittorrent IP ban. The
+  backoff wait is never interruptible now, and both suites assert that a
+  failing server is polled once while the demand toggles.
+- **H2** — the panel's rows came from the merged delta, so a server that does
+  not report progress-only changes would have frozen the progress bars. The
+  full scope asks for everything; the delta is used for the summary scope only.
+- **F1** — the sticky signal delivered the wake-up twice (two whole-library
+  downloads per panel open). One signal now ends exactly one wait.
+- **F2** — the backoff was detected by magnitude; it is decided by the failure
+  kind now (`MonitorStore.HasBackoff`).
+- **F3** — the self-heal rule could lose a torrent; it is a superset test now.
+- Plus the smaller ones: the tracker fallback is merged, Transmission's scope
+  rule is a pure function, the probe prints the full snapshot and the summary,
+  and the wording in the PRD, the specs and the README no longer overclaims.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f0b5709` | feat(runtime): poll only what is on screen and rebuild only a visible panel |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors (one pre-existing CS8602)
+- [OK] --selftest: 692 checks passed (44 new)
+- [OK] dotnet test: 150 passed (24 new)
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] qBittorrent stub: rid=0 full, then the delta; the merged summary
+      (`totalTorrents` 1 of 2, the delta's speed); WebAPI 4.6 and 5.2 alike
+- [ ] Windows only: the tooltip and chip keep updating, the panel opens with
+      data and stays live, the tray icon still switches Idle/Active, qBittorrent's
+      list matches the server's, the log stays clean for 30 s
+
+### Status
+
+[OK] **Completed — Windows pass pending**
+
+### Next Steps
+
+- User runs the published build on the target machine and reports the manual
+  pass (including: open and close the panel five times, the scope must fall
+  back to the summary every time)
+- Parent task 11-05-performance-startup-runtime is then 2/2 and can be archived

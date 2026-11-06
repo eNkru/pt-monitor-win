@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "floating speed chip contract: gesture rules, cursor rule, window management, show/hide table"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "event wiring rules, localization rules, window conventions for the widget"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "where Services/ files live and the naming rules"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "every user-facing string goes through L10n in both tables"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "the App layer has no automated gate; the manual checks that replace it"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "the web-console URL and the URL opening already have owners - do not duplicate them"}

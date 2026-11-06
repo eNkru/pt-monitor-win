@@ -54,7 +54,9 @@ The log is the record that survives a crash.
 | Call site | Event |
 |---|---|
 | `App/Program.cs` | one startup line: version, OS, data directory |
+| `App/Program.cs` → `App/Services/AppServices` | one `startup: timeline` line per launch: named launch phases with millisecond offsets and a `total`, written by `Core/Diagnostics/StartupTrace.Flush()`; fixed phase labels only, so nothing needs redacting |
 | `App/Services/AppServices` | startup: secret-store state; TLS certificate accepted (per server + thumbprint) |
+| `App/Services/AppServices` / `App/Services/TrayIconFactory` | the tray icon could not be built or assigned (the agent keeps running with the previous icon) |
 | `App/Program.cs` | `AppDomain.CurrentDomain.UnhandledException` and `Dispatcher.UIThread.UnhandledException` — logged, and **`Handled` is never set**, so behaviour stays "terminate" |
 | `MonitorStore.PollLoopAsync` | a failure **transition** only: the previous status was `Online`, or the `FailureKind` changed |
 | `DpapiSecretStore` | `Unreadable` on load, the `.corrupt` copy, a failed `Persist` |

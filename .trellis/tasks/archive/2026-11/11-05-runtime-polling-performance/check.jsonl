@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/client-and-parser-rules.md", "reason": "review the change against this spec"}
+{"file": ".trellis/spec/backend/concurrency-guidelines.md", "reason": "review the change against this spec"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "review the change against this spec"}
+{"file": ".trellis/spec/frontend/viewmodel-guidelines.md", "reason": "review the change against this spec"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "review the change against this spec"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "review the change against this spec"}

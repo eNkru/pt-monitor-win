@@ -48,6 +48,13 @@ if (-not $SkipGates) {
 }
 
 Write-Host "==> dotnet publish $Rid (self-contained)" -ForegroundColor Cyan
+# Packaging options are evidence-driven, not habit: a single self-extracting exe
+# (Avalonia needs IncludeNativeLibrariesForSelfExtract). No PublishReadyToRun --
+# measured on Linux 2026-11-05 with no startup gain (105 vs 109 ms), and on
+# Windows 2026-11-05 the launch timeline showed entry->log-ready = 12 ms (the
+# bundle/extraction cost) and total = 575 ms against a 1500 ms target, so the
+# bundle is not the bottleneck. Only add ReadyToRun after a Windows A/B of the
+# same build shows a gain. Keep this identical to build.sh.
 dotnet publish src/PTMonitor.App -c Release -r $Rid `
     --self-contained true `
     -p:PublishSingleFile=true `

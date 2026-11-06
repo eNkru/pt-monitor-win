@@ -27,6 +27,47 @@ cheap; do not optimise it into grey-code diffing without a measurement.
 
 ---
 
+## A hidden panel does not rebuild
+
+The panel window is cached and only hidden, so its view models stay alive. A
+rebuild while nobody can see the panel is invisible work: at 2 s it re-created
+up to 100 row view models per server, forever.
+
+`PanelViewModel.IsPanelVisible` is the gate:
+
+```csharp
+public bool IsPanelVisible
+{
+    get => _panelVisible;
+    set
+    {
+        if (_panelVisible == value) return;
+        _panelVisible = value;
+        _monitor.SetListDemand(value);   // the polls fetch the list only while it is shown
+        if (value) Rebuild();            // opening shows the current data at once
+    }
+}
+```
+
+- `false` → `StatusesChanged` and `Settings.Changed` rebuild **nothing**. The
+  rows stay in the collection untouched, so re-showing them costs nothing.
+- `true` → one rebuild, so the panel shows the current numbers at once. The
+  torrent list it shows is the last full one the store kept; the fresh list
+  follows within one request time (the demand wakes the poll loop), so the
+  panel is never *stale* for long and never invents rows. Before the first
+  full poll there is nothing to show — the panel says so.
+- The gate is checked **twice**: when the event arrives (on the poll thread) and
+  again inside the posted action (on the UI thread). A poll that lands while
+  the panel is closing must not rebuild a hidden window.
+
+`MainPanelWindow` owns the truth: the explicit `HidePanel()` call is the
+signal (it sets the flag and stops the freshness timer), and
+`Visual.IsVisibleProperty` is a safety net for a hide that comes from
+elsewhere. `Hide()` does not raise `Closed`, so the property and the explicit
+call are the only two signals.
+
+---
+
 ## Shape rules
 
 - Immutable display data uses `required` + `init`:
@@ -51,6 +92,8 @@ cheap; do not optimise it into grey-code diffing without a measurement.
   owns configuration values.
 - The view-model never references `Window`, `Dispatcher` or a brush-producing
   service — only `Avalonia.Media.IBrush` as a value (`StateBrush`).
+- The view-model may ask the store to change what the polls fetch
+  (`SetListDemand`); it does not reach into the poll loops.
 
 ---
 
