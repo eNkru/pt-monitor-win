@@ -30,6 +30,23 @@ builds. Then exercise the change by hand:
 - [ ] Quit from the tray menu actually exits, and monitor loops stop
 - [ ] Preferences → Save round-trips through a restart
 
+### Handing a build over
+
+`publish/<rid>/PTMonitor.exe` is **only as new as the last `scripts/build.sh`
+run** — `dotnet build` and `dotnet test` never touch it. Republish after the
+last commit before pointing the user at that path, and say which build it is:
+
+```bash
+stat -c '%y' publish/win-x64/PTMonitor.exe   # must be later than the last commit
+git log -1 --format='%ad' --date=iso
+sha256sum publish/win-x64/PTMonitor.exe
+```
+
+On 2026-11-06 the tray-icon change was handed over with an exe published **10
+seconds before** the commit that changed the artwork, and the user (correctly)
+reported "I still see the old icon". A stale `publish/` build looks exactly
+like a broken change; check the timestamp before debugging the code.
+
 ---
 
 ## Required patterns

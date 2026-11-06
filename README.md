@@ -42,11 +42,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - one flat monochrome glyph (a down arrow over a bar, inside a hairline
-    rounded-square frame) that follows the light/dark taskbar,
-  - idle — the glyph dimmed,
-  - actively transferring — the glyph at full brightness,
-  - every enabled server failing — the glyph in red.
+  - one flat mark (a down arrow over a bar) knocked out of a bright rounded
+    tile — the same in the light and the dark theme,
+  - idle — the mark dimmed,
+  - actively transferring — the mark at full brightness,
+  - every enabled server failing — the arrow in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Floating speed chip (opt-in)** — a small always-on-top readout, either
   numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
@@ -983,6 +983,7 @@ git push origin v1.0.0
 | **Free space shows "—"** | qBittorrent older than WebAPI 2.1.1, or the Transmission `free-space` call failed. Not an error. |
 | **Panel appears in an odd place** | It anchors to the bottom-right of the *primary* screen's work area. Secondary-taskbar placement is not detected (see limitations). |
 | **No tray icon** | Windows hides new tray icons by default — expand the overflow chevron and drag it out. |
+| **The tray icon still looks like the old one** | The exe you started predates the change, or the previous instance is still running. Quit from the tray menu (`tasklist \| findstr PTMonitor` must be empty), compare `Get-FileHash PTMonitor.exe -Algorithm SHA256` against the build you mean to run, then start it. If the hash is right and the icon is still old, the shell is holding its cached tray entry: restart Explorer. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
 | **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms; a healthy Windows 10 run reads `entry → log-ready` ≈ 12 ms, `tray-set` ≈ 420 ms, `total` ≈ 575 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
 | **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
@@ -1025,7 +1026,7 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat monochrome glyph that follows the light/dark taskbar, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat mark (a bright tile with the arrow knocked out of it), the same in the light and the dark theme, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
 | `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, drawn from scratch in the Windows flat style by `scripts/make-app-icon.py` — deliberately **not** a port of the macOS artwork |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |

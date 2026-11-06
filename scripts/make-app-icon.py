@@ -6,8 +6,9 @@ accent-blue glyph (a down/up arrow pair over a progress pill), in the visual
 language of Windows 11 first-party app icons -- no gradients, no sheen, no
 drop shadow, no macOS-style charcoal card.
 
-This is the *exe* icon only. The tray icon is a different drawing: a single
-monochrome glyph that follows the light/dark taskbar, drawn at runtime by
+This is the *exe* icon only. The tray icon is a different drawing: a bright
+rounded tile with a dark arrow knocked out of it, the same in the light and the
+dark theme, drawn at runtime by
 `src/PTMonitor.App/Services/TrayIconFactory.cs`. The two no longer share
 constants -- see .trellis/spec/frontend/lifecycle-and-tray.md.
 

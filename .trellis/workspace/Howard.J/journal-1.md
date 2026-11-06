@@ -672,3 +672,121 @@ all of them are fixed.
   pass (including: open and close the panel five times, the scope must fall
   back to the summary every time)
 - Parent task 11-05-performance-startup-runtime is then 2/2 and can be archived
+
+
+## Session 15: Solid tray glyph without a frame
+<!-- trellis-session: v=2 fp=e45f413e99359d3b -->
+
+**Date**: 2026-11-06
+**Task**: Solid tray glyph without a frame
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+The user runs Windows in dark mode and asked to invert the system-tray icon (bottom-right corner): drop the outline, make the whole piece bright. Read it as 'no frame, one solid fill' -- a literal colour swap would vanish on a dark taskbar. Removed the hairline rounded-square frame from TrayIconFactory, scaled the arrow-over-bar glyph 1.25x about the icon centre so it fills the tile, and updated the tray spec and README. Verified on this box: build clean, 692 selftest checks, 150 tests, in-memory .ico still parses into five straight-alpha entries, and the glyph was rendered to preview PNGs (artifacts/tray-preview/) and reviewed. The Windows manual check (solid bright arrow-over-bar on a dark taskbar) is still open.
+
+### Main Changes
+
+- src/PTMonitor.App/Services/TrayIconFactory.cs: frame constants and draw call removed; GlyphScale = 1.25 scales the arrow and bar about the icon centre
+- .trellis/spec/frontend/lifecycle-and-tray.md: artwork section no longer describes a framed badge
+- README.md: the tray-icon feature bullet
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ecd251` | feat(tray): draw the tray glyph as one solid piece without a frame |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+- [OK] scripts/build.sh --invariant: win-x64 ZIP + CLI produced
+- [OK] rendered preview PNGs at 16/20/24/32/48 px for both themes and all three states
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows manual check: the tray shows one solid bright arrow-over-bar on a dark taskbar, no leftover outline
+
+
+## Session 16: One fixed tray mark in every theme
+<!-- trellis-session: v=2 fp=835a0453df80d534 -->
+
+**Date**: 2026-11-06
+**Task**: One fixed tray mark in every theme
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+Follow-up to 11-06: the user picked the 'bright tile, dark arrow' artwork and asked for it regardless of the theme colour. The theme dimension is gone from the whole tray factory: Icon(TrayState), BuildIco(TrayState), Render(size, TrayState), a cache keyed by state alone, and a fixed palette (tile #FFFFFF, ink #1F1F1F, error #C42B1C). AppServices lost _trayDark and CurrentTheme(), the ActualThemeVariantChanged subscription (an OS theme switch cannot change the icon any more) and UpdateTray now assigns the icon on a state change only -- the 11-01 crash-prevention rule still holds. Stale 'the tray follows the taskbar' claims fixed in the spec, the README (feature bullet and the macOS-porting table) and the make-app-icon.py docstring. Two trellis-check passes: the second found only stale docs, all fixed.
+
+### Main Changes
+
+- src/PTMonitor.App/Services/TrayIconFactory.cs: no theme parameter; fixed palette; the tile is always drawn
+- src/PTMonitor.App/Services/AppServices.cs: _trayDark/CurrentTheme removed, theme hook removed, assign on a state change
+- .trellis/spec/frontend/lifecycle-and-tray.md: artwork, colour table, theme section, constructor order
+- README.md and scripts/make-app-icon.py: the artwork description
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab6e561` | feat(tray): use the same tray icon in every theme |
+
+### Testing
+
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+- [OK] in-memory .ico: five 32-bit entries (16/20/24/32/48), straight alpha
+- [OK] rendered previews identical in both themes (artifacts/tray-preview/final/)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Windows manual check: the bright tile with the dark arrow reads on both a light and a dark taskbar
+
+
+## Session 17: Stale build handed over as the artwork fix
+<!-- trellis-session: v=2 fp=944ae1557109034d -->
+
+**Date**: 2026-11-06
+**Task**: Stale build handed over as the artwork fix
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+The user reported still seeing the old tray icon. The code was right, the handover was not: publish/win-x64/PTMonitor.exe had been published 10 seconds BEFORE the commit that changed the artwork (14:48:12 vs commit 5ecd251 at 14:48:22), so the exe they copied still drew the framed icon. Republished with scripts/build.sh (new sha256 31158d24..., DrawTile present and GlyphDark gone in the bundle), gave the checksum, the quit-first step and the hash check. Codified the lesson: frontend/quality-guidelines.md now has a 'Handing a build over' section (stat the exe against the last commit, quote the sha256), and the README troubleshooting table has a 'tray icon still looks like the old one' row.
+
+### Main Changes
+
+- .trellis/spec/frontend/quality-guidelines.md: new 'Handing a build over' section with the timestamp/sha256 checks
+- README.md: troubleshooting row for a stale exe or a cached tray entry
+- .trellis/tasks/archive/2026-11/11-06-tray-icon-solid-glyph/task.json: incident note
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] scripts/build.sh: full pipeline, win-x64 ZIP republished at 16:36
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User confirms the icon on Windows with the new exe (sha256 31158d24...)

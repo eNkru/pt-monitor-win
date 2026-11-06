@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Media;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using PTMonitor.Core.Client;
 using PTMonitor.Core.Diagnostics;
@@ -35,7 +33,6 @@ public sealed class AppServices
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
     private MenuBarState? _trayState;
-    private bool? _trayDark;
     private bool _quitRequested;
 
     private AppServices()
@@ -58,7 +55,7 @@ public sealed class AppServices
         // block (DPAPI) or paint (windows). That is the whole launch target.
         _trayIcon = new TrayIcon
         {
-            Icon = TrayIconFactory.Icon(TrayState.Idle, CurrentTheme()),
+            Icon = TrayIconFactory.Icon(TrayState.Idle),
             ToolTipText = "PT Monitor",
             Menu = BuildMenu(),
         };
@@ -76,15 +73,11 @@ public sealed class AppServices
 
         Monitor = new MonitorStore(Settings, Secrets, ClientFactory);
 
-        // The tray glyph follows the taskbar, so it has to be redrawn when the
-        // OS switches between light and dark. Avalonia's Win32 backend reports
-        // that as WM_SETTINGCHANGE/"ImmersiveColorSet". Next to the icon it
-        // affects.
-        if (Application.Current is { } app)
-            app.ActualThemeVariantChanged += (_, _) => UpdateTray();
-
         // Poll loops publish from a thread-pool thread; tray updates must
         // reach the UI thread (see .trellis/spec/frontend/state-management.md).
+        // The tray glyph is the same in the light and the dark theme -- a
+        // bright tile with the arrow knocked out of it -- so an OS theme
+        // switch does not change it and needs no redraw hook here.
         Monitor.StatusesChanged += (_, _) => Dispatcher.UIThread.Post(UpdateTray);
         // Only now: OnSettingsChanged assigns _trayIcon.Menu and calls through
         // the ticker and the monitor, and all three exist by this point.
@@ -189,30 +182,21 @@ public sealed class AppServices
         SyncFloatingWindow();
     }
 
-    /// <summary>
-    /// The OS light/dark variant. The app requests the default variant, so
-    /// this follows the Windows setting -- and the taskbar with it.
-    /// </summary>
-    private static ThemeVariant CurrentTheme() =>
-        Application.Current?.ActualThemeVariant ?? ThemeVariant.Light;
-
     private void UpdateTray()
     {
         var state = Monitor.MenuBarState;
-        var dark = CurrentTheme() == ThemeVariant.Dark;
         // Only touch Icon on a real transition. Reassigning it every poll drew a
         // new bitmap (never disposed) and rebuilt the native icon each time --
         // ~1800/hour at the default 2 s interval -- until CreateIcon failed and
         // the exception took the process down (event log 1026).
-        if (state != _trayState || dark != _trayDark)
+        if (state != _trayState)
         {
-            // The pair is recorded *before* the assignment on purpose: a failed
+            // The state is recorded *before* the assignment on purpose: a failed
             // assignment must not be retried on every poll, or the native icon
             // would be rebuilt over and over -- the churn that crashed the app
             // (event log 1026, .trellis/tasks/11-01-tray-icon-crash). The icon
             // is refreshed on the next real transition instead.
             _trayState = state;
-            _trayDark = dark;
             try
             {
                 _trayIcon.Icon = TrayIconFactory.Icon(
@@ -221,8 +205,7 @@ public sealed class AppServices
                         MenuBarState.Error => TrayState.Error,
                         MenuBarState.Active => TrayState.Active,
                         _ => TrayState.Idle,
-                    },
-                    dark ? ThemeVariant.Dark : ThemeVariant.Light);
+                    });
             }
             catch (Exception exception)
             {

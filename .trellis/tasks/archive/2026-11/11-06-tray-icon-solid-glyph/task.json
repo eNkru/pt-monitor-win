@@ -1,0 +1,28 @@
+{
+  "id": "tray-icon-solid-glyph",
+  "name": "tray-icon-solid-glyph",
+  "title": "Solid tray glyph without frame",
+  "description": "Drop the hairline rounded-square frame from the system-tray icon and draw the arrow-over-bar glyph as one solid piece that fills the tile, so the whole mark reads bright on a dark Windows taskbar.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-06",
+  "completedAt": "2026-11-06",
+  "branch": "feat/tray-icon-solid-glyph",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "c624eef",
+  "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/15",
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "stale_build_incident": "publish/win-x64/PTMonitor.exe was 10 s older than the artwork commit; the user reported 'still the old icon'. Republished and documented in frontend/quality-guidelines.md."
+  }
+}

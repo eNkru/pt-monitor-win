@@ -6,7 +6,6 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
 using Avalonia.Platform;
-using Avalonia.Styling;
 using PTMonitor.Core.Diagnostics;
 
 namespace PTMonitor.App.Services;
@@ -26,13 +25,15 @@ public enum TrayState
 /// Draws the tray icon at runtime, so the app ships without binary tray
 /// assets.
 ///
-/// The artwork is one flat silhouette — a bold down arrow over a bar, in the
-/// spirit of the exe icon's sub-32 px variant but drawn separately — inside a
-/// hairline rounded-square frame, so the icon reads as a square badge in the
-/// tray. The whole thing is a single colour that follows the taskbar:
-/// near-black on a light taskbar, white on a dark one. The floating chip
-/// already shows the live rates, so the tray icon is an identity mark, not a
-/// meter.
+/// The artwork is one flat mark — a bold down arrow over a bar, in the spirit
+/// of the exe icon's sub-32 px variant but drawn separately — knocked out of
+/// a bright rounded tile.
+///
+/// The colours are fixed: the tile is white, the arrow is the dark ink, and
+/// the error arrow is the dark red. The icon is the same in the light and the
+/// dark theme — it does not follow the taskbar, because the bright tile
+/// around a dark mark reads on both. The floating chip already shows the
+/// live rates, so the tray icon is an identity mark, not a meter.
 ///
 /// The icon is packaged as a real multi-size .ico in memory (16/20/24/32/48 px)
 /// and handed to <see cref="WindowIcon"/> as a stream. That matters: a
@@ -41,7 +42,7 @@ public enum TrayState
 /// channel away and leaves hard edges. A .ico with 32-bit entries keeps the
 /// alpha, and Windows picks the entry that matches the taskbar size.
 ///
-/// One native icon per (state, theme) is created and reused; see
+/// One native icon per state is created and reused; see
 /// <c>AppServices.UpdateTray</c> for why the icon must not be rebuilt per
 /// poll tick./// </summary>
 public static class TrayIconFactory
@@ -54,7 +55,8 @@ public static class TrayIconFactory
 
     // Glyph geometry, as a fraction of the icon side, so one description
     // covers every size. The arrow occupies the upper part, the bar sits
-    // below it with a clear gap, and both fit inside the square frame.
+    // below it with a clear gap. The fractions describe the unscaled drawing:
+    // the glyph itself is scaled about the icon centre (see GlyphScale).
     private const double ShaftHalf = 0.085;
     private const double ShaftTop = 0.19;
     private const double ShaftBottom = 0.41;
@@ -66,86 +68,79 @@ public static class TrayIconFactory
     private const double BarTop = 0.71;
     private const double BarBottom = 0.82;
 
-    // The square frame around the glyph: a rounded square stroked with a
-    // hairline, so the icon reads as a square badge in the tray. The stroke is
-    // 1 px at 16 px and never thicker than 2 px, and it sits one pixel inside
-    // the icon edge so it is not clipped by it.
-    private const double FrameStroke = 0.06;
-    private const double FrameMargin = 1.0;
-    // The *visible* corner radius of the frame. The stroked path is inset by
-    // half the stroke, so the path radius is this minus half the stroke.
-    // Keep it small: a hairline stroke cannot render a big radius at 16 px
-    // without the corners turning into a staircase.
-    private const double FrameRadius = 0.10;
+    // The glyph fills the icon: there is no frame around it any more, so it
+    // is scaled up about the centre to keep the mark legible at the 16 px
+    // the taskbar asks for.
+    private const double GlyphScale = 1.25;
+
+    // The bright tile the glyph is knocked out of: a filled rounded square,
+    // one pixel inside the icon edge (half a pixel at 16 px), with the same
+    // corner radius the exe icon's card uses.
+    private const double TileRadius = 0.22;
+    private const double TileMargin = 1.0;
 
     // Idle is the same glyph at a lower opacity -- the hue never changes.
     private const double IdleOpacity = 0.55;
 
-    // Flat monochrome palette. The error colour is Fluent's critical
-    // foreground, one per theme so it stays readable on both taskbars.
-    private static readonly Color GlyphLight = Color.Parse("#1F1F1F");
-    private static readonly Color GlyphDark = Color.Parse("#FFFFFF");
-    private static readonly Color ErrorLight = Color.Parse("#C42B1C");
-    private static readonly Color ErrorDark = Color.Parse("#FF99A4");
+    // Flat palette. The artwork is theme-independent: a white tile with the
+    // arrow knocked out of it in the dark ink, and the dark red for the error.
+    private static readonly Color Tile = Color.Parse("#FFFFFF");
+    private static readonly Color GlyphInk = Color.Parse("#1F1F1F");
+    private static readonly Color ErrorInk = Color.Parse("#C42B1C");
 
-    // One native icon per (state, theme). Assigning a WindowIcon to the tray
-    // makes the platform wrap it in a native icon (HICON), and the handles
-    // behind it are never disposed by the tray. Creating a fresh one per
-    // status change churned those handles until CreateIcon failed and took the
-    // process down -- see .trellis/tasks/11-01-tray-icon-crash. The artwork
-    // is static per state, so build it once.
-    private static readonly ConcurrentDictionary<(TrayState State, bool Dark), WindowIcon> Icons = new();
+    // One native icon per state. Assigning a WindowIcon to the tray makes the
+    // platform wrap it in a native icon (HICON), and the handles behind it
+    // are never disposed by the tray. Creating a fresh one per status change
+    // churned those handles until CreateIcon failed and took the process down
+    // -- see .trellis/tasks/11-01-tray-icon-crash. The artwork is static per
+    // state, so build it once.
+    private static readonly ConcurrentDictionary<TrayState, WindowIcon> Icons = new();
 
     /// <summary>
-    /// The tray icon for one state and theme, created on first use and reused
+    /// The tray icon for one state, created on first use and reused
     /// afterwards.
     /// </summary>
-    public static WindowIcon Icon(TrayState state, ThemeVariant variant)
-    {
-        var dark = variant == ThemeVariant.Dark;
-        return Icons.GetOrAdd((state, dark), key => Create(key.State, key.Dark));
-    }
+    public static WindowIcon Icon(TrayState state) =>
+        Icons.GetOrAdd(state, key => Create(key));
 
     /// <summary>
     /// The whole icon as a .ico container, for inspection and tests.
     /// </summary>
-    public static byte[] BuildIco(TrayState state, ThemeVariant variant) =>
-        BuildIcoBytes(state, variant == ThemeVariant.Dark);
-
-    private static byte[] BuildIcoBytes(TrayState state, bool dark)
+    public static byte[] BuildIco(TrayState state)
     {
         var images = new List<(int Size, byte[] Bgra)>(Sizes.Length);
         foreach (var size in Sizes)
         {
-            using var bitmap = Render(size, state, dark);
+            using var bitmap = Render(size, state);
             images.Add((size, ToBgra(bitmap, size)));
         }
         return IcoEncoder.Encode(images);
     }
 
     /// <summary>
-    /// Draws the glyph on a transparent background. The caller owns the
+    /// Draws the icon on a transparent background. The caller owns the
     /// returned bitmap and should dispose it once the pixels are copied.
     /// </summary>
-    public static RenderTargetBitmap Render(int size, TrayState state, bool dark)
+    public static RenderTargetBitmap Render(int size, TrayState state)
     {
         var bitmap = new RenderTargetBitmap(new PixelSize(size, size), new Vector(96, 96));
         using (var context = bitmap.CreateDrawingContext())
         {
-            var color = state == TrayState.Error
-                ? (dark ? ErrorDark : ErrorLight)
-                : (dark ? GlyphDark : GlyphLight);
             var opacity = state == TrayState.Idle ? IdleOpacity : 1.0;
-            DrawGlyph(context, size, color, opacity);
+            var ink = state == TrayState.Error ? ErrorInk : GlyphInk;
+            // The glyph is knocked out of the bright tile, so the mark reads
+            // as one bright piece around a dark arrow.
+            DrawTile(context, size, opacity);
+            DrawGlyph(context, size, ink, opacity);
         }
         return bitmap;
     }
 
-    private static WindowIcon Create(TrayState state, bool dark)
+    private static WindowIcon Create(TrayState state)
     {
         try
         {
-            using var stream = new MemoryStream(BuildIcoBytes(state, dark));
+            using var stream = new MemoryStream(BuildIco(state));
             return new WindowIcon(stream);
         }
         catch (Exception exception)
@@ -155,8 +150,26 @@ public static class TrayIconFactory
             // (hard edges) but always loads. The bitmap stays alive: the
             // native icon keeps a reference to its pixels.
             Log.Warn("tray", $"tray icon packaging failed, falling back to a bitmap: {exception.Message}");
-            return new WindowIcon(Render(32, state, dark));
+            return new WindowIcon(Render(32, state));
         }
+    }
+
+    // MARK: - Tile
+
+    /// <summary>
+    /// The bright rounded tile the glyph is knocked out of. A filled rounded
+    /// square, one pixel inside the icon edge (half a pixel at 16 px, where
+    /// every pixel counts).
+    /// </summary>
+    private static void DrawTile(DrawingContext context, int size, double opacity)
+    {
+        var s = (double)size;
+        var inset = size >= 32 ? TileMargin : TileMargin / 2;
+        var rect = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
+        context.DrawRectangle(
+            new ImmutableSolidColorBrush(Tile, opacity),
+            null,
+            new RoundedRect(rect, s * TileRadius));
     }
 
     // MARK: - Glyph
@@ -165,18 +178,10 @@ public static class TrayIconFactory
     {
         var s = (double)size;
 
-        // The square frame: a hairline rounded square, centred on a path inset
-        // by half the stroke (so the stroke straddles the path) plus a
-        // one-pixel margin (so the frame is not clipped by the icon edge).
-        // The path radius is the wanted visible radius minus half the stroke:
-        // the stroke is centred on the path, so it adds that much outside.
-        var stroke = Math.Clamp(Math.Round(s * FrameStroke), 1.0, 2.0);
-        var inset = FrameMargin + stroke / 2;
-        var path = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
-        var pathRadius = Math.Max(s * FrameRadius - stroke / 2, 0);
-        context.DrawRectangle(null,
-            new ImmutablePen(new ImmutableSolidColorBrush(color, opacity), stroke),
-            new RoundedRect(path, pathRadius));
+        // The glyph is drawn at its nominal fractions and scaled about the
+        // icon centre, so the whole mark fills the tile.
+        double X(double v) => (0.5 + (v - 0.5) * GlyphScale) * s;
+        double Y(double v) => (0.5 + (v - 0.5) * GlyphScale) * s;
 
         var brush = new ImmutableSolidColorBrush(color, opacity);
 
@@ -184,20 +189,20 @@ public static class TrayIconFactory
         var arrow = new StreamGeometry();
         using (var geometry = arrow.Open())
         {
-            geometry.BeginFigure(new Point((0.5 - ShaftHalf) * s, ShaftTop * s), true);
-            geometry.LineTo(new Point((0.5 + ShaftHalf) * s, ShaftTop * s));
-            geometry.LineTo(new Point((0.5 + ShaftHalf) * s, ShaftBottom * s));
-            geometry.LineTo(new Point((0.5 + HeadHalf) * s, HeadBottom * s));
-            geometry.LineTo(new Point(0.5 * s, TipY * s));
-            geometry.LineTo(new Point((0.5 - HeadHalf) * s, HeadBottom * s));
-            geometry.LineTo(new Point((0.5 - ShaftHalf) * s, ShaftBottom * s));
+            geometry.BeginFigure(new Point(X(0.5 - ShaftHalf), Y(ShaftTop)), true);
+            geometry.LineTo(new Point(X(0.5 + ShaftHalf), Y(ShaftTop)));
+            geometry.LineTo(new Point(X(0.5 + ShaftHalf), Y(ShaftBottom)));
+            geometry.LineTo(new Point(X(0.5 + HeadHalf), Y(HeadBottom)));
+            geometry.LineTo(new Point(X(0.5), Y(TipY)));
+            geometry.LineTo(new Point(X(0.5 - HeadHalf), Y(HeadBottom)));
+            geometry.LineTo(new Point(X(0.5 - ShaftHalf), Y(ShaftBottom)));
             geometry.EndFigure(true);
         }
         context.DrawGeometry(brush, null, arrow);
 
         // The bar below the tip.
-        var height = (BarBottom - BarTop) * s;
-        var bar = new Rect(BarLeft * s, BarTop * s, (BarRight - BarLeft) * s, height);
+        var height = (BarBottom - BarTop) * s * GlyphScale;
+        var bar = new Rect(X(BarLeft), Y(BarTop), (BarRight - BarLeft) * s * GlyphScale, height);
         context.DrawRectangle(brush, null, new RoundedRect(bar, height / 2));
     }
 
