@@ -42,13 +42,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 ## Features
 
 - **Tray agent** — no window at launch. The tray icon is the only persistent UI:
-  - one flat monochrome mark (a down arrow over a bar) whose colours are
-    reversed against the taskbar — on a dark taskbar a bright tile with the
-    arrow knocked out of it, on a light taskbar the dark arrow straight on
-    the taskbar,
-  - idle — the glyph dimmed,
-  - actively transferring — the glyph at full brightness,
-  - every enabled server failing — the glyph in red.
+  - one flat mark (a down arrow over a bar) knocked out of a bright rounded
+    tile — the same in the light and the dark theme,
+  - idle — the mark dimmed,
+  - actively transferring — the mark at full brightness,
+  - every enabled server failing — the arrow in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
 - **Floating speed chip (opt-in)** — a small always-on-top readout, either
   numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
@@ -1027,7 +1025,7 @@ For anyone comparing the two codebases:
 
 | macOS original | This port |
 |---|---|
-| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat monochrome glyph that follows the light/dark taskbar, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
+| `NSStatusItem` + template SF Symbol | Avalonia `TrayIcon` + a flat mark (a bright tile with the arrow knocked out of it), the same in the light and the dark theme, drawn at runtime by `TrayIconFactory` (Windows flat style, not a port of `make-icon.swift`) |
 | `AppIcon.icns` (bundle icon) | `app.ico` via `ApplicationIcon`, drawn from scratch in the Windows flat style by `scripts/make-app-icon.py` — deliberately **not** a port of the macOS artwork |
 | `NSPanel` (borderless, non-activating) | Borderless `Window` (`SystemDecorations=None`) anchored bottom-right |
 | SwiftUI views | Avalonia XAML + view-models |

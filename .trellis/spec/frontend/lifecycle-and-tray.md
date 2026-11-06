@@ -17,7 +17,7 @@ AppServices.Initialize();
 - `AppServices`'s constructor is ordered so the tray icon exists before
   anything that can block or paint: `Instance` → `Settings` → `L10n.SetLanguage`
   → the floating ticker → the tray icon and its glyph → `TrayIcon.SetIcons` →
-  the secret store (DPAPI) → `MonitorStore` → the theme/`StatusesChanged` hooks
+  the secret store (DPAPI) → `MonitorStore` → the `StatusesChanged` hook
   and `Settings.Changed` → `UpdateTray()`/`Monitor.Start()` → the `Clicked`
   handler.
 - The two optional windows are **posted**, not created inline: one
@@ -171,13 +171,13 @@ sets `ToolTipText` (`PT Monitor — N servers · M online`, plus speeds when the
 toggle is on and something is online). The menu is rebuilt on any settings
 change so its headers follow the language.
 
-**Assign `TrayIcon.Icon` only when the state or the theme changes.**
-`TrayIconFactory` caches one `WindowIcon` per (state, theme) pair, and
-`UpdateTray` skips the assignment while both are unchanged. Reassigning the
-icon on every status change builds a
-new bitmap plus a new native icon per poll; at the default 2 s interval that
-exhausted the native icon path after a few hours and crashed the process with an
-unhandled `Win32Exception` (`AppServices.UpdateTray`, event log 1026) — see
+**Assign `TrayIcon.Icon` only when the state changes.**
+`TrayIconFactory` caches one `WindowIcon` per state, and `UpdateTray` skips
+the assignment while the state is unchanged. Reassigning the icon on every
+status change builds a new bitmap plus a new native icon per poll; at the
+default 2 s interval that exhausted the native icon path after a few hours and
+crashed the process with an unhandled `Win32Exception`
+(`AppServices.UpdateTray`, event log 1026) — see
 `.trellis/tasks/11-01-tray-icon-crash`. The assignment is also wrapped in a
 scoped `catch`: a cosmetic icon failure must never take the agent down.
 
@@ -186,44 +186,47 @@ public for tests/artwork but the tray must use the cached accessors.
 
 ### The artwork
 
-The tray icon is **one flat monochrome mark** — a bold down arrow over a short
-bar, in the spirit of the exe icon's sub-32 px variant but drawn separately.
-No frame, no outline, no second arrow and no progress meter: the floating
-chip already shows the live rates, so the tray icon is an identity mark, not
-a display.
+The tray icon is **one flat mark** — a bold down arrow over a short bar, in
+the spirit of the exe icon's sub-32 px variant but drawn separately — knocked
+out of a bright rounded tile. No frame, no outline, no second arrow and no
+progress meter: the floating chip already shows the live rates, so the tray
+icon is an identity mark, not a display.
 
 The glyph is drawn at its nominal fractions and then scaled about the icon
 centre (`GlyphScale` = 1.25), so the whole mark fills the tile. Without a
 frame there is nothing to frame it, and the unscaled glyph would sit small in
 the middle of the 16 px slot the taskbar asks for.
 
-The colours are **reversed against the taskbar**. On a dark taskbar the icon
-is a bright rounded tile (`#FFFFFF`, one pixel inside the edge, radius 22 % of
-the side) with the arrow knocked out of it in the dark ink, so the eye reads
-one bright piece around a dark mark. On a light taskbar there is no tile and
-the dark ink sits straight on the taskbar:
+**The artwork is the same in the light and the dark theme.** The palette is
+fixed and does not follow the taskbar: a white tile (`#FFFFFF`, one pixel
+inside the edge, radius 22 % of the side) with the arrow knocked out of it in
+the dark ink (`#1F1F1F`), and the error arrow in the dark red (`#C42B1C`).
 
-| Theme | Outside | Glyph (idle / active / error) |
+| State | Tile | Arrow |
 |---|---|---|
-| light taskbar | none (transparent) | `#1F1F1F` @ 55 % / 100 % / 100 % — error `#C42B1C` |
-| dark taskbar | `#FFFFFF` tile @ 55 % / 100 % | `#1F1F1F` @ 55 % / 100 % / 100 % — error `#C42B1C` |
+| idle | `#FFFFFF` @ 55 % | `#1F1F1F` @ 55 % |
+| active | `#FFFFFF` @ 100 % | `#1F1F1F` @ 100 % |
+| error | `#FFFFFF` @ 100 % | `#C42B1C` @ 100 % |
 
-The ink is the dark colour in **both** themes: it sits on the taskbar in the
-light theme and is knocked out of the bright tile in the dark one, so the
-error colour is the dark red (`#C42B1C`) in both. Idle is the same artwork at
-a lower opacity, so one geometry covers all three states. Tray icons are
-always drawn, never loaded from files. (The one committed binary asset is the
-exe icon `app.ico` — a different concern, see
+Idle is the same artwork at a lower opacity, so one geometry covers all three
+states. Tray icons are always drawn, never loaded from files. (The one
+committed binary asset is the exe icon `app.ico` — a different concern, see
 [component guidelines](./component-guidelines.md).)
+
+Do not add a per-theme variant of the tray artwork back: the icon no longer
+carries a theme dimension, so `TrayIconFactory` has no theme parameter, the
+cache is keyed by state alone, and `UpdateTray` assigns on a state change
+only.
 
 ### Theme
 
-The app requests the default theme variant, so
-`Application.Current.ActualThemeVariant` is the OS light/dark setting, and the
-taskbar follows it. Avalonia's Win32 backend reports an OS theme switch as
-`WM_SETTINGCHANGE`/"ImmersiveColorSet" and raises
-`Application.ActualThemeVariantChanged`; `AppServices` subscribes to it and
-redraws the tray icon. There is no timer and no registry polling.
+The app requests the default theme variant, so the **windows** follow the OS
+light/dark setting. The **tray icon does not**: its palette is fixed (see
+[the artwork](#the-artwork)), so there is nothing to redraw on an OS theme
+switch and no `ActualThemeVariantChanged` hook any more. If a theme-dependent
+tray icon comes back, the hook has to come back with it — Avalonia's Win32
+backend reports an OS theme switch as `WM_SETTINGCHANGE`/"ImmersiveColorSet".
+There is no timer and no registry polling.
 
 ### Packaging
 
@@ -243,9 +246,10 @@ an exact match.
 ### Tray vs exe icon
 
 The tray glyph and the exe icon are **different drawings**: the exe icon
-(`scripts/make-app-icon.py`, `app.ico`) keeps the coloured tile, the tray uses
-the flat monochrome mark. They no longer share constants — do not assume a
-change to one has to be repeated in the other.
+(`scripts/make-app-icon.py`, `app.ico`) keeps the coloured tile with the accent
+glyph, the tray uses a white tile with the arrow knocked out of it. They no
+longer share constants — do not assume a change to one has to be repeated in
+the other.
 
 ---
 
