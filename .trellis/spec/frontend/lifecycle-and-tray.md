@@ -186,27 +186,34 @@ public for tests/artwork but the tray must use the cached accessors.
 
 ### The artwork
 
-The tray icon is **one flat monochrome glyph** — a bold down arrow over a short
+The tray icon is **one flat monochrome mark** — a bold down arrow over a short
 bar, in the spirit of the exe icon's sub-32 px variant but drawn separately.
-There is no frame, no tile, no outline, no second arrow and no progress
-meter: the floating chip already shows the live rates, so the tray icon is an
-identity mark, not a display.
+No frame, no outline, no second arrow and no progress meter: the floating
+chip already shows the live rates, so the tray icon is an identity mark, not
+a display.
 
 The glyph is drawn at its nominal fractions and then scaled about the icon
 centre (`GlyphScale` = 1.25), so the whole mark fills the tile. Without a
 frame there is nothing to frame it, and the unscaled glyph would sit small in
 the middle of the 16 px slot the taskbar asks for.
 
-The colour follows the taskbar, not the app's accent colour:
+The colours are **reversed against the taskbar**. On a dark taskbar the icon
+is a bright rounded tile (`#FFFFFF`, one pixel inside the edge, radius 22 % of
+the side) with the arrow knocked out of it in the dark ink, so the eye reads
+one bright piece around a dark mark. On a light taskbar there is no tile and
+the dark ink sits straight on the taskbar:
 
-| Theme | Idle | Active | Error |
-|---|---|---|---|
-| light taskbar | `#1F1F1F` @ 55 % | `#1F1F1F` @ 100 % | `#C42B1C` @ 100 % |
-| dark taskbar | `#FFFFFF` @ 55 % | `#FFFFFF` @ 100 % | `#FF99A4` @ 100 % |
+| Theme | Outside | Glyph (idle / active / error) |
+|---|---|---|
+| light taskbar | none (transparent) | `#1F1F1F` @ 55 % / 100 % / 100 % — error `#C42B1C` |
+| dark taskbar | `#FFFFFF` tile @ 55 % / 100 % | `#1F1F1F` @ 55 % / 100 % / 100 % — error `#C42B1C` |
 
-Idle is the same glyph at a lower opacity, so one geometry covers all three
-states. Tray icons are always drawn, never loaded from files. (The one
-committed binary asset is the exe icon `app.ico` — a different concern, see
+The ink is the dark colour in **both** themes: it sits on the taskbar in the
+light theme and is knocked out of the bright tile in the dark one, so the
+error colour is the dark red (`#C42B1C`) in both. Idle is the same artwork at
+a lower opacity, so one geometry covers all three states. Tray icons are
+always drawn, never loaded from files. (The one committed binary asset is the
+exe icon `app.ico` — a different concern, see
 [component guidelines](./component-guidelines.md).)
 
 ### Theme

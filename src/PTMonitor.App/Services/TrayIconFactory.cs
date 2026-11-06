@@ -27,11 +27,14 @@ public enum TrayState
 /// assets.
 ///
 /// The artwork is one flat silhouette — a bold down arrow over a bar, in the
-/// spirit of the exe icon's sub-32 px variant but drawn separately. There is
-/// no frame, no tile and no outline: the whole piece is one solid colour
-/// that follows the taskbar — near-black on a light taskbar, white on a dark
-/// one. The floating chip already shows the live rates, so the tray icon is
-/// an identity mark, not a meter.
+/// spirit of the exe icon's sub-32 px variant but drawn separately.
+///
+/// The colours are "reversed" against the taskbar. On a dark taskbar the
+/// icon is a bright rounded tile with the arrow knocked out of it in the dark
+/// ink, so the eye reads one bright piece around a dark mark; on a light
+/// taskbar there is no tile and the dark ink sits straight on the taskbar.
+/// The floating chip already shows the live rates, so the tray icon is an
+/// identity mark, not a meter.
 ///
 /// The icon is packaged as a real multi-size .ico in memory (16/20/24/32/48 px)
 /// and handed to <see cref="WindowIcon"/> as a stream. That matters: a
@@ -71,15 +74,21 @@ public static class TrayIconFactory
     // the taskbar asks for.
     private const double GlyphScale = 1.25;
 
+    // The bright tile behind the glyph on a dark taskbar: a filled rounded
+    // square, one pixel inside the icon edge (half a pixel at 16 px), with
+    // the same corner radius the exe icon's card uses.
+    private const double TileRadius = 0.22;
+    private const double TileMargin = 1.0;
+
     // Idle is the same glyph at a lower opacity -- the hue never changes.
     private const double IdleOpacity = 0.55;
 
-    // Flat monochrome palette. The error colour is Fluent's critical
-    // foreground, one per theme so it stays readable on both taskbars.
-    private static readonly Color GlyphLight = Color.Parse("#1F1F1F");
-    private static readonly Color GlyphDark = Color.Parse("#FFFFFF");
-    private static readonly Color ErrorLight = Color.Parse("#C42B1C");
-    private static readonly Color ErrorDark = Color.Parse("#FF99A4");
+    // Flat monochrome palette. The ink is always the dark colour -- it sits
+    // on the taskbar in the light theme and is knocked out of the bright tile
+    // in the dark theme -- so the error colour is the dark red in both.
+    private static readonly Color TileDark = Color.Parse("#FFFFFF");
+    private static readonly Color GlyphInk = Color.Parse("#1F1F1F");
+    private static readonly Color ErrorInk = Color.Parse("#C42B1C");
 
     // One native icon per (state, theme). Assigning a WindowIcon to the tray
     // makes the platform wrap it in a native icon (HICON), and the handles
@@ -117,7 +126,7 @@ public static class TrayIconFactory
     }
 
     /// <summary>
-    /// Draws the glyph on a transparent background. The caller owns the
+    /// Draws the icon on a transparent background. The caller owns the
     /// returned bitmap and should dispose it once the pixels are copied.
     /// </summary>
     public static RenderTargetBitmap Render(int size, TrayState state, bool dark)
@@ -125,11 +134,13 @@ public static class TrayIconFactory
         var bitmap = new RenderTargetBitmap(new PixelSize(size, size), new Vector(96, 96));
         using (var context = bitmap.CreateDrawingContext())
         {
-            var color = state == TrayState.Error
-                ? (dark ? ErrorDark : ErrorLight)
-                : (dark ? GlyphDark : GlyphLight);
             var opacity = state == TrayState.Idle ? IdleOpacity : 1.0;
-            DrawGlyph(context, size, color, opacity);
+            var ink = state == TrayState.Error ? ErrorInk : GlyphInk;
+            // On a dark taskbar the glyph sits on a bright tile, so the mark
+            // reads as one bright piece around a dark arrow.
+            if (dark)
+                DrawTile(context, size, opacity);
+            DrawGlyph(context, size, ink, opacity);
         }
         return bitmap;
     }
@@ -150,6 +161,24 @@ public static class TrayIconFactory
             Log.Warn("tray", $"tray icon packaging failed, falling back to a bitmap: {exception.Message}");
             return new WindowIcon(Render(32, state, dark));
         }
+    }
+
+    // MARK: - Tile
+
+    /// <summary>
+    /// The bright rounded tile the glyph is knocked out of on a dark taskbar.
+    /// A filled rounded square, one pixel inside the icon edge (half a pixel
+    /// at 16 px, where every pixel counts).
+    /// </summary>
+    private static void DrawTile(DrawingContext context, int size, double opacity)
+    {
+        var s = (double)size;
+        var inset = size >= 32 ? TileMargin : TileMargin / 2;
+        var rect = new Rect(inset, inset, s - 2 * inset, s - 2 * inset);
+        context.DrawRectangle(
+            new ImmutableSolidColorBrush(TileDark, opacity),
+            null,
+            new RoundedRect(rect, s * TileRadius));
     }
 
     // MARK: - Glyph
