@@ -753,3 +753,40 @@ Follow-up to 11-06: the user picked the 'bright tile, dark arrow' artwork and as
 ### Next Steps
 
 - Windows manual check: the bright tile with the dark arrow reads on both a light and a dark taskbar
+
+
+## Session 17: Stale build handed over as the artwork fix
+<!-- trellis-session: v=2 fp=944ae1557109034d -->
+
+**Date**: 2026-11-06
+**Task**: Stale build handed over as the artwork fix
+**Branch**: `feat/tray-icon-solid-glyph`
+
+### Summary
+
+The user reported still seeing the old tray icon. The code was right, the handover was not: publish/win-x64/PTMonitor.exe had been published 10 seconds BEFORE the commit that changed the artwork (14:48:12 vs commit 5ecd251 at 14:48:22), so the exe they copied still drew the framed icon. Republished with scripts/build.sh (new sha256 31158d24..., DrawTile present and GlyphDark gone in the bundle), gave the checksum, the quit-first step and the hash check. Codified the lesson: frontend/quality-guidelines.md now has a 'Handing a build over' section (stat the exe against the last commit, quote the sha256), and the README troubleshooting table has a 'tray icon still looks like the old one' row.
+
+### Main Changes
+
+- .trellis/spec/frontend/quality-guidelines.md: new 'Handing a build over' section with the timestamp/sha256 checks
+- README.md: troubleshooting row for a stale exe or a cached tray entry
+- .trellis/tasks/archive/2026-11/11-06-tray-icon-solid-glyph/task.json: incident note
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] scripts/build.sh: full pipeline, win-x64 ZIP republished at 16:36
+- [OK] dotnet build -c Release: 0 errors
+- [OK] --selftest: 692 checks passed
+- [OK] dotnet test: 150 passed
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- User confirms the icon on Windows with the new exe (sha256 31158d24...)
