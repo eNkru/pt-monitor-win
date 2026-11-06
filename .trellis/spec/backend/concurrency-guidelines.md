@@ -25,9 +25,11 @@ PollLoopAsync:
   await using client = factory(config, secret(config.Id))
   loop:
     interval = settings.PollInterval
-    try fetch → Online
+    detail = DetailFor(_listDemand)
+    try fetch(detail) → Online
     catch → Failed + RetryDelay
-    delay(interval), exit on cancellation
+    wait(interval) — a backoff is never interrupted; a normal interval is
+    exit on cancellation
 ```
 
 Rules that must survive any edit:
@@ -46,6 +48,42 @@ Rules that must survive any edit:
 6. **The loop logs failure *transitions* only** (`ShouldLogFailure`): the previous
    status was `Online`, or the `FailureKind` changed. A successful poll clears the
    memo, so recovery-then-failure logs again. Never a line per tick.
+
+---
+
+## The demand — what the polls have to fetch
+
+The store cannot see the panel, so the App layer pushes one flag:
+
+```csharp
+private volatile bool _listDemand;              // written on the UI thread
+public bool ListDemand { get; }
+public void SetListDemand(bool listNeeded);     // also wakes the loops
+public static PollDetail DetailFor(bool listDemand) =>
+    listDemand ? PollDetail.Full : PollDetail.Summary;
+```
+
+- The flag is `volatile`: it is written on the UI thread and read on the poll
+  threads.
+- `SetListDemand` fires an `AsyncSignal`, which interrupts the poll interval.
+  Without it, opening the panel would wait out the whole interval before the
+  first list poll; with it, the list arrives in about one request time.
+  `AsyncSignal` is **sticky**: it remembers a signal that arrives while nobody
+  waits, so it is never lost — the next wait ends at once. One signal ends
+  **one** wait: the wait after it is a real wait again, so a demand change
+  cannot cause two poll cycles (and two whole-library downloads).
+- **A backoff is never interrupted.** The signal only ends a *normal* interval.
+  A failing server waits out its `RetryDelay` (600 s for an auth failure), no
+  matter how often the panel is opened and closed: qBittorrent bans an IP after
+  five failed logins, and a demand change must never turn that into an instant
+  retry. The kind decides, not the number — `MonitorStore.HasBackoff(kind)` is
+  true for `Auth` and `Banned` only. The selftest asserts that an
+  auth-failing server is polled exactly once while the demand toggles.
+- The scope is read **before every request**, never cached.
+- The store keeps the last full list per server (`_lists`) and publishes it
+  with a summary snapshot (`AttachList`), so the panel never loses its rows
+  because the panel closed. `Reconcile()` drops the entries of servers that no
+  longer exist.
 
 ---
 

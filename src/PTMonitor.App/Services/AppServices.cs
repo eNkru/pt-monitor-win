@@ -297,7 +297,7 @@ public sealed class AppServices
     {
         if (_panel is { IsVisible: true } visible)
         {
-            visible.Hide();
+            visible.HidePanel();
             return;
         }
         ShowPanel();
@@ -335,7 +335,7 @@ public sealed class AppServices
 
     public void HidePanel()
     {
-        if (_panel is { IsVisible: true } panel) panel.Hide();
+        if (_panel is { IsVisible: true } panel) panel.HidePanel();
     }
 
     public void ShowPreferences()

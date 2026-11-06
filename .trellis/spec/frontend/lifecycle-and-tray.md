@@ -53,8 +53,8 @@ AppServices.Initialize();
 | Action | Result |
 |---|---|
 | Left-click tray icon | `TogglePanel()` |
-| `Deactivated` on the panel | `Hide()` |
-| `Escape` / `Cancel` | `Hide()` |
+| `Deactivated` on the panel | `HidePanel()` |
+| `Escape` / `Cancel` | `HidePanel()` |
 | Click on the floating chip | `ShowPanel()` (show + activate) |
 | Right-click the floating chip | context menu: open the first server's web console / hide the chip / quit |
 | X / `Close()` on a window | the window closes; the process stays in the tray (`OnExplicitShutdown`). `PreferencesWindow` clears its cached reference via its `Closed` handler. The panel has no close button (borderless) — it hides on deactivate/Esc. |
@@ -66,6 +66,12 @@ the floating chip calls, so a click there never *hides* an already-open panel.
 Windows are cached in `AppServices` (`_panel`, `_preferences`, `_floating`) and reused. Only
 `ServerEditorWindow` is created per open, because it is a modal dialog owned by
 Preferences.
+
+The panel's visibility is also the **poll scope**: `PanelViewModel.IsPanelVisible`
+follows the window, and `MonitorStore.SetListDemand` tells the poll loops to
+fetch the torrent list only while the panel is on screen. A hidden panel is not
+rebuilt on every poll, and the servers are not asked for the whole torrent
+list either (`frontend/viewmodel-guidelines.md`, `backend/concurrency-guidelines.md`).
 
 What actually keeps the process alive is `ShutdownMode.OnExplicitShutdown` —
 no window is ever `.Close()`d except the editor dialog; the panel and
@@ -108,9 +114,9 @@ height guard.
 ## Freshness timer
 
 `MainPanelWindow` owns one `DispatcherTimer` (1 s) calling
-`ViewModel.RefreshFreshness()`. It starts in `OnOpened` and stops in `OnClosed`,
-so a hidden panel does no work. Keep the stop — a leaked timer keeps the panel
-alive.
+`ViewModel.RefreshFreshness()`. It starts in `OnOpened` and stops in `OnClosed`
+**and in `HidePanel()`**, so a hidden panel does no work. Keep the stop — a
+leaked timer keeps the panel alive and updates a header nobody sees.
 
 ---
 

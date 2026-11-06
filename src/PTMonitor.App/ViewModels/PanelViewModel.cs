@@ -124,6 +124,7 @@ public sealed class PanelViewModel : INotifyPropertyChanged
     private readonly MonitorStore _monitor;
     private readonly ObservableCollection<ServerSectionViewModel> _sections = [];
     private string? _expandedTorrentId;
+    private volatile bool _panelVisible;
 
     public PanelViewModel(SettingsStore settings, MonitorStore monitor)
     {
@@ -132,9 +133,47 @@ public sealed class PanelViewModel : INotifyPropertyChanged
         // StatusesChanged is raised from the poll loop's thread-pool thread;
         // Rebuild mutates the bound Sections collection and must run on the UI
         // thread. Settings.Changed is always raised on the UI thread already.
-        monitor.StatusesChanged += (_, _) => Dispatcher.UIThread.Post(Rebuild);
-        settings.Changed += (_, _) => Rebuild();
+        monitor.StatusesChanged += (_, _) => OnStatusesChanged();
+        settings.Changed += (_, _) =>
+        {
+            // A hidden panel must not rebuild: nobody sees the result, and the
+            // rebuild is the expensive part of a poll.
+            if (_panelVisible) Rebuild();
+        };
         Rebuild();
+    }
+
+    /// <summary>
+    /// Whether the panel window is on screen. While it is closed the polls
+    /// fetch the summary only, and no poll rebuilds the rows nobody can see.
+    /// Opening it switches the poll scope on and rebuilds once, so the panel
+    /// shows the current data the moment it appears.
+    /// </summary>
+    public bool IsPanelVisible
+    {
+        get => _panelVisible;
+        set
+        {
+            if (_panelVisible == value) return;
+            _panelVisible = value;
+            // The poll loops only fetch the torrent list while it is shown.
+            _monitor.SetListDemand(value);
+            if (value) Rebuild();
+        }
+    }
+
+    /// <summary>
+    /// A poll finished. The panel is rebuilt only while it is on screen -- and
+    /// the check runs again on the UI thread, because the panel may have been
+    /// closed between the poll and the posted action.
+    /// </summary>
+    private void OnStatusesChanged()
+    {
+        if (!_panelVisible) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_panelVisible) Rebuild();
+        });
     }
 
     public IReadOnlyList<ServerSectionViewModel> Sections => _sections;

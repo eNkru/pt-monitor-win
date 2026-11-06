@@ -452,7 +452,11 @@ selftest: FAILED — qb eta: valid: expected 3600, got nil | …
 
 ### `--probe`
 
-Fetches one snapshot from one server and prints it as JSON.
+Fetches one snapshot from one server and prints it as JSON. It polls twice —
+once for the whole list, once for the summary — so the answer also proves that
+the qBittorrent client keeps the `rid` and merges the server's delta. The
+`snapshot` is the full poll (with the torrent list); the `summary` object next
+to it carries the counters of the second poll.
 
 ```powershell
 PTMonitor.Cli.exe --probe qbittorrent --host 192.168.1.2 --port 8080 --user admin --pass secret
@@ -510,7 +514,13 @@ server banned this IP":
   ban uses — this is what makes the distinction matter),
 - 5 failed logins → IP ban for the rest of the process,
 - `WEBAPI=5.2` switches to the 5.2 login shapes (`204` success / `401` wrong
-  credentials) instead of 4.6's (`200 "Ok."` / `200 "Fails."`).
+  credentials) instead of 4.6's (`200 "Ok."` / `200 "Fails."`),
+- `/api/v2/sync/maindata` speaks the **rid protocol**: the first request
+  (`rid=0`) gets the whole library, every later request gets only what
+  changed. The probe polls twice — once for the list, once for the summary —
+  so the printed `summary` comes from a merged delta: one torrent left, one
+  removed, and the delta's download speed. The stub's log must not contain
+  `UNEXPECTED rid`.
 
 ```powershell
 node scripts\fake-qbittorrent.mjs 18080
@@ -679,12 +689,13 @@ loop(server):
     client = factory(server, secret(server.id))   # built once, keeps auth state
     forever:
         interval = settings.pollInterval
+        detail = summary | full                   # full only while the panel is open
         try:
-            publish(online(client.fetchSnapshot()))
+            publish(online(client.fetchSnapshot(detail)))
         catch auth   → publish(failed); interval = max(interval, 600s)
         catch banned → publish(failed); interval = max(interval, 900s)
         catch other  → publish(failed); interval = interval
-        sleep(interval)
+        sleep(interval)                           # a scope change interrupts it
 ```
 
 - Results are compared before publishing (`IsEquivalent`, which **ignores**
@@ -693,6 +704,26 @@ loop(server):
   It deliberately rebuilds even when only the password changed, because a
   password edit is invisible in `ServerConfig`.
 - Disabled servers are never contacted — the client factory is not even invoked.
+
+#### What a closed panel costs
+
+The poll interval stays at **2 seconds** — the speeds in the tooltip and on the
+floating chip are always that fresh. What changes is the *work* behind the poll:
+
+- **qBittorrent** — while the panel is closed the app sends the last `rid` the
+  server handed out, so the server reports only the torrents that changed
+  instead of the whole library on every poll. The counts stay exact. A full
+  re-sync every 5 minutes repairs any drift.
+- **Transmission** — the summary poll asks only for `session-stats` (rates and
+  counts). The torrent list is fetched only while the panel is on screen.
+- **The panel itself** — a hidden panel is not rebuilt. The window is cached
+  and only hidden, so before this change every 2-second poll re-created the
+  whole row list for a window nobody could see.
+
+With the panel open, the behaviour is the one you had: the full list is
+fetched and the panel stays live. Opening the panel shows the current numbers
+immediately and the fresh list within a fraction of a second; the list it shows
+before that is the last one it fetched, never an invented one.
 
 ---
 

@@ -26,7 +26,10 @@ public sealed class MonitorStore : IDisposable
     private readonly Func<ServerConfig, string?, ITorrentClient> _clientFactory;
     private readonly Dictionary<Guid, ServerStatus> _statuses = [];
     private readonly Dictionary<Guid, CancellationTokenSource> _tasks = [];
+    private readonly Dictionary<Guid, List<TorrentSummary>> _lists = [];
+    private readonly AsyncSignal _demandSignal = new();
     private CancellationTokenSource _lifetime = new();
+    private volatile bool _listDemand;
     private bool _disposed;
 
     public event EventHandler? StatusesChanged;
@@ -49,6 +52,28 @@ public sealed class MonitorStore : IDisposable
 
     public MonitorAggregate Aggregate => AggregateOf(Statuses);
     public MenuBarState MenuBarState => MenuBarStateOf(Statuses);
+
+    /// <summary>
+    /// Whether the poll loops must fetch the torrent list. The App layer sets
+    /// it from the panel's visibility: while the panel is closed nothing shows
+    /// the list, so the loops ask for the summary only.
+    /// </summary>
+    public bool ListDemand => _listDemand;
+
+    /// <summary>
+    /// Switches the poll scope and wakes the loops, so a change is in effect
+    /// on the next request instead of after the current interval.
+    /// </summary>
+    public void SetListDemand(bool listNeeded)
+    {
+        if (_listDemand == listNeeded) return;
+        _listDemand = listNeeded;
+        _demandSignal.Signal();
+    }
+
+    /// <summary>The scope a poll asks for: the list only when something shows it.</summary>
+    public static PollDetail DetailFor(bool listDemand) =>
+        listDemand ? PollDetail.Full : PollDetail.Summary;
 
     public void Start() => Reconcile();
 
@@ -85,6 +110,11 @@ public sealed class MonitorStore : IDisposable
                 foreach (var (id, status) in next) _statuses[id] = status;
                 changed = true;
             }
+            // A deleted server must not keep its torrent list in memory.
+            foreach (var id in _lists.Keys.ToList())
+            {
+                if (!next.ContainsKey(id)) _lists.Remove(id);
+            }
         }
         if (changed) RaiseChanged();
 
@@ -99,8 +129,9 @@ public sealed class MonitorStore : IDisposable
     public async Task RefreshNowAsync()
     {
         var enabled = _settings.Servers.Where(server => server.IsEnabled).ToList();
+        var detail = DetailFor(_listDemand);
         var results = await Task.WhenAll(enabled.Select(async config =>
-            (config.Id, Status: await PollOnceAsync(config, CancellationToken.None))));
+            (config.Id, Status: await PollOnceAsync(config, detail, CancellationToken.None))));
         foreach (var (id, status) in results)
         {
             if (status is not null) SetStatus(id, status);
@@ -140,10 +171,15 @@ public sealed class MonitorStore : IDisposable
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var interval = _settings.PollInterval;
+            var baseInterval = _settings.PollInterval;
+            var interval = baseInterval;
+            var backoff = false;
             try
             {
-                var snapshot = await client.FetchSnapshotAsync(cancellationToken);
+                // The scope follows the panel: closed -> the summary only,
+                // open -> the list as well.
+                var detail = DetailFor(_listDemand);
+                var snapshot = await client.FetchSnapshotAsync(detail, cancellationToken);
                 loggedFailure = null;
                 SetStatus(config.Id, new ServerStatus.Online(snapshot));
             }
@@ -160,6 +196,7 @@ public sealed class MonitorStore : IDisposable
                     ? " (the secret store is unreadable; re-enter the password)"
                     : null);
                 interval = RetryDelay(status, interval);
+                backoff = HasBackoff(status.Failure?.Kind);
             }
             catch (Exception exception)
             {
@@ -167,11 +204,24 @@ public sealed class MonitorStore : IDisposable
                 SetStatus(config.Id, status);
                 Report(status);
                 interval = RetryDelay(status, interval);
+                backoff = HasBackoff(status.Failure?.Kind);
             }
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(interval), cancellationToken);
+                if (backoff)
+                {
+                    // A backoff is never interrupted. A demand change must not
+                    // turn a 10-minute auth backoff into an instant retry --
+                    // qBittorrent bans an IP after five failed logins.
+                    await Task.Delay(TimeSpan.FromSeconds(interval), cancellationToken);
+                }
+                else
+                {
+                    // A demand change interrupts the wait: opening the panel must
+                    // not wait out the whole interval.
+                    await _demandSignal.WaitAsync(TimeSpan.FromSeconds(interval), cancellationToken);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -180,15 +230,16 @@ public sealed class MonitorStore : IDisposable
         }
     }
 
-    private async Task<ServerStatus?> PollOnceAsync(ServerConfig config, CancellationToken cancellationToken)
+    private async Task<ServerStatus?> PollOnceAsync(ServerConfig config, PollDetail detail, CancellationToken cancellationToken)
     {
-        return await PollAsync(config, _clientFactory, _secrets, cancellationToken);
+        return await PollAsync(config, _clientFactory, _secrets, detail, cancellationToken);
     }
 
     public static async Task<ServerStatus?> PollAsync(
         ServerConfig config,
         Func<ServerConfig, string?, ITorrentClient> clientFactory,
         ISecretStore secrets,
+        PollDetail detail = PollDetail.Full,
         CancellationToken cancellationToken = default)
     {
         if (!config.IsEnabled) return ServerStatus.Disabled.Instance;
@@ -196,7 +247,7 @@ public sealed class MonitorStore : IDisposable
         try
         {
             await using var client = clientFactory(config, password);
-            return new ServerStatus.Online(await client.FetchSnapshotAsync(cancellationToken));
+            return new ServerStatus.Online(await client.FetchSnapshotAsync(detail, cancellationToken));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -214,12 +265,32 @@ public sealed class MonitorStore : IDisposable
 
     private void SetStatus(Guid id, ServerStatus status)
     {
+        if (status is ServerStatus.Online online) AttachList(id, online);
         lock (_gate)
         {
             if (!_statuses.ContainsKey(id) || IsEquivalent(_statuses[id], status)) return;
             _statuses[id] = status;
         }
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// Keeps the torrent list alive across a summary poll. A summary snapshot
+    /// carries no list; publishing it as it is would empty the panel the moment
+    /// the panel closed. The last full list stays with the server instead.
+    /// </summary>
+    private void AttachList(Guid id, ServerStatus.Online status)
+    {
+        var snapshot = status.Value;
+        lock (_gate)
+        {
+            if (snapshot.Detail == PollDetail.Full)
+            {
+                _lists[id] = snapshot.Torrents;
+                return;
+            }
+            if (_lists.TryGetValue(id, out var list)) snapshot.Torrents = list;
+        }
     }
 
     private void RaiseChanged() => StatusesChanged?.Invoke(this, EventArgs.Empty);
@@ -333,6 +404,14 @@ public sealed class MonitorStore : IDisposable
         FailureKind.Banned => Math.Max(baseInterval, BannedBackoff),
         _ => baseInterval,
     };
+
+    /// <summary>
+    /// Whether a failure kind backs off hard. A backoff wait is never
+    /// interrupted — qBittorrent bans an IP after five failed logins, so the
+    /// panel must not turn a 10-minute backoff into an instant retry.
+    /// </summary>
+    public static bool HasBackoff(FailureKind? kind) =>
+        kind is FailureKind.Auth or FailureKind.Banned;
 
     public static ServerStatus? StatusFrom(Exception exception) => exception switch
     {

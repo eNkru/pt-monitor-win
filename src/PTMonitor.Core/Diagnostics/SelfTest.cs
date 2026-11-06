@@ -226,6 +226,7 @@ public static class SelfTest
             DetailChecks(checks);
             FormatChecks(checks);
             await StoreChecks(checks);
+            await PollScopeChecks(checks);
             await ClientChecks(checks);
             await LogChecks(checks);
             StartupTraceChecks(checks);
@@ -1037,6 +1038,296 @@ public static class SelfTest
         return File.Exists(logPath) ? File.ReadAllLines(logPath).Length : 0;
     }
 
+    /// <summary>
+    /// The two poll scopes: what the loops ask for, what the qBittorrent
+    /// library merges into, and what the store keeps when the list is not
+    /// fetched.
+    /// </summary>
+    private static async Task PollScopeChecks(Checks c)
+    {
+        // The scope rule.
+        c.Expect("scope: no demand asks for the summary", MonitorStore.DetailFor(false), PollDetail.Summary);
+        c.Expect("scope: demand asks for the list", MonitorStore.DetailFor(true), PollDetail.Full);
+
+        // The qBittorrent library: a full update, a delta, a removal and the
+        // self-heal rule for a delta that is bigger than the library.
+        var full = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 7, "full_update": true,
+          "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+          "torrents": {
+            "aaa": { "state": "downloading" },
+            "bbb": { "state": "uploading" }
+          }
+        }
+        """);
+        var parsed = QBittorrentParser.ParseMainData(
+            full, new WebApiVersion(2, 11, 2), PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        c.Expect("qb scope: full update total", parsed.Snapshot.TotalTorrents, 2);
+        c.Expect("qb scope: full update active", parsed.Snapshot.ActiveTorrents, 2);
+        c.Expect("qb scope: rid is read", parsed.Rid, 7);
+        c.Expect("qb scope: the list is there", parsed.Snapshot.Torrents.Count, 2);
+
+        var delta = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 8,
+          "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+          "torrents": { "aaa": { "state": "pausedDL" } },
+          "torrents_removed": [ "bbb" ]
+        }
+        """);
+        var merged = QBittorrentParser.ParseMainData(
+            delta, new WebApiVersion(2, 11, 2), PollDetail.Full, parsed.State, false);
+        c.Expect("qb scope: the delta drops the removed torrent", merged.Snapshot.TotalTorrents, 1);
+        c.Expect("qb scope: the delta applies the change", merged.Snapshot.ActiveTorrents, 0);
+        c.Expect("qb scope: the delta carries the new rates", merged.Snapshot.DownSpeed, 200L);
+        c.Expect("qb scope: the delta keeps the connection state", merged.Snapshot.ConnectionState, ConnectionState.Connected);
+
+        var summary = QBittorrentParser.ParseMainData(
+            delta, new WebApiVersion(2, 11, 2), PollDetail.Summary, parsed.State, false);
+        c.Expect("qb scope: the summary carries no list", summary.Snapshot.Torrents.Count, 0);
+        c.Expect("qb scope: the summary carries the counts", summary.Snapshot.TotalTorrents, 1);
+        c.Expect("qb scope: the summary says so", summary.Snapshot.Detail, PollDetail.Summary);
+
+        // A map that does not cover the library is a delta, even when it is
+        // bigger: treating it as a full set would lose the torrent it misses.
+        var bigger = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 9,
+          "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+          "torrents": {
+            "ccc": { "state": "downloading" },
+            "ddd": { "state": "downloading" },
+            "eee": { "state": "downloading" }
+          }
+        }
+        """);
+        var healed = QBittorrentParser.ParseMainData(
+            bigger, new WebApiVersion(2, 11, 2), PollDetail.Full, parsed.State, false);
+        c.Expect("qb scope: a bigger map that misses a torrent is a delta", healed.Snapshot.TotalTorrents, 5);
+
+        // A map that covers the library is the whole library.
+        var covering = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 12,
+          "server_state": { "dl_info_speed": 200, "up_info_speed": 60, "connection_status": "connected" },
+          "torrents": {
+            "aaa": { "state": "downloading" },
+            "bbb": { "state": "downloading" },
+            "ccc": { "state": "downloading" }
+          }
+        }
+        """);
+        var whole = QBittorrentParser.ParseMainData(
+            covering, new WebApiVersion(2, 11, 2), PollDetail.Full, parsed.State, false);
+        c.Expect("qb scope: a map that covers the library is the whole library", whole.Snapshot.TotalTorrents, 3);
+
+        // The store: the scope follows the demand, and a summary poll keeps the
+        // list the panel shows.
+        var directory = Path.Combine(Path.GetTempPath(), "ptmonitor-scope-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var server = new ServerConfig(ServerKind.Qbittorrent, "192.168.1.2", 8080) { Name = "NAS" };
+            settings.Add(server);
+            settings.SetPollInterval(1);
+
+            var scopes = new List<PollDetail>();
+            var polled = new SemaphoreSlim(0);
+            var monitor = new MonitorStore(settings, new InMemorySecretStore(),
+                (_, _) => new ScopeRecordingClient(detail =>
+                {
+                    lock (scopes) scopes.Add(detail);
+                    polled.Release();
+                }));
+            try
+            {
+                monitor.Start();
+                c.True("scope: the first poll arrives", await polled.WaitAsync(TimeSpan.FromSeconds(10)));
+                c.Expect("scope: a closed panel asks for the summary", scopes[0], PollDetail.Summary);
+
+                monitor.SetListDemand(true);
+                c.True("scope: the demand wakes the loop", await polled.WaitAsync(TimeSpan.FromSeconds(10)));
+                // The scope is not pinned to an index: a slow machine may poll
+                // once more before the demand lands.
+                lock (scopes)
+                {
+                    c.True("scope: an open panel asks for the list", scopes.Skip(1).Contains(PollDetail.Full));
+                }
+                c.True("scope: the demand is on", monitor.ListDemand);            }
+            finally
+            {
+                await monitor.StopAsync();
+                monitor.Dispose();
+            }
+
+            // The retained list: a summary poll must not empty the panel.
+            var retainedDirectory = Path.Combine(directory, "retained");
+            Directory.CreateDirectory(retainedDirectory);
+            var retainedSettings = new SettingsStore(Path.Combine(retainedDirectory, "settings.json"));
+            var retainedServer = new ServerConfig(ServerKind.Qbittorrent, "192.168.1.3", 8080) { Name = "NAS" };
+            retainedSettings.Add(retainedServer);
+            retainedSettings.SetPollInterval(1);
+
+            var fullSnapshot = new TransferSnapshot
+            {
+                DownSpeed = 100,
+                TotalTorrents = 2,
+                Detail = PollDetail.Full,
+                Torrents =
+                [
+                    new TorrentSummary { Id = "aaa", Name = "one" },
+                    new TorrentSummary { Id = "bbb", Name = "two" },
+                ],
+            };
+            var summarySnapshot = new TransferSnapshot { DownSpeed = 999, TotalTorrents = 2, Detail = PollDetail.Summary };
+            var published = new SemaphoreSlim(0);
+            var retainedMonitor = new MonitorStore(retainedSettings, new InMemorySecretStore(),
+                (config, password) => new ScopeRecordingClient(
+                    recorded => { },
+                    detail => detail == PollDetail.Full ? fullSnapshot : summarySnapshot));
+            // Only the online states count: the reconcile publishes the
+            // "connecting" state before the first poll.
+            retainedMonitor.StatusesChanged += (_, _) =>
+            {
+                if (retainedMonitor.Statuses.Values.Any(state => state is ServerStatus.Online))
+                    published.Release();
+            };
+            try
+            {
+                // The panel is open: the first poll asks for the list.
+                retainedMonitor.SetListDemand(true);
+                retainedMonitor.Start();
+                c.True("scope: the full poll is published",
+                    await published.WaitAsync(TimeSpan.FromSeconds(10)));
+                // The panel closes: the next poll asks for the summary only.
+                retainedMonitor.SetListDemand(false);
+                c.True("scope: the summary poll is published",
+                    await published.WaitAsync(TimeSpan.FromSeconds(10)));
+                var status = retainedMonitor.Statuses[retainedServer.Id] as ServerStatus.Online;
+                c.True("scope: the server is online", status is not null);
+                c.Expect("scope: the summary poll keeps the list", status?.Value.Torrents.Count ?? 0, 2);
+                c.Expect("scope: the summary poll is marked as such", status?.Value.Detail, PollDetail.Summary);
+                c.Expect("scope: the summary poll keeps the fresh rates", status?.Value.DownSpeed ?? 0, 999L);
+            }
+            finally
+            {
+                await retainedMonitor.StopAsync();
+                retainedMonitor.Dispose();
+            }
+
+            // A backoff must survive a demand change. qBittorrent bans an IP
+            // after five failed logins, so the panel must never turn a
+            // 10-minute auth backoff into an instant retry.
+            var backoffDirectory = Path.Combine(directory, "backoff");
+            Directory.CreateDirectory(backoffDirectory);
+            var backoffSettings = new SettingsStore(Path.Combine(backoffDirectory, "settings.json"));
+            backoffSettings.Add(new ServerConfig(ServerKind.Qbittorrent, "192.168.1.4", 8080) { Name = "NAS" });
+            backoffSettings.SetPollInterval(1);
+            var attempts = new int[1];
+            var secondAttempt = new TaskCompletionSource();
+            var attempted = new SemaphoreSlim(0);
+            var backoffMonitor = new MonitorStore(backoffSettings, new InMemorySecretStore(),
+                (config, password) => new FailingClient(ServerFailure.Auth("wrong password"), () =>
+                {
+                    if (Interlocked.Increment(ref attempts[0]) >= 2) secondAttempt.TrySetResult();
+                    attempted.Release();
+                }));
+            try
+            {
+                backoffMonitor.Start();
+                c.True("scope: the failing server is polled", await attempted.WaitAsync(TimeSpan.FromSeconds(10)));
+                backoffMonitor.SetListDemand(true);
+                backoffMonitor.SetListDemand(false);
+                // A broken implementation would poll again at once; the wait
+                // gives it the chance to show that.
+                var again = await Task.WhenAny(secondAttempt.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+                c.True("scope: a backoff is not interrupted", again != secondAttempt.Task);
+                c.Expect("scope: the failing server was polled once", attempts[0], 1);
+            }
+            finally
+            {
+                await backoffMonitor.StopAsync();
+                backoffMonitor.Dispose();
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+
+        // The wake-up is not lost: a signal that arrives while nobody waits
+        // still ends the next wait.
+        var signal = new AsyncSignal();
+        signal.Signal();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await signal.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        c.True("signal: a signal between two waits is not lost", watch.Elapsed < TimeSpan.FromSeconds(5));
+
+        var waking = new AsyncSignal();
+        var wait = waking.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        waking.Signal();
+        var woken = await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(5)));
+        c.True("signal: a signal wakes the waiting loop", woken == wait);
+
+        // One signal ends one wait: the next wait is a real wait again, so a
+        // demand change cannot cause two poll cycles.
+        var once = new AsyncSignal();
+        once.Signal();
+        await once.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+        var after = System.Diagnostics.Stopwatch.StartNew();
+        await once.WaitAsync(TimeSpan.FromMilliseconds(300), CancellationToken.None);
+        c.True("signal: one signal ends one wait", after.Elapsed >= TimeSpan.FromMilliseconds(250));
+
+        // The Transmission scope rule.
+        c.True("scope: the summary does not need the list", !TransmissionClient.NeedsTorrentList(PollDetail.Summary));
+        c.True("scope: the full scope needs the list", TransmissionClient.NeedsTorrentList(PollDetail.Full));
+
+        // The backoff ladder: only these two kinds back off hard, and a backoff
+        // wait is never interrupted.
+        c.True("scope: an auth failure backs off", MonitorStore.HasBackoff(FailureKind.Auth));
+        c.True("scope: a ban backs off", MonitorStore.HasBackoff(FailureKind.Banned));
+        c.True("scope: an unreachable server does not back off", !MonitorStore.HasBackoff(FailureKind.Unreachable));
+        c.True("scope: no failure does not back off", !MonitorStore.HasBackoff(null));
+
+        // The rid the next request carries.
+        var now = DateTimeOffset.UnixEpoch;
+        c.Expect("rid: the full scope asks for everything",
+            QBittorrentClient.NextRid(PollDetail.Full, false, 5, now, now, TimeSpan.FromMinutes(5)), 0);
+        c.Expect("rid: an empty library asks for everything",
+            QBittorrentClient.NextRid(PollDetail.Summary, true, 5, now, now, TimeSpan.FromMinutes(5)), 0);
+        c.Expect("rid: the summary scope asks for the changes",
+            QBittorrentClient.NextRid(PollDetail.Summary, false, 5, now, now, TimeSpan.FromMinutes(5)), 5);
+        c.Expect("rid: the periodic re-sync asks for everything",
+            QBittorrentClient.NextRid(PollDetail.Summary, false, 5, now.AddMinutes(6), now, TimeSpan.FromMinutes(5)), 0);
+
+        // The tracker fallback is merged, not replaced: a delta carries only
+        // the announce URLs of the torrents it mentions.
+        var withTracker = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 10, "full_update": true,
+          "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+          "trackers": { "https://tracker.example/announce": [ "aaa" ] },
+          "torrents": { "aaa": { "state": "downloading" } }
+        }
+        """);
+        var tracked = QBittorrentParser.ParseMainData(
+            withTracker, new WebApiVersion(2, 11, 2), PollDetail.Full, QBittorrentParser.QbLibraryState.Empty, true);
+        c.Expect("qb scope: the tracker fallback is read", tracked.State.Trackers.GetValueOrDefault("aaa"), "https://tracker.example/announce");
+        var withoutTrackers = Encoding.UTF8.GetBytes("""
+        {
+          "rid": 11,
+          "server_state": { "dl_info_speed": 100, "up_info_speed": 50, "connection_status": "connected" },
+          "torrents": { "aaa": { "state": "downloading" } }
+        }
+        """);
+        var kept = QBittorrentParser.ParseMainData(
+            withoutTrackers, new WebApiVersion(2, 11, 2), PollDetail.Full, tracked.State, false);
+        c.Expect("qb scope: the tracker fallback survives a delta",
+            kept.State.Trackers.GetValueOrDefault("aaa"), "https://tracker.example/announce");
+    }
+
     private static async Task ClientChecks(Checks c)
     {
         var secrets = new InMemorySecretStore();
@@ -1077,7 +1368,7 @@ public static class SelfTest
     /// <summary>Fails every poll and reports each attempt, so a test can count ticks.</summary>
     private sealed class CountingClient(Action onPoll) : ITorrentClient
     {
-        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken)
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
         {
             onPoll();
             return Task.FromException<TransferSnapshot>(
@@ -1087,6 +1378,34 @@ public static class SelfTest
         public Task<string> TestConnectionAsync(CancellationToken cancellationToken) =>
             Task.FromResult("stub");
 
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>Records the scope every poll asked for and returns a canned snapshot.</summary>
+    private sealed class ScopeRecordingClient(
+        Action<PollDetail> onPoll,
+        Func<PollDetail, TransferSnapshot>? snapshot = null) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
+        {
+            onPoll(detail);
+            return Task.FromResult(snapshot?.Invoke(detail) ?? new TransferSnapshot { Detail = detail });
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>Fails every poll with a given cause, so a test can count the attempts.</summary>
+    private sealed class FailingClient(ServerFailure failure, Action? onPoll = null) : ITorrentClient
+    {
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken)
+        {
+            onPoll?.Invoke();
+            return Task.FromException<TransferSnapshot>(new ServerFailureException(failure));
+        }
+
+        public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
@@ -1101,10 +1420,10 @@ public static class SelfTest
             _error = error;
         }
 
-        public Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken) =>
+        public Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken) =>
             _error is not null
                 ? Task.FromException<TransferSnapshot>(new ServerFailureException(_error))
-                : Task.FromResult(_snapshot ?? new TransferSnapshot());
+                : Task.FromResult(_snapshot ?? new TransferSnapshot { Detail = detail });
 
         public Task<string> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult("stub");
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

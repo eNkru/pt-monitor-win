@@ -52,24 +52,78 @@ See the parent PRD for the anchors. In short:
 6. **The decision on the poll interval is the user's** — the child may measure
    and propose, but the default only changes with an explicit answer.
 
+## Decisions
+
+- **D1 — the poll interval stays at 2 s.** The user's answer (2026-11-06):
+  keep 2 seconds. The interval is not the lever: the panel-closed cost comes
+  from *what* is fetched and *what* is rebuilt, not from how often. Nothing the
+  user sees gets less fresh.
+- **D2 — two poll scopes, not two poll loops.** `Summary` (rates, counts,
+  connection state, free space — no torrent list) and `Full` (everything). The
+  scope is chosen per request from one flag: the panel's visibility, pushed
+  into the store by the App layer.
+- **D3 — qBittorrent keeps one endpoint and sends the last `rid`.** The
+  server then reports only what changed; the client merges the deltas into its
+  library, so the counts stay exact and the payload follows the churn instead
+  of the library size. A full re-sync every 5 minutes heals any drift.
+  **Revised after the review:** the *full* scope always asks for everything
+  (`rid=0`), because the panel has to show exactly what the server has and the
+  server's "changed" criterion must not decide what a progress bar shows. The
+  delta is used for the *summary* scope, where only the counts matter.
+- **D4 — Transmission's summary poll is one request.** `session-stats` already
+  carries the rates and the counts; the torrent list is only asked for while
+  the panel is on screen.
+- **D5 — a backoff is never interrupted.** The demand wakes a poll loop out of
+  a *normal* interval only. A failing server waits out its `RetryDelay`
+  (600 s for an auth failure) no matter how often the panel is opened and
+  closed: qBittorrent bans an IP after five failed logins.
+
 ## Acceptance criteria
 
-- [ ] With the panel closed, a poll does not create, clear or rebuild any
+- [x] With the panel closed, a poll does not create, clear or rebuild any
       panel section or row view model. Opening the panel shows the current
-      data (no stale list, no empty list).
-- [ ] With the panel open, the list still refreshes at least as often as
-      before.
-- [ ] The per-poll request volume and payload are strictly lower than today
-      for the panel-closed case, and the tray tooltip and the floating chip
-      still update at the current rate.
-- [ ] The pure parts of the new policy (which refresh a snapshot needs, how
-      often the panel list is refreshed) are covered by `--selftest` and by the
-      xUnit mirror.
-- [ ] `dotnet build -c Release` → 0 errors; `--selftest` → all checks pass;
+      numbers at once and the fresh list within one request time; it never
+      invents rows. *`PanelViewModel.IsPanelVisible` gates both triggers; the
+      gate is checked on the poll thread and again on the UI thread. The store
+      keeps the last full list, so the panel shows that list for a fraction of
+      a second and the fresh one right after; before the first full poll there
+      is nothing to show.*
+- [x] With the panel open, the list still refreshes at least as often as
+      before. *The demand switches the scope on and wakes the loop, so the
+      first list poll lands in about one request time; the full scope asks the
+      server for everything, so the panel shows exactly what the server has.*
+- [x] The per-poll payload is strictly lower than today for the panel-closed
+      case: no poll asks a server for the whole torrent list while nothing
+      shows it (except the 5-minute re-sync, which is one request in 150), and
+      the tray tooltip and the floating chip still update at the current rate
+      (2 s). *qBittorrent sends the last `rid`, so the server reports only the
+      changes; Transmission's summary poll is one `session-stats` request
+      instead of two. The counts stay exact in both scopes, so the tray's
+      Active/Idle state does not change.*
+- [x] The pure parts of the new policy (which scope a poll asks for, how the
+      qBittorrent library is merged, which snapshot carries which list) are
+      covered by `--selftest` and by the xUnit mirror. *692 selftest checks
+      (44 new) and 150 xUnit tests (24 new): `PollScopeChecks` and
+      `PollScopeTests`.*
+- [x] `dotnet build -c Release` → 0 errors; `--selftest` → all checks pass;
       `dotnet test` → all tests pass; `scripts/build.sh --invariant` → ZIP and
-      CLI produced.
+      CLI produced. *Re-verified: 0 errors, 692 checks, 150 tests, the ZIP and
+      the CLI produced.*
+- [x] The stub server speaks the rid protocol, and the probe against it
+      returns the merged delta. *`scripts/fake-qbittorrent.mjs` answers `rid=0`
+      with the full library and the last rid with a delta; the probe prints
+      the full snapshot and the merged `summary` (`totalTorrents` 1 of 2, the
+      delta's speed) in both WebAPI modes, and the stub's log shows the rid
+      sequence without an `UNEXPECTED rid`.*
+- [x] A failing server is not polled again because the panel was opened and
+      closed. *The backoff wait is not interruptible; the selftest and the
+      xUnit mirror assert that an auth-failing server is polled exactly once
+      while the demand toggles.*
 - [ ] Windows manual pass: the tooltip and the chip keep updating at the
-      expected rate; the panel opens with data and stays live.
+      expected rate; the panel opens with data and stays live; the tray icon
+      still switches between Idle and Active; qBittorrent's panel list matches
+      the server's; the log stays clean for 30 s. **Still open — needs the
+      target machine.**
 
 ## Out of scope
 
@@ -81,6 +135,6 @@ See the parent PRD for the anchors. In short:
 
 ## Open questions
 
-- **Q3 (inherited)** — the default poll interval: keep 2 s, or raise it? Raising
-  it to 5 s cuts the idle network and CPU cost by 60 % at the price of slower
-  tooltip updates. The child measures the actual cost first and then asks.
+- **Q3 (inherited) — answered: keep 2 s.** The default poll interval stays at
+  2 seconds (D1, 2026-11-06). The idle cost is cut by fetching less and
+  rebuilding less, not by polling less often.

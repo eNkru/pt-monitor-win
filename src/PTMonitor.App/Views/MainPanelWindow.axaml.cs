@@ -36,16 +36,23 @@ public partial class MainPanelWindow : Window
         _freshnessTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _freshnessTimer.Tick += (_, _) => ViewModel.RefreshFreshness();
 
-        Deactivated += (_, _) => Hide();
+        Deactivated += (_, _) => HidePanel();
         Opened += (_, _) => Dispatcher.UIThread.Post(PositionNearTray, DispatcherPriority.Background);
         KeyDown += OnKeyDown;
+        // Hide() does not raise Closed, so the panel's visibility follows the
+        // property: the view model stops rebuilding and the poll loops stop
+        // fetching the torrent list as soon as the window is gone.
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Visual.IsVisibleProperty) ViewModel.IsPanelVisible = e.NewValue is true;
+        };
     }
 
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
         ApplyLocalization();
-        ViewModel.Rebuild();
+        ViewModel.IsPanelVisible = true;
         _freshnessTimer.Start();
     }
 
@@ -55,9 +62,22 @@ public partial class MainPanelWindow : Window
         _freshnessTimer.Stop();
     }
 
+    /// <summary>
+    /// Hides the panel and tells the view model. The poll scope follows the
+    /// panel's visibility, so the hide has to be announced even if the window
+    /// property change is missed. The freshness timer stops with it: a hidden
+    /// panel must not update its header either.
+    /// </summary>
+    public void HidePanel()
+    {
+        ViewModel.IsPanelVisible = false;
+        _freshnessTimer.Stop();
+        Hide();
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Escape or Key.Cancel) Hide();
+        if (e.Key is Key.Escape or Key.Cancel) HidePanel();
     }
 
     private void PositionNearTray()

@@ -10,7 +10,7 @@
 // src/PTMonitor.Core/Client/TorrentClient.cs
 public interface ITorrentClient : IAsyncDisposable
 {
-    Task<TransferSnapshot> FetchSnapshotAsync(CancellationToken cancellationToken);
+    Task<TransferSnapshot> FetchSnapshotAsync(PollDetail detail, CancellationToken cancellationToken);
     Task<string> TestConnectionAsync(CancellationToken cancellationToken);
 }
 ```
@@ -28,6 +28,49 @@ Rules:
 - Auth state, cookies, session ids and cached versions are instance fields —
   clients are built once per poll loop and reused.
 - `DisposeAsync` releases transport and locks; callers use `await using`.
+
+---
+
+## Two poll scopes
+
+`PollDetail` says how much a poll needs:
+
+| Scope | Carries | Used when |
+|---|---|---|
+| `Summary` | rates, torrent counts, connection state, free space — **no torrent list** | the panel is closed |
+| `Full` | everything, including the torrent list | the panel is on screen |
+
+The client picks the cheapest request that satisfies the scope. `TransferSnapshot.Detail`
+says what the snapshot carries, so the store knows whether a list is there.
+
+- **qBittorrent**: both scopes use `/api/v2/sync/maindata`; the scope decides
+  what the *request* asks for:
+  - `Full` → `rid=0`, the whole library. The panel shows the list, and it has
+    to show exactly what the server has — a delta only reports what the server
+    considers changed, and that must not decide what a progress bar shows.
+  - `Summary` → the **last rid** the server handed out, so the server reports
+    only what changed. The client merges the deltas into its library
+    (`QBittorrentParser.MergeLibrary`), which keeps the counts exact and the
+    payload proportional to the churn. A full re-sync (`rid=0`) happens when
+    the library is empty and every `QBittorrentClient.FullSyncInterval`
+    (5 minutes) — the safety net against drift.
+  - The merge is pure and lives in the parser: a full update replaces the
+    library, a delta applies the changed entries and drops the removed ones.
+    A map that holds **every** torrent of the current library is the whole
+    library, even when the server did not label it as one — that is the
+    self-heal. The test is a *superset*, not a size: a delta that is bigger
+    than the library but misses a torrent is a delta, and treating it as a
+    full set would lose the missing torrent. The tracker fallback map is
+    **merged**, not replaced: a delta carries only the announce URLs of the
+    torrents it mentions.
+- **Transmission**: `Summary` sends `session-stats` only (it already carries
+  the rates and the counts), `Full` adds `torrent-get` with the fixed field
+  list. The summary poll is one request instead of two. The rule is a pure
+  function — `TransmissionClient.NeedsTorrentList(detail)` — so both suites
+  can pin it.
+
+The store keeps the last full list per server and publishes it with a summary
+snapshot, so closing the panel never empties it.
 
 ---
 
