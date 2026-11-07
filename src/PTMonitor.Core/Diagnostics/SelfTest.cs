@@ -597,6 +597,10 @@ public static class SelfTest
             c.True("settings: floating off", !settings.ShowFloatingSpeeds);
             c.Expect("settings: default floating display", settings.FloatingDisplay, FloatingDisplayMode.Numbers);
             c.True("settings: no floating position", settings.FloatingPositionX is null && settings.FloatingPositionY is null);
+            c.True("settings: desktop widget off", !settings.ShowDesktopWidget);
+            c.True("settings: no desktop widget position",
+                settings.DesktopWidgetPositionX is null && settings.DesktopWidgetPositionY is null);
+            c.True("settings: desktop widget unlocked", !settings.DesktopWidgetLocked);
             c.Expect("settings: default mode", settings.TorrentListMode, TorrentListMode.All);
 
             var server = new ServerConfig(ServerKind.Qbittorrent, "192.168.1.2", 8080) { Name = "NAS" };
@@ -618,6 +622,9 @@ public static class SelfTest
             settings.SetShowFloatingSpeeds(true);
             settings.SetFloatingDisplayMode(FloatingDisplayMode.Graph);
             settings.SetFloatingPosition(320, 240);
+            settings.SetShowDesktopWidget(true);
+            settings.SetDesktopWidgetPosition(120, 80);
+            settings.SetDesktopWidgetLocked(true);
 
             var reloaded = new SettingsStore(settings.FilePath);
             c.Expect("settings: reload count", reloaded.Servers.Count, 1);
@@ -629,6 +636,10 @@ public static class SelfTest
             c.Expect("settings: reload floating display", reloaded.FloatingDisplay, FloatingDisplayMode.Graph);
             c.True("settings: reload floating position",
                 reloaded.FloatingPositionX == 320 && reloaded.FloatingPositionY == 240);
+            c.True("settings: reload desktop widget", reloaded.ShowDesktopWidget);
+            c.True("settings: reload desktop widget position",
+                reloaded.DesktopWidgetPositionX == 120 && reloaded.DesktopWidgetPositionY == 80);
+            c.True("settings: reload desktop widget lock", reloaded.DesktopWidgetLocked);
             reloaded.Delete(server.Id);
             c.Expect("settings: delete", reloaded.Servers.Count, 0);
 

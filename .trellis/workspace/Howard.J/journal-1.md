@@ -790,3 +790,124 @@ The user reported still seeing the old tray icon. The code was right, the handov
 ### Next Steps
 
 - User confirms the icon on Windows with the new exe (sha256 31158d24...)
+
+
+## Session 18: Desktop widget (desktop level, lockable)
+<!-- trellis-session: v=2 fp=7c1d2f0a9b4e6d33 -->
+
+**Date**: 2026-11-07
+**Task**: Desktop widget (desktop-level, lockable)
+**Branch**: `feat/desktop-widget`
+
+### Summary
+
+The user asked for a copy of the Nexus desktop widget: a card that lives on the
+desktop and can be locked in a position. Nexus (`hello-nexus/nexus`, AGPL-3.0)
+was only read for the *behaviour* — a floating card, draggable, with a
+per-widget `Locked` flag that blocks drag/edit/resize. No code was copied.
+
+Scope decided with the user: simple content first (aggregate rates + the
+existing rolling graph + a summary line), a **true desktop-level** widget
+(behind the app windows, not always-on-top), and a lock that freezes the
+**position only**.
+
+What was built: `Services/DesktopLayer.cs` (Win32 desktop layer) and
+`Views/DesktopWidgetWindow` (the card), plus the settings, the tray/Preferences
+toggles and the localization. The card is made a **child of the shell's desktop
+host** (`Progman`/`WorkerW`) — behind every app window, survives Win+D, cannot
+steal the focus. Without a host it degrades to an always-on-top window and the
+log says why; a 2 s retry re-attaches after a shell restart.
+
+Two constraints shaped the design: a **layered (transparent) window cannot be a
+child of the desktop host**, so the card stays opaque and its rounded corners
+are cut out with `SetWindowRgn`; and a **child window is not moved by the
+window manager**, so the drag follows the cursor itself
+(`GetCursorPos` + `SetWindowPos` in host coordinates).
+
+### Main Changes
+
+- `src/PTMonitor.App/Services/DesktopLayer.cs` (new): the desktop host
+  discovery, the `SetParent` attach with the `WS_POPUP`↔`WS_CHILD` style swap,
+  the verified host-relative placement, `WS_EX_NOACTIVATE`, `SetWindowRgn`.
+- `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml(.cs)` (new): the card.
+- `src/PTMonitor.App/Services/AppServices.cs`: the widget wiring, the shared
+  1 s sample ticker (`SyncTicker`), the 2 s attach-retry timer.
+- `src/PTMonitor.Core/Store/SettingsStore.cs`: `ShowDesktopWidget`,
+  `DesktopWidgetPositionX/Y`, `DesktopWidgetLocked`.
+- Specs: a "Desktop widget" section in `frontend/lifecycle-and-tray.md`, the
+  settings table in `frontend/state-management.md`, the DTO and the mutator
+  list in `backend/persistence-guidelines.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7f5c09` | feat(widget): a desktop-level card with a position lock |
+
+### Testing
+
+- [OK] dotnet build -c Debug: 0 errors
+- [OK] --selftest: 698 checks passed
+- [OK] dotnet test: 151 passed
+- [OK] app run with the widget enabled: the card is created and placed, the
+      fallback is logged once, the process survives with a clean log
+- [ ] **Windows only** (cannot run on this box): behind the app windows,
+      Win+D, the focus behaviour, the menu over the desktop layer, the drag
+      of a child window, the lock across a restart — the checklist is in
+      `.trellis/tasks/11-07-desktop-widget/notes.md`
+
+### Status
+
+[OK] **Implemented, PR #17 open**
+
+### Next Steps
+
+- Check the widget on Windows, then merge PR #17 and archive the task
+- Follow-up (not in this task): per-server rows / top torrents inside the card
+
+### Update (same day, later): transparent and square
+
+The user looked at the first build and asked for two changes: **no rounded
+corner** and **transparent**. That reversed the desktop-layer mechanism.
+
+The first version re-parented the card into the shell's desktop host
+(`SetParent` to `Progman`/`WorkerW`). That worked, but it forced the card to
+stay **opaque**: Avalonia renders a transparent window without a redirection
+bitmap (DirectComposition) or with DWM blur-behind, and neither survives being
+made a child of the shell's desktop — the card would simply not be drawn.
+
+So the card is now pinned in the **z-order** directly above the desktop window
+(`SetWindowPos(hwnd, host, …)`), below every application window, with
+`WS_EX_NOACTIVATE` so a click never activates it. The pin is re-asserted on
+every sample, so a shell restart heals itself. The card is an ordinary
+top-level window again: the drag is the chip's `BeginMoveDrag`, and Win+D is
+undone by restoring it from `WindowState.Minimized`.
+
+The card has no card: no fill, no border, square corners, and every run is
+drawn with `OutlinedText` (a hard outline around the glyphs) so it stays
+readable on the wallpaper.
+
+**Verified on the X11 display**: the card was captured with `xwd`, converted
+to a PNG and inspected — 91 % of its pixels are fully transparent (1 % opaque:
+the glyph cores; 8 % partial: the outlines and the anti-aliased graph).
+
+The lesson worth keeping: *a transparent Avalonia window and a desktop-host
+child window are mutually exclusive on Windows.* Choose one.
+
+### Update 2 (same day): a soft mask behind the readout
+
+Fully transparent was too bare — the text sat straight on the wallpaper. The
+card now has a **mask**: 50 % black per-pixel alpha, no border, square
+corners, so the wallpaper still reads through it the way a Nexus glass plate
+does. The hard outlines stayed (and got thinner) for bright wallpapers,
+where the mask alone is not enough contrast.
+
+Verified on the X11 display again: the card was captured with `xwd` and
+composited over a light and over a dark wallpaper — the mask reads through
+on both and the text stays legible.
+
+The mask is the *window background* (`Background="#80000000"`), not a plate
+inside it: with `TransparencyLevelHint="Transparent"` the window is per-pixel
+alpha, so the background is composited over the desktop. A plate inside the
+window would have needed rounded corners to look right, and the user does not
+want those.

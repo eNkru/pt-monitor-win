@@ -34,6 +34,10 @@ private sealed class SettingsFile
     public FloatingDisplayMode? FloatingDisplay { get; set; }   // numbers (default) | graph
     public int? FloatingPositionX { get; set; }      // physical pixels, null = never moved
     public int? FloatingPositionY { get; set; }
+    public bool? ShowDesktopWidget { get; set; }      // the card on the desktop
+    public int? DesktopWidgetPositionX { get; set; }  // physical pixels, null = never moved
+    public int? DesktopWidgetPositionY { get; set; }
+    public bool? DesktopWidgetLocked { get; set; }    // the position is frozen
     public TorrentListMode? TorrentListMode { get; set; }
     public AppLanguage? AppLanguage { get; set; }
 }
@@ -53,8 +57,10 @@ new JsonSerializerOptions
 Consequences to preserve:
 
 - On-disk keys are `servers`, `pollInterval`, `torrentListMode`,
-  `appLanguage`, and `"qbittorrent"`/`"transmission"` for `kind`. Renaming a
-  property or enum member silently breaks existing files — add, do not rename.
+  `appLanguage`, `"qbittorrent"`/`"transmission"` for `kind`, and
+  `showDesktopWidget` / `desktopWidgetPositionX` / `desktopWidgetPositionY` /
+  `desktopWidgetLocked` for the desktop card. Renaming a property or enum
+  member silently breaks existing files — add, do not rename.
 - Load clamps and defaults every field
   (`Clamp(file.PollInterval ?? DefaultPollInterval)`). A missing or older
   payload is "not configured", never an error.
@@ -77,7 +83,9 @@ File.Move(temp, _path, true);
 
 Mutators, not a public setter: `Add`, `Update`, `Delete`, `ReplaceServers`,
 `SetEnabled`, `SetPollInterval`, `SetShowSpeedsInMenuBar`,
-`SetShowFloatingSpeeds`, `SetFloatingDisplayMode`, `SetFloatingPosition`, `SetTorrentListMode`,
+`SetShowFloatingSpeeds`, `SetFloatingDisplayMode`, `SetFloatingPosition`,
+`SetShowDesktopWidget`, `SetDesktopWidgetPosition`, `SetDesktopWidgetLocked`,
+`SetTorrentListMode`,
 `SetAppLanguage`. `Clamp` is public static for the selftest.
 
 ---

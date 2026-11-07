@@ -53,6 +53,13 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   upload). It can be dragged anywhere and the position is remembered across
   restarts; double-click it to open the server's web console in the default
   browser. Off by default; enable it from the tray menu or Preferences.
+- **Desktop widget (opt-in)** — a translucent readout that lives on the
+  Windows desktop, *behind* every application window: it survives **Win+D** and
+  never steals the keyboard focus. It shows the aggregate `↓ / ↑` rates, the
+  same rolling graph and a summary line (`N servers · M online · K active`) on
+  a soft, square-cornered mask — the wallpaper still shows through it. Drag it
+  anywhere (the position is remembered), or **lock** it so it cannot be moved
+  by accident. Off by default; enable it from the tray menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -163,7 +170,7 @@ self-built zip can be compared line by line with a released one.
 | Action | Result |
 |---|---|
 | **Left click** | Toggle the dropdown panel |
-| **Right click** | Native menu: Refresh Now / Show floating speed window / Preferences… / Quit PT Monitor |
+| **Right click** | Native menu: Refresh Now / Show floating speed window / Show desktop widget / Preferences… / Quit PT Monitor |
 | **Hover** | Tooltip with server count and live speeds |
 
 ### The dropdown panel
@@ -242,6 +249,46 @@ aggregate rates as the panel and `—` when no server is online.
 The window is deliberately opaque, square and shadow-free: no transparency
 layer is composited, which keeps a permanently-on-top 56 px window cheap.
 
+### Desktop widget
+
+A 250×150 **translucent** readout that lives on the **desktop**, not above your
+windows: every application window covers it, **Win+D** does not hide it, and
+clicking it never takes the focus away from the app you are working in.
+
+There is no card: no border, square corners. A soft **mask** (50 % black, per
+pixel alpha) sits behind the content — the wallpaper still shows through it,
+the way a Nexus glass plate does — and every run carries a hard outline as
+well, so the text stays readable on a bright wallpaper too.
+
+- **Content** — the aggregate `↓` and `↑` rates, the rolling one-minute graph
+  (the same control as the chip), and a summary line (`3 servers · 2 online ·
+  12 active`).
+- **Drag** — moves the card; the position is saved and restored on the next
+  launch, clamped back on-screen if the display layout changed.
+- **Lock** — the header control (or *Lock position* in the right-click menu)
+  freezes the **position only**. The rates, the graph, the double-click and
+  the menu keep working; the card simply cannot be moved by accident. The
+  state survives a restart.
+- **Double-click** — opens the web console of the first enabled server in the
+  default browser (the same target as the *Open &lt;server&gt; web UI* item).
+- **Right-click** — a small menu: open web console / lock (unlock) position /
+  hide the widget / quit.
+- **Toggle** — tray menu → *Show desktop widget*, or the matching Preferences
+  checkbox. Off by default.
+
+On Windows the card is **pinned in the z-order directly above the desktop**
+(`Progman` / the `WorkerW` that owns the icons) and below every application
+window, and it is never activated by a click (`WS_EX_NOACTIVATE`). It is
+deliberately **not** re-parented into the desktop host: Avalonia renders a
+transparent window without a redirection bitmap (DirectComposition) or with DWM
+blur-behind, and neither survives being made a child of the shell's desktop —
+the card would simply not be drawn. Pinning the z-order needs no re-parenting,
+so the per-pixel transparency keeps working.
+
+If the desktop window cannot be found (a shell restart, or a non-Windows
+build), the card keeps its normal z-order and the log says so; the widget is
+never lost, and the pin is retried on the next sample.
+
 ### Preferences
 
 | Setting | Notes |
@@ -251,6 +298,7 @@ layer is composited, which keeps a permanently-on-top 56 px window cheap.
 | **Poll every N seconds** | 1–60 s, default 2 s. Global; one loop per server. |
 | **Show speeds in the tray tooltip** | Icon state is always shown regardless |
 | **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, double-click to open the web console |
+| **Show desktop widget** | Card on the desktop, behind every application window; drag to move, lock to freeze the position, double-click to open the web console |
 | **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s, with the current rates pinned to the top-left corner) |
 | **Torrents shown in the panel** | All / ↓ Down / ↑ Up / Active (also settable from the panel) |
 | **Language** | Follow System / English / 简体中文 — applies immediately |
@@ -550,7 +598,7 @@ Everything lives under `%APPDATA%\PTMonitor\`:
 
 | File | Contents | Protection |
 |---|---|---|
-| `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, list mode, language | plain text — **never contains passwords** |
+| `settings.json` | servers (id, kind, name, host, port, TLS flags, username, enabled), poll interval, tray toggle, floating-chip toggle and position, desktop-widget toggle, position and lock, list mode, language | plain text — **never contains passwords** |
 | `secrets.dat` | password per server id | DPAPI, `DataProtectionScope.CurrentUser` |
 | `ptmonitor.log` | startup line, launch timeline, unhandled exceptions, poll **failure transitions**, secret-store/TLS/settings trouble | plain text, **no secrets** — see below |
 
@@ -745,6 +793,7 @@ src/
     Services/
       AppServices.cs             composition root: stores, tray icon, windows
       L10n.cs                    English + zh-Hans string tables
+      DesktopLayer.cs            Win32: the Windows desktop layer (Progman/WorkerW)
       TrayIconFactory.cs         tray icons drawn at runtime (no binary assets)
       IcoEncoder.cs              .ico container writer for the tray icon
       UrlLauncher.cs             opens a URL in the default browser
@@ -753,6 +802,7 @@ src/
     Views/
       MainPanelWindow.axaml(.cs)     the dropdown panel
       FloatingSpeedWindow.axaml(.cs) optional floating speed chip
+      DesktopWidgetWindow.axaml(.cs) optional card on the Windows desktop
       SpeedGraph.cs                  rolling two-colour graph, drawn at runtime
       PreferencesWindow.axaml(.cs)   server list + preferences + language
       ServerEditorWindow.axaml(.cs)  add/edit + Test Connection
@@ -789,6 +839,8 @@ Exact values, so you do not have to read the source:
 | Visible torrent rows per server | 100 (rest → "+ N more torrents") |
 | Panel width | 400 px; height content-driven, list capped at 420 px |
 | Panel position | bottom-right of the primary screen's work area |
+| Desktop widget size | 250 × 150 px, fixed, translucent mask |
+| Desktop widget position | saved position, else bottom-right of the primary screen's work area |
 | Default ports | qBittorrent 8080, Transmission 9091 |
 | HTTP timeouts | 15 s per request |
 | Transmission `free-space` refresh | every 30 s, independent of the speed poll |
@@ -1013,6 +1065,9 @@ Deliberate scope decisions for the first release:
 - **Tray panel position is approximated** at the bottom-right of the primary
   screen, because Avalonia does not expose the tray icon's screen coordinates.
   A secondary monitor with its own taskbar is not handled.
+- **The desktop widget inherits the desktop host's DPI context.** On a
+  secondary monitor with a different scale it is rendered at the host's scale,
+  so it looks physically smaller there.
 - **No notifications / no sound** — the app is observational.
 - **No torrent actions** (add, pause, remove, set category) and no per-torrent
   deep link — neither upstream web UI supports one. Use the `↗` button.
