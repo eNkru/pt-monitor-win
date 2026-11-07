@@ -790,3 +790,77 @@ The user reported still seeing the old tray icon. The code was right, the handov
 ### Next Steps
 
 - User confirms the icon on Windows with the new exe (sha256 31158d24...)
+
+
+## Session 18: Desktop widget (desktop level, lockable)
+<!-- trellis-session: v=2 fp=7c1d2f0a9b4e6d33 -->
+
+**Date**: 2026-11-07
+**Task**: Desktop widget (desktop-level, lockable)
+**Branch**: `feat/desktop-widget`
+
+### Summary
+
+The user asked for a copy of the Nexus desktop widget: a card that lives on the
+desktop and can be locked in a position. Nexus (`hello-nexus/nexus`, AGPL-3.0)
+was only read for the *behaviour* — a floating card, draggable, with a
+per-widget `Locked` flag that blocks drag/edit/resize. No code was copied.
+
+Scope decided with the user: simple content first (aggregate rates + the
+existing rolling graph + a summary line), a **true desktop-level** widget
+(behind the app windows, not always-on-top), and a lock that freezes the
+**position only**.
+
+What was built: `Services/DesktopLayer.cs` (Win32 desktop layer) and
+`Views/DesktopWidgetWindow` (the card), plus the settings, the tray/Preferences
+toggles and the localization. The card is made a **child of the shell's desktop
+host** (`Progman`/`WorkerW`) — behind every app window, survives Win+D, cannot
+steal the focus. Without a host it degrades to an always-on-top window and the
+log says why; a 2 s retry re-attaches after a shell restart.
+
+Two constraints shaped the design: a **layered (transparent) window cannot be a
+child of the desktop host**, so the card stays opaque and its rounded corners
+are cut out with `SetWindowRgn`; and a **child window is not moved by the
+window manager**, so the drag follows the cursor itself
+(`GetCursorPos` + `SetWindowPos` in host coordinates).
+
+### Main Changes
+
+- `src/PTMonitor.App/Services/DesktopLayer.cs` (new): the desktop host
+  discovery, the `SetParent` attach with the `WS_POPUP`↔`WS_CHILD` style swap,
+  the verified host-relative placement, `WS_EX_NOACTIVATE`, `SetWindowRgn`.
+- `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml(.cs)` (new): the card.
+- `src/PTMonitor.App/Services/AppServices.cs`: the widget wiring, the shared
+  1 s sample ticker (`SyncTicker`), the 2 s attach-retry timer.
+- `src/PTMonitor.Core/Store/SettingsStore.cs`: `ShowDesktopWidget`,
+  `DesktopWidgetPositionX/Y`, `DesktopWidgetLocked`.
+- Specs: a "Desktop widget" section in `frontend/lifecycle-and-tray.md`, the
+  settings table in `frontend/state-management.md`, the DTO and the mutator
+  list in `backend/persistence-guidelines.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7f5c09` | feat(widget): a desktop-level card with a position lock |
+
+### Testing
+
+- [OK] dotnet build -c Debug: 0 errors
+- [OK] --selftest: 698 checks passed
+- [OK] dotnet test: 151 passed
+- [OK] app run with the widget enabled: the card is created and placed, the
+      fallback is logged once, the process survives with a clean log
+- [ ] **Windows only** (cannot run on this box): behind the app windows,
+      Win+D, the focus behaviour, the menu over the desktop layer, the drag
+      of a child window, the lock across a restart — the checklist is in
+      `.trellis/tasks/11-07-desktop-widget/notes.md`
+
+### Status
+
+[OK] **Implemented, PR #17 open**
+
+### Next Steps
+
+- Check the widget on Windows, then merge PR #17 and archive the task
+- Follow-up (not in this task): per-server rows / top torrents inside the card

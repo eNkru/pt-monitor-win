@@ -12,7 +12,7 @@
   "assignee": "Howard.J",
   "createdAt": "2026-11-07",
   "completedAt": null,
-  "branch": "main",
+  "branch": "feat/desktop-widget",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
