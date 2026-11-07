@@ -31,6 +31,10 @@ public sealed class SettingsStore
     private FloatingDisplayMode _floatingDisplayMode = FloatingDisplayMode.Numbers;
     private int? _floatingPositionX;
     private int? _floatingPositionY;
+    private bool _showDesktopWidget;
+    private int? _desktopWidgetPositionX;
+    private int? _desktopWidgetPositionY;
+    private bool _desktopWidgetLocked;
     private TorrentListMode _torrentListMode = TorrentListMode.All;
     private AppLanguage _appLanguage = AppLanguage.System;
 
@@ -77,6 +81,30 @@ public sealed class SettingsStore
     public int? FloatingPositionY
     {
         get { lock (_gate) return _floatingPositionY; }
+    }
+
+    /// <summary>Whether the desktop widget (the card on the Windows desktop) is shown.</summary>
+    public bool ShowDesktopWidget
+    {
+        get { lock (_gate) return _showDesktopWidget; }
+    }
+
+    /// <summary>The desktop widget's screen X in physical pixels, or null when it was never moved.</summary>
+    public int? DesktopWidgetPositionX
+    {
+        get { lock (_gate) return _desktopWidgetPositionX; }
+    }
+
+    /// <summary>The desktop widget's screen Y in physical pixels, or null when it was never moved.</summary>
+    public int? DesktopWidgetPositionY
+    {
+        get { lock (_gate) return _desktopWidgetPositionY; }
+    }
+
+    /// <summary>Whether the desktop widget's position is frozen (the lock in its header).</summary>
+    public bool DesktopWidgetLocked
+    {
+        get { lock (_gate) return _desktopWidgetLocked; }
     }
 
     public TorrentListMode TorrentListMode
@@ -197,6 +225,40 @@ public sealed class SettingsStore
         PersistAndNotify();
     }
 
+    /// <summary>Shows or hides the desktop widget. The choice survives a restart.</summary>
+    public void SetShowDesktopWidget(bool enabled)
+    {
+        lock (_gate)
+        {
+            if (_showDesktopWidget == enabled) return;
+            _showDesktopWidget = enabled;
+        }
+        PersistAndNotify();
+    }
+
+    /// <summary>Stores the desktop widget's screen position in physical pixels.</summary>
+    public void SetDesktopWidgetPosition(int x, int y)
+    {
+        lock (_gate)
+        {
+            if (_desktopWidgetPositionX == x && _desktopWidgetPositionY == y) return;
+            _desktopWidgetPositionX = x;
+            _desktopWidgetPositionY = y;
+        }
+        PersistAndNotify();
+    }
+
+    /// <summary>Freezes (or releases) the desktop widget's position.</summary>
+    public void SetDesktopWidgetLocked(bool locked)
+    {
+        lock (_gate)
+        {
+            if (_desktopWidgetLocked == locked) return;
+            _desktopWidgetLocked = locked;
+        }
+        PersistAndNotify();
+    }
+
     public void SetTorrentListMode(TorrentListMode mode)
     {
         lock (_gate)
@@ -242,6 +304,10 @@ public sealed class SettingsStore
                     FloatingDisplay = _floatingDisplayMode,
                     FloatingPositionX = _floatingPositionX,
                     FloatingPositionY = _floatingPositionY,
+                    ShowDesktopWidget = _showDesktopWidget,
+                    DesktopWidgetPositionX = _desktopWidgetPositionX,
+                    DesktopWidgetPositionY = _desktopWidgetPositionY,
+                    DesktopWidgetLocked = _desktopWidgetLocked,
                     TorrentListMode = _torrentListMode,
                     AppLanguage = _appLanguage,
                 };
@@ -274,6 +340,10 @@ public sealed class SettingsStore
             _floatingDisplayMode = file.FloatingDisplay ?? FloatingDisplayMode.Numbers;
             _floatingPositionX = file.FloatingPositionX;
             _floatingPositionY = file.FloatingPositionY;
+            _showDesktopWidget = file.ShowDesktopWidget ?? false;
+            _desktopWidgetPositionX = file.DesktopWidgetPositionX;
+            _desktopWidgetPositionY = file.DesktopWidgetPositionY;
+            _desktopWidgetLocked = file.DesktopWidgetLocked ?? false;
             _torrentListMode = file.TorrentListMode ?? TorrentListMode.All;
             _appLanguage = file.AppLanguage ?? AppLanguage.System;
         }
@@ -286,6 +356,10 @@ public sealed class SettingsStore
             _floatingDisplayMode = FloatingDisplayMode.Numbers;
             _floatingPositionX = null;
             _floatingPositionY = null;
+            _showDesktopWidget = false;
+            _desktopWidgetPositionX = null;
+            _desktopWidgetPositionY = null;
+            _desktopWidgetLocked = false;
             _torrentListMode = TorrentListMode.All;
             _appLanguage = AppLanguage.System;
         }
@@ -300,6 +374,10 @@ public sealed class SettingsStore
         public FloatingDisplayMode? FloatingDisplay { get; set; }
         public int? FloatingPositionX { get; set; }
         public int? FloatingPositionY { get; set; }
+        public bool? ShowDesktopWidget { get; set; }
+        public int? DesktopWidgetPositionX { get; set; }
+        public int? DesktopWidgetPositionY { get; set; }
+        public bool? DesktopWidgetLocked { get; set; }
         public TorrentListMode? TorrentListMode { get; set; }
         public AppLanguage? AppLanguage { get; set; }
     }

@@ -16,6 +16,58 @@
             <Setter Property="BoxShadow" Value="0 12 40 12 #66000000" />
         </Style>
 
+        <!-- Desktop widget: the text is drawn straight on the desktop (no
+             card, no plate, square corners), so every run carries a hard
+             outline — the same technique as the graph labels — and stays
+             readable on whatever wallpaper is behind it. -->
+        <Style Selector="views|OutlinedText.widgetTitle">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontFamily" Value="Inter" />
+            <Setter Property="Fill" Value="#F2F2F2" />
+            <Setter Property="Outline" Value="#B3000000" />
+            <Setter Property="OutlineThickness" Value="1.1" />
+        </Style>
+
+        <Style Selector="views|OutlinedText.widgetRate">
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Fill" Value="#F2F2F2" />
+            <Setter Property="Outline" Value="#B3000000" />
+            <Setter Property="OutlineThickness" Value="1.2" />
+        </Style>
+
+        <Style Selector="views|OutlinedText.widgetArrow">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Fill" Value="#B3FFFFFF" />
+            <Setter Property="Outline" Value="#B3000000" />
+            <Setter Property="OutlineThickness" Value="1.4" />
+        </Style>
+
+        <Style Selector="views|OutlinedText.widgetSummary">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontFamily" Value="Inter" />
+            <Setter Property="Fill" Value="#D9FFFFFF" />
+            <Setter Property="Outline" Value="#8C000000" />
+            <Setter Property="OutlineThickness" Value="1" />
+        </Style>
+
+        <!-- The widget's lock control: text on the desktop, so the button
+             itself has no fill or border of its own. -->
+        <Style Selector="Button.widgetButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Opacity" Value="0.75" />
+        </Style>
+        <Style Selector="Button.widgetButton:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Button.widgetButton:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
         <!-- Floating speed chip: small, opaque, no rounded corners, so the
              window needs no transparency/compositing layer. -->
         <Style Selector="TextBlock.floatingRate">

@@ -51,6 +51,7 @@
 
             <CheckBox x:Name="ShowSpeedsToggle" Click="OnShowSpeedsToggled" />
             <CheckBox x:Name="FloatingSpeedsToggle" Click="OnFloatingSpeedsToggled" />
+            <CheckBox x:Name="DesktopWidgetToggle" Click="OnDesktopWidgetToggled" />
 
             <StackPanel Spacing="4">
                 <TextBlock x:Name="FloatingDisplayLabel" />

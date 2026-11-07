@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -28,10 +27,11 @@ public sealed class AppServices
     public MonitorStore Monitor { get; }
 
     private readonly TrayIcon _trayIcon;
-    private readonly DispatcherTimer _floatingTicker;
+    private readonly DispatcherTimer _ticker;
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
+    private DesktopWidgetWindow? _desktopWidget;
     private MenuBarState? _trayState;
     private bool _quitRequested;
 
@@ -46,10 +46,11 @@ public sealed class AppServices
         // Before BuildMenu below: the menu titles are localized.
         L10n.SetLanguage(Settings.AppLanguage);
 
-        // Graph mode samples once a second so the line rolls even while the
-        // rates are steady (StatusesChanged only fires on a real change).
-        _floatingTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _floatingTicker.Tick += (_, _) => PushFloatingSample();
+        // One sample per second, so the rolling graphs keep moving even while
+        // the rates are steady (StatusesChanged only fires on a real change).
+        // Shared by the floating chip and the desktop widget.
+        _ticker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _ticker.Tick += (_, _) => PushSamples();
 
         // The tray icon is the app, so it gets set before everything that can
         // block (DPAPI) or paint (windows). That is the whole launch target.
@@ -97,6 +98,7 @@ public sealed class AppServices
             () =>
             {
                 SyncFloatingWindow();
+                SyncDesktopWidget();
                 if (Settings.Servers.Count == 0) ShowPreferences();
                 StartupTrace.Mark("windows");
                 StartupTrace.Flush();
@@ -157,6 +159,15 @@ public sealed class AppServices
         floatingItem.Click += (_, _) => Dispatcher.UIThread.Post(
             () => Settings.SetShowFloatingSpeeds(!Settings.ShowFloatingSpeeds));
         menu.Items.Add(floatingItem);
+        var desktopWidgetItem = new NativeMenuItem
+        {
+            Header = L10n.S("Show desktop widget"),
+            ToggleType = NativeMenuItemToggleType.CheckBox,
+            IsChecked = Settings.ShowDesktopWidget,
+        };
+        desktopWidgetItem.Click += (_, _) => Dispatcher.UIThread.Post(
+            () => Settings.SetShowDesktopWidget(!Settings.ShowDesktopWidget));
+        menu.Items.Add(desktopWidgetItem);
         menu.Items.Add(NewItem(L10n.S("Preferences…"), ShowPreferences));
         menu.Items.Add(NewMenuItemSeparator());
         menu.Items.Add(NewItem(L10n.S("Quit PT Monitor"), Quit));
@@ -180,6 +191,7 @@ public sealed class AppServices
         _trayIcon.Menu = BuildMenu();
         UpdateTray();
         SyncFloatingWindow();
+        SyncDesktopWidget();
     }
 
     private void UpdateTray()
@@ -224,6 +236,7 @@ public sealed class AppServices
         }
         _trayIcon.ToolTipText = text;
         UpdateFloatingRates();
+        UpdateDesktopWidget();
     }
 
     private void SyncFloatingWindow()
@@ -231,7 +244,7 @@ public sealed class AppServices
         if (!Settings.ShowFloatingSpeeds)
         {
             if (_floating is { IsVisible: true } visible) visible.Hide();
-            _floatingTicker.Stop();
+            SyncTicker();
             return;
         }
 
@@ -240,19 +253,7 @@ public sealed class AppServices
         else _floating.RefreshLocalization();
 
         _floating.SetDisplayMode(Settings.FloatingDisplay);
-        if (Settings.FloatingDisplay == FloatingDisplayMode.Graph)
-        {
-            if (!_floatingTicker.IsEnabled)
-            {
-                PushFloatingSample();
-                _floatingTicker.Start();
-            }
-        }
-        else
-        {
-            _floatingTicker.Stop();
-        }
-
+        SyncTicker();
         UpdateFloatingRates();
     }
 
@@ -270,6 +271,109 @@ public sealed class AppServices
         var aggregate = Monitor.Aggregate;
         floating.PushSample(aggregate.DownSpeed, aggregate.UpSpeed);
     }
+
+    /// <summary>
+    /// The one-second sample tick: the floating chip's graph and the desktop
+    /// widget's graph both need it. It runs while either one is on screen.
+    /// </summary>
+    private void SyncTicker()
+    {
+        var chipGraph = _floating is { IsVisible: true } && Settings.FloatingDisplay == FloatingDisplayMode.Graph;
+        var widget = _desktopWidget is { IsVisible: true };
+        if (!chipGraph && !widget)
+        {
+            _ticker.Stop();
+            return;
+        }
+        if (_ticker.IsEnabled) return;
+        PushSamples();
+        _ticker.Start();
+    }
+
+    private void PushSamples()
+    {
+        PushFloatingSample();
+        PushDesktopSample();
+    }
+
+    // MARK: - Desktop widget
+
+    /// <summary>
+    /// Shows or hides the desktop widget, following the setting. The widget is
+    /// a second, independent surface: the floating chip is untouched by it.
+    /// </summary>
+    private void SyncDesktopWidget()
+    {
+        if (!Settings.ShowDesktopWidget)
+        {
+            if (_desktopWidget is { IsVisible: true } visible) visible.Hide();
+            SyncTicker();
+            return;
+        }
+
+        if (_desktopWidget is null)
+        {
+            _desktopWidget = new DesktopWidgetWindow();
+            // An Explorer restart kills the desktop host and the card with it.
+            _desktopWidget.Closed += (_, _) => OnDesktopWidgetClosed();
+        }
+        if (!_desktopWidget.IsVisible)
+        {
+            // Place it before it appears, so the card never flashes in the
+            // screen corner.
+            _desktopWidget.PreparePlacement();
+            _desktopWidget.Show();
+        }
+        else _desktopWidget.RefreshLocalization();
+
+        _desktopWidget.SetLocked(Settings.DesktopWidgetLocked);
+        UpdateDesktopWidget();
+        SyncTicker();
+    }
+
+    /// <summary>
+    /// The card's window was closed — the shell restarted and took the desktop
+    /// host with it. The setting is still on, so the card comes back and is
+    /// pinned to the desktop again.
+    /// </summary>
+    private void OnDesktopWidgetClosed()
+    {
+        _desktopWidget = null;
+        // The ticker may have been running for the card alone.
+        SyncTicker();
+        if (_quitRequested || !Settings.ShowDesktopWidget) return;
+        // Recreate on the next dispatcher turn: the shell needs a moment to
+        // bring its desktop host back, and the new card looks for it again.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_quitRequested || !Settings.ShowDesktopWidget) return;
+            SyncDesktopWidget();
+        }, DispatcherPriority.Background);
+    }
+
+    private void UpdateDesktopWidget()
+    {
+        if (_desktopWidget is not { IsVisible: true } widget) return;
+        var aggregate = Monitor.Aggregate;
+        widget.ShowRates(aggregate.DownSpeed, aggregate.UpSpeed, aggregate.OnlineServers > 0);
+        widget.ShowSummary(Settings.Servers.Count, aggregate.OnlineServers, aggregate.ActiveTorrents);
+    }
+
+    private void PushDesktopSample()
+    {
+        if (_desktopWidget is not { IsVisible: true } widget) return;
+        var aggregate = Monitor.Aggregate;
+        widget.PushSample(aggregate.DownSpeed, aggregate.UpSpeed);
+        // The card is pinned above the desktop; a sample is a cheap moment to
+        // put it back there (a shell restart, a show, a new window).
+        widget.EnsureDesktopPin();
+    }
+
+    /// <summary>
+    /// Hides the desktop widget and remembers the choice, so it stays hidden
+    /// across restarts. The tray menu toggle brings it back.
+    /// </summary>
+    public void HideDesktopWidget() => Settings.SetShowDesktopWidget(false);
 
     private static string ByteRateFormatterSpeedText(MonitorAggregate aggregate) =>
         PTMonitor.Core.Format.ByteRateFormatter.SpeedText(aggregate.DownSpeed, aggregate.UpSpeed);
@@ -302,19 +406,9 @@ public sealed class AppServices
         _panel.Activate();
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint { public int X; public int Y; }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out NativePoint point);
-
     /// <summary>The global cursor position in physical screen pixels, or null
     /// off-Windows (where the panel falls back to edge docking).</summary>
-    private static PixelPoint? CursorPosition()
-    {
-        if (!OperatingSystem.IsWindows()) return null;
-        return GetCursorPos(out var point) ? new PixelPoint(point.X, point.Y) : null;
-    }
+    private static PixelPoint? CursorPosition() => DesktopLayer.CursorPosition();
 
     public void HidePanel()
     {
@@ -367,7 +461,7 @@ public sealed class AppServices
     public void Quit()
     {
         _quitRequested = true;
-        _floatingTicker.Stop();
+        _ticker.Stop();
         Monitor.StopAsync();
         if (GetApp().ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

@@ -88,6 +88,13 @@ public static class L10n
         ["Show speeds in the tray tooltip"] = "在托盘提示中显示速度",
         ["Show floating speed window"] = "显示悬浮速度窗口",
         ["Hide floating speed window"] = "隐藏悬浮速度窗口",
+        ["Show desktop widget"] = "显示桌面挂件",
+        ["Hide desktop widget"] = "隐藏桌面挂件",
+        ["Desktop widget"] = "桌面挂件",
+        ["Lock position"] = "锁定位置",
+        ["Unlock position"] = "解锁位置",
+        ["%lld server · %lld online · %lld active"] = "%lld 台服务器 · %lld 台在线 · %lld 个活动",
+        ["%lld servers · %lld online · %lld active"] = "%lld 台服务器 · %lld 台在线 · %lld 个活动",
         ["Open web console"] = "打开网页控制台",
         ["Double-click to open the web console"] = "双击打开网页控制台",
         ["Floating display"] = "悬浮窗显示",
@@ -180,6 +187,20 @@ public static class L10n
             : Format(total == 1 ? "%lld server · %lld online" : "%lld servers · %lld online", total, online);
 
     public static string ActiveTorrents(int active, int total) => Format("%lld · %lld total", active, total);
+
+    /// <summary>
+    /// The desktop widget's summary line: the configured servers, how many of
+    /// them are online and how many torrents are active. One templated key —
+    /// the fragments are never glued together.
+    /// </summary>
+    public static string WidgetSummary(int servers, int online, int active) =>
+        servers <= 0
+            ? S("Not configured")
+            : Format(
+                servers == 1
+                    ? "%lld server · %lld online · %lld active"
+                    : "%lld servers · %lld online · %lld active",
+                servers, online, active);
 
     public static string StateWord(TorrentState state) => state switch
     {
