@@ -30,15 +30,17 @@ booleans/ints in `SettingsStore`; everything Win32 lives in the App layer.
 | `ShowActivated` | `False` | it must not steal focus |
 | `Topmost` | `False` | desktop level, not always-on-top |
 | `CanResize` | `False` | fixed size |
-| `Background` | transparent | the wallpaper shows through |
+| `Background` | `#80000000` | a 50 % mask: the wallpaper shows through |
 | `TransparencyLevelHint` | `Transparent` | per-pixel alpha |
 
 Size: fixed logical size (`Width=250`, `Height=150`), no `SizeToContent` — the
 card must not resize when the content changes.
 
-Layout — **no card**: no fill, no border, square corners. Every run is drawn
-with `Views/OutlinedText`, which puts a hard outline around the glyphs, so the
-text stays readable on the wallpaper without an opaque plate behind it:
+Layout — **no card, but a mask**: no border, square corners, and a 50 % black
+mask behind the content (the wallpaper still shows through it, like a Nexus
+glass plate). Every run is additionally drawn with `Views/OutlinedText`, which
+puts a hard outline around the glyphs, so the text stays readable on a bright
+wallpaper where the mask alone is not enough:
 
 ```
  PT Monitor                   Lock position
@@ -193,4 +195,4 @@ glued-together fragments.
 | The card steals focus | `WS_EX_NOACTIVATE` on the card |
 | Win+D minimizes the card | it restores itself from `WindowState.Minimized` |
 | Explorer restarts change the desktop window | the pin is re-asserted on every sample |
-| The Windows path cannot be exercised on a Linux dev box | the transparency was verified on X11 (91 % of the pixels are fully transparent); the Win32 z-order pin is small, guarded and logged |
+| The Windows path cannot be exercised on a Linux dev box | the mask was verified on X11 (captured with `xwd` over a light and a dark wallpaper); the Win32 z-order pin is small, guarded and logged |

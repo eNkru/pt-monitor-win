@@ -53,11 +53,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   upload). It can be dragged anywhere and the position is remembered across
   restarts; double-click it to open the server's web console in the default
   browser. Off by default; enable it from the tray menu or Preferences.
-- **Desktop widget (opt-in)** — a transparent readout that lives on the
+- **Desktop widget (opt-in)** — a translucent readout that lives on the
   Windows desktop, *behind* every application window: it survives **Win+D** and
   never steals the keyboard focus. It shows the aggregate `↓ / ↑` rates, the
-  same rolling graph and a summary line (`N servers · M online · K active`),
-  drawn straight on the wallpaper — no card, no plate, square corners. Drag it
+  same rolling graph and a summary line (`N servers · M online · K active`) on
+  a soft, square-cornered mask — the wallpaper still shows through it. Drag it
   anywhere (the position is remembered), or **lock** it so it cannot be moved
   by accident. Off by default; enable it from the tray menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
@@ -251,14 +251,14 @@ layer is composited, which keeps a permanently-on-top 56 px window cheap.
 
 ### Desktop widget
 
-A 250×150 **transparent** readout that lives on the **desktop**, not above your
+A 250×150 **translucent** readout that lives on the **desktop**, not above your
 windows: every application window covers it, **Win+D** does not hide it, and
 clicking it never takes the focus away from the app you are working in.
 
-There is no card: no fill, no border, square corners. The rates, the graph and
-the summary line are drawn straight on the wallpaper, and every run carries a
-hard outline (the same technique as the chip's graph labels) so it stays
-readable on a busy background without an opaque plate behind it.
+There is no card: no border, square corners. A soft **mask** (50 % black, per
+pixel alpha) sits behind the content — the wallpaper still shows through it,
+the way a Nexus glass plate does — and every run carries a hard outline as
+well, so the text stays readable on a bright wallpaper too.
 
 - **Content** — the aggregate `↓` and `↑` rates, the rolling one-minute graph
   (the same control as the chip), and a summary line (`3 servers · 2 online ·
@@ -839,7 +839,7 @@ Exact values, so you do not have to read the source:
 | Visible torrent rows per server | 100 (rest → "+ N more torrents") |
 | Panel width | 400 px; height content-driven, list capped at 420 px |
 | Panel position | bottom-right of the primary screen's work area |
-| Desktop widget size | 250 × 150 px, fixed, transparent |
+| Desktop widget size | 250 × 150 px, fixed, translucent mask |
 | Desktop widget position | saved position, else bottom-right of the primary screen's work area |
 | Default ports | qBittorrent 8080, Transmission 9091 |
 | HTTP timeouts | 15 s per request |

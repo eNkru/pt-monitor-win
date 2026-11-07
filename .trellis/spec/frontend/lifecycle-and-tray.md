@@ -184,12 +184,14 @@ untouched by it.
   a summary line (`L10n.WidgetSummary` — one templated key, never glued
   fragments). Aggregate only: the widget does not need the torrent list, so
   `MonitorStore.ListDemand` stays driven by the panel alone.
-- **There is no card.** The window is **transparent** (`TransparencyLevelHint=
-  "Transparent"`, `Background="Transparent"`), there is no fill, no border and
-  no rounded corner. Every run is drawn with `Views/OutlinedText`, which puts
-  a hard outline around the glyphs — the wallpaper shows through everywhere
-  else, and the text stays readable without an opaque plate behind it (the
-  same technique as the chip's graph labels).
+- **There is no card, but there is a mask.** The window is per-pixel alpha
+  (`TransparencyLevelHint="Transparent"`) with a **50 % black background**
+  (`#80000000`): the wallpaper still shows through, the way a Nexus glass
+  plate does, but the text has a dark bed to sit on. There is no border and no
+  rounded corner. Every run is additionally drawn with `Views/OutlinedText`,
+  which puts a hard outline around the glyphs — so the text stays readable on
+  a bright wallpaper where the mask alone is not enough (the same technique as
+  the chip's graph labels).
 - **Desktop layer** (`Services/DesktopLayer.cs`): the card is **pinned in the
   z-order directly above the desktop** — `SetWindowPos(hwnd, host, …)` with
   the shell's `Progman` (or the `WorkerW` that owns the icons) as the window to

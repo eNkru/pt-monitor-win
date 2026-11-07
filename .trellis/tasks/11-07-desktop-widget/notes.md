@@ -8,10 +8,9 @@
 - The app starts with the widget enabled, the card is created and placed, and
   the process survives the run with a clean log.
 - **The look was verified on the X11 display**: the card was captured with
-  `xwd` and converted to a PNG. It is square, there is no fill or border, and
-  **91 % of its pixels are fully transparent** (1 % opaque — the glyph cores —
-  and 8 % partial: the outlines and the anti-aliased graph). The wallpaper
-  shows through everywhere else.
+  `xwd` and composited over a light and a dark wallpaper. It is square, there
+  is no border, and the mask is 50 % black — the wallpaper reads through it on
+  both, and the white glyphs stay readable in both cases.
 
 ## What still has to be checked on Windows
 

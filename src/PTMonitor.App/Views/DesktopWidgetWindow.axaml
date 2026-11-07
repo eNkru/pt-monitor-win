@@ -7,19 +7,19 @@
         ShowActivated="False"
         Topmost="False"
         TransparencyLevelHint="Transparent"
-        Background="Transparent"
+        Background="#80000000"
         Width="250" Height="150"
         CanResize="False"
         WindowStartupLocation="Manual">
 
-    <!-- There is no card: square corners, no fill, no border — the wallpaper
-         shows through everywhere except the glyphs and the graph. Every run
-         carries a hard outline instead (the same technique as the chip's graph
-         labels), so the card stays readable on a busy wallpaper without an
-         opaque plate behind it.
-         Background="Transparent" is a hit-test surface, not a fill: without a
-         non-null brush the empty parts of the window do not receive pointer
-         events, so only the glyphs would drag. -->
+    <!-- A soft mask, not a card: no border, square corners, and the mask
+         itself is translucent, so the wallpaper still shows through it (the
+         window is per-pixel alpha, so the 40 % black plate is composited over
+         the desktop). Every run carries a hard outline as well, so the text
+         stays readable on a bright wallpaper too.
+         Background="Transparent" on the Grid is a hit-test surface, not a
+         fill: without a non-null brush the empty parts of the window do not
+         receive pointer events, so only the glyphs would drag. -->
     <Grid x:Name="Card" Background="Transparent" Margin="8"
           RowDefinitions="Auto,Auto,Auto,*,Auto"
           PointerPressed="OnPointerPressed"

@@ -20,9 +20,10 @@ drag/edit/resize until the user unlocks it). Nexus is AGPL-3.0, so only the
   in the **desktop layer**: it is behind every application window, it survives
   "Show desktop" (Win+D), and it never steals keyboard focus from the app the
   user is working in.
-- **No card**: no fill, no border, square corners — the wallpaper shows
-  through everywhere except the glyphs and the graph, and every run carries a
-  hard outline so it stays readable on any background.
+- **No card, but a mask**: no border, square corners, and a soft translucent
+  mask (50 % black) behind the content — the wallpaper still shows through it,
+  the way a Nexus glass plate does — plus a hard outline on every run so the
+  text stays readable on any background.
 - On Windows the window is **pinned in the z-order directly above the shell's
   desktop window** (`Progman` / the `WorkerW` that owns the icons), below every
   application window, with `WS_EX_NOACTIVATE` so a click never activates it.
