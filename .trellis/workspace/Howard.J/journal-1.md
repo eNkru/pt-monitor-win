@@ -893,3 +893,21 @@ the glyph cores; 8 % partial: the outlines and the anti-aliased graph).
 
 The lesson worth keeping: *a transparent Avalonia window and a desktop-host
 child window are mutually exclusive on Windows.* Choose one.
+
+### Update 2 (same day): a soft mask behind the readout
+
+Fully transparent was too bare — the text sat straight on the wallpaper. The
+card now has a **mask**: 50 % black per-pixel alpha, no border, square
+corners, so the wallpaper still reads through it the way a Nexus glass plate
+does. The hard outlines stayed (and got thinner) for bright wallpapers,
+where the mask alone is not enough contrast.
+
+Verified on the X11 display again: the card was captured with `xwd` and
+composited over a light and over a dark wallpaper — the mask reads through
+on both and the text stays legible.
+
+The mask is the *window background* (`Background="#80000000"`), not a plate
+inside it: with `TransparencyLevelHint="Transparent"` the window is per-pixel
+alpha, so the background is composited over the desktop. A plate inside the
+window would have needed rounded corners to look right, and the user does not
+want those.
