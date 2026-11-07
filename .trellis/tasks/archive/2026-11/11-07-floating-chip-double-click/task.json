@@ -1,0 +1,31 @@
+{
+  "id": "floating-chip-double-click",
+  "name": "floating-chip-double-click",
+  "title": "Floating chip: double-click opens the web console, single click does nothing",
+  "description": "Drop the single-click ShowPanel() path on the floating speed chip: the chip is a drag handle, not a panel toggle. Add a hand-detected double left-click (same spot within 400 ms and 6 px) that opens the first enabled server's web UI in the default browser via AppServices.OpenFirstServerWebConsole(); a drag resets the click pair and a third click opens no second tab. Update the tooltip and L10n table, the README, and frontend/lifecycle-and-tray.md.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "Howard.J",
+  "assignee": "Howard.J",
+  "createdAt": "2026-11-07",
+  "completedAt": "2026-11-07",
+  "branch": "feat/floating-chip-double-click",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "18a7a87",
+  "pr_url": "https://github.com/eNkru/pt-monitor-win/pull/16",
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/PTMonitor.App/Views/FloatingSpeedWindow.axaml.cs",
+    "src/PTMonitor.App/Services/L10n.cs",
+    "README.md",
+    ".trellis/spec/frontend/lifecycle-and-tray.md"
+  ],
+  "notes": "",
+  "meta": {}
+}

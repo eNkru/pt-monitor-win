@@ -8,19 +8,29 @@ using PTMonitor.Core.Model;
 namespace PTMonitor.App.Views;
 
 /// <summary>
-/// Optional always-on-top chip with the aggregate down/up rates. A click opens
-/// the panel, a drag moves the chip and persists the new position, a
-/// right-click opens a menu (web console / hide / quit).
+/// Optional always-on-top chip with the aggregate down/up rates. A drag moves
+/// the chip and persists the new position, a double left-click opens the web
+/// console in the default browser, a right-click opens a menu (web console /
+/// hide / quit). A single click does nothing.
 /// </summary>
 public partial class FloatingSpeedWindow : Window
 {
     private const double EdgeGap = 12;
     private const double DragThreshold = 4;
+    // Two clicks are one double click when they land in the same spot within
+    // this window. The platform double-click time is not used: the chip
+    // captures the pointer while it is pressed, so the native double-click
+    // message cannot be relied on.
+    private const ulong DoubleClickIntervalMs = 400;
+    private const double DoubleClickRadius = 6;
 
     private PointerPressedEventArgs? _pressArgs;
     private Point _pressPoint;
     private bool _pressed;
     private bool _dragged;
+    // The last completed click, so the next one can be paired with it.
+    private ulong? _lastClickTime;
+    private Point _lastClickPoint;
 
     // The menu is built in code: the first item names the server it opens and
     // is disabled when there is none, which XAML cannot express.
@@ -104,9 +114,11 @@ public partial class FloatingSpeedWindow : Window
         if (Math.Abs(delta.X) < DragThreshold && Math.Abs(delta.Y) < DragThreshold) return;
 
         // Hand the press to the window manager; the move loop owns the pointer
-        // until the drag ends, so the click path is skipped.
+        // until the drag ends, so the click path is skipped. A drag also
+        // breaks a click pair: it is not a click at all.
         _dragged = true;
         _pressed = false;
+        _lastClickTime = null;
         if (_pressArgs is { } args) BeginMoveDrag(args);
         SavePosition();
     }
@@ -119,7 +131,38 @@ public partial class FloatingSpeedWindow : Window
         _dragged = false;
         _pressArgs = null;
         e.Pointer.Capture(null);
-        if (wasClick) AppServices.Instance.ShowPanel();
+        if (!wasClick) return;
+
+        // A single click does nothing: the chip is a drag handle and a
+        // launcher, not a panel toggle. Two quick clicks in the same spot
+        // open the web console in the default browser.
+        if (IsDoubleClick(e.Timestamp))
+        {
+            // A third click must not open a second browser tab.
+            _lastClickTime = null;
+            AppServices.Instance.OpenFirstServerWebConsole();
+            return;
+        }
+        _lastClickTime = e.Timestamp;
+        _lastClickPoint = _pressPoint;
+    }
+
+    /// <summary>
+    /// Whether the click that just ended pairs with the previous one: same
+    /// spot, close enough in time.
+    /// </summary>
+    private bool IsDoubleClick(ulong timestamp)
+    {
+        if (_lastClickTime is not { } last) return false;
+        if (timestamp < last || timestamp - last > DoubleClickIntervalMs) return false;
+        return Distance(_pressPoint, _lastClickPoint) <= DoubleClickRadius;
+    }
+
+    private static double Distance(Point a, Point b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     // MARK: - Placement
@@ -170,7 +213,7 @@ public partial class FloatingSpeedWindow : Window
     private void ApplyLocalization()
     {
         Title = L10n.S("PT Monitor speeds");
-        ToolTip.SetTip(Chip, L10n.S("Open PT Monitor"));
+        ToolTip.SetTip(Chip, L10n.S("Double-click to open the web console"));
         // Glyphs, not words — taken from the formatter so they cannot drift
         // from the panel's arrows.
         DownArrow.Text = ByteRateFormatter.DownArrow;

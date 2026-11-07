@@ -55,13 +55,15 @@ AppServices.Initialize();
 | Left-click tray icon | `TogglePanel()` |
 | `Deactivated` on the panel | `HidePanel()` |
 | `Escape` / `Cancel` | `HidePanel()` |
-| Click on the floating chip | `ShowPanel()` (show + activate) |
+| Click on the floating chip | nothing — the chip is a drag handle, not a panel toggle |
+| Double-click the floating chip | open the first enabled server's web console in the default browser (`OpenFirstServerWebConsole`) |
 | Right-click the floating chip | context menu: open the first server's web console / hide the chip / quit |
 | X / `Close()` on a window | the window closes; the process stays in the tray (`OnExplicitShutdown`). `PreferencesWindow` clears its cached reference via its `Closed` handler. The panel has no close button (borderless) — it hides on deactivate/Esc. |
 | Tray menu → Quit | `Quit()` |
 
 `TogglePanel()` answers the tray click; `ShowPanel()` is the always-show variant
-the floating chip calls, so a click there never *hides* an already-open panel.
+(it shows and activates an already-open panel instead of hiding it). Nothing in
+the floating chip calls it any more — a single click on the chip does nothing.
 
 Windows are cached in `AppServices` (`_panel`, `_preferences`, `_floating`) and reused. Only
 `ServerEditorWindow` is created per open, because it is a modal dialog owned by
@@ -141,11 +143,18 @@ that way unless the design genuinely needs transparency.
   control that draws two overlaid series (download green `#35C46F`, upload
   orange `#F2994A`) over the last 60 one-second samples, scaled to the peak of
   the visible window. No assets, no chart library.
-- Gesture: a press+release under the 4 px threshold opens the panel; crossing
-  the threshold calls `BeginMoveDrag` instead, so a drag never clicks. The chip
-  `Border` sets `Background="Transparent"` purely as a hit-test surface — a
-  `Border`/`Grid` with a null background does not receive pointer events in its
-  empty areas, so without it only the digits would be draggable.
+- Gesture: a drag (crossing the 4 px threshold) calls `BeginMoveDrag` and
+  saves the position; **a single click does nothing** — the chip no longer
+  opens the panel. **A double left-click** (two clicks in the same spot within
+  400 ms and 6 px) opens the web console of the first enabled server in the
+  default browser, through `AppServices.OpenFirstServerWebConsole()` — the
+  same target as the context-menu item. The double click is detected by hand
+  (timestamp + distance), **not** by the platform's double-click message: the
+  chip captures the pointer while it is pressed, so the native message cannot
+  be relied on. A drag resets the click pair. The chip `Border` sets
+  `Background="Transparent"` purely as a hit-test surface — a `Border`/`Grid`
+  with a null background does not receive pointer events in its empty areas, so
+  without it only the digits would be draggable.
 - Cursor: the **system hand cursor** (`new Cursor(StandardCursorType.Hand)`).
   The app draws no cursor of its own — `Services/CursorFactory.cs` and the
   hand-drawn open hand were removed on purpose (the user asked for the system

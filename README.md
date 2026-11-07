@@ -51,8 +51,8 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 - **Floating speed chip (opt-in)** — a small always-on-top readout, either
   numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
   upload). It can be dragged anywhere and the position is remembered across
-  restarts; click it to open the panel. Off by default; enable it from the tray
-  menu or Preferences.
+  restarts; double-click it to open the server's web console in the default
+  browser. Off by default; enable it from the tray menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -221,9 +221,13 @@ aggregate rates as the panel and `—` when no server is online.
     The current `↓` / `↑` rates are pinned to the top-left corner, drawn on
     top of the plot with a dark outline around the glyphs, so the numbers stay
     visible without switching modes and the graph shows through behind them.
-- **Click** — opens the panel (the chip stays visible).
 - **Drag** — moves the chip; the position is saved and restored on the next
-  launch, clamped back on-screen if the display layout changed.
+  launch, clamped back on-screen if the display layout changed. A single
+  click does nothing: the chip is a drag handle, not a panel toggle.
+- **Double-click** — opens the web console of the first enabled server in the
+  default browser (`http://host:port/` for qBittorrent,
+  `http://host:port/transmission/web/` for Transmission) — the same target as
+  the *Open &lt;server&gt; web UI* menu item below.
 - **Right-click** — opens a small menu:
   - **Open <server> web UI** — the first configured server's web console in the
     default browser (`http://host:port/` for qBittorrent,
@@ -246,7 +250,7 @@ layer is composited, which keeps a permanently-on-top 56 px window cheap.
 | **Add Server…** | Opens the server editor |
 | **Poll every N seconds** | 1–60 s, default 2 s. Global; one loop per server. |
 | **Show speeds in the tray tooltip** | Icon state is always shown regardless |
-| **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, click to open the panel |
+| **Show floating speed window** | Always-on-top `↓ / ↑` chip; drag to move, double-click to open the web console |
 | **Floating display** | Numbers (`↓ / ↑` rates) or Graph (green download / orange upload, rolling 60 s, with the current rates pinned to the top-left corner) |
 | **Torrents shown in the panel** | All / ↓ Down / ↑ Up / Active (also settable from the panel) |
 | **Language** | Follow System / English / 简体中文 — applies immediately |
