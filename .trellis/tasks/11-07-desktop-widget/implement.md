@@ -20,9 +20,13 @@
 ### 3. App: the desktop layer helper
 
 - [ ] `src/PTMonitor.App/Services/DesktopLayer.cs` (new)
-  - `FindDesktopHost()`, `Attach(hwnd)`, `Detach(hwnd)`, `Place(hwnd, x, y, w, h)`,
-    `MakeNonActivating(hwnd)`, `IsWindowsHostAvailable`.
+  - `IsSupported`, `PinAboveDesktop(hwnd)` (the z-order pin above the shell's
+    desktop window), `MakeNonActivating(hwnd)` (`WS_EX_NOACTIVATE`),
+    `CursorPosition()`.
   - every P/Invoke guarded by `OperatingSystem.IsWindows()`; no exception escapes.
+  - **no re-parenting**: a transparent Avalonia window (no redirection bitmap /
+    DComp) cannot be a child of the shell's desktop, so the card is pinned in
+    the z-order instead.
 
 ### 4. App: the card
 
@@ -34,7 +38,9 @@
   - drag / double-click / lock / context menu (mirroring `FloatingSpeedWindow`);
   - placement: restore the saved position, dock bottom-right, clamp to the
     work area, save on drag;
-  - desktop attach on open, detach on close.
+  - transparent and square: no fill, no border, no rounded corner; every run
+    drawn with `Views/OutlinedText` so it stays readable on the wallpaper;
+  - the z-order pin (re-asserted on every sample) and the Win+D restore.
 
 ### 5. App: wiring
 
@@ -43,8 +49,8 @@
     `PushDesktopSample()`, `HideDesktopWidget()`, `OnDesktopWidgetClosed()`;
   - tray menu item "Show desktop widget" (check box);
   - the 1 s ticker runs when the chip needs it **or** the widget is visible;
-  - a 2 s retry timer (`_desktopAttachTimer`) that puts the card back into the
-    desktop layer after a shell restart (bounded to ~60 s);
+  - the card re-asserts its z-order pin on every sample (a shell restart
+    heals itself);
   - recreate the widget if its window was closed by an Explorer restart.
 
 ### 6. App: preferences

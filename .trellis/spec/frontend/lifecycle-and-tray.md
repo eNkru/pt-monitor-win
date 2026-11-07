@@ -175,41 +175,47 @@ that way unless the design genuinely needs transparency.
 
 ## Desktop widget
 
-`DesktopWidgetWindow` is the optional card that lives on the **desktop** — the
-Windows desktop layer, not the app's z-order. It is the second surface next to
-the chip (both may be on screen at the same time); the chip's behaviour is
+`DesktopWidgetWindow` is the optional readout that lives on the **desktop** —
+the Windows desktop layer, not the app's z-order. It is the second surface next
+to the chip (both may be on screen at the same time); the chip's behaviour is
 untouched by it.
 
 - **Content**: the aggregate `↓`/`↑` rates, the same `SpeedGraph` control, and
   a summary line (`L10n.WidgetSummary` — one templated key, never glued
   fragments). Aggregate only: the widget does not need the torrent list, so
   `MonitorStore.ListDemand` stays driven by the panel alone.
-- **Desktop layer** (`Services/DesktopLayer.cs`): the card is made a **child of
-  the shell's desktop host** (`Progman` / `WorkerW`) — the technique desktop
-  widgets and wallpapers use. A child of that host is behind every application
-  window, survives Win+D, and cannot take the focus away from the app the user
-  is working in. The attach is the documented `SetParent` dance
-  (`WS_POPUP` → `WS_CHILD` **and** the style swap, because `SetParent` does
-  not change the styles itself) and it is **verified**: the parent must be the
-  host and the position must match, or the window is detached again.
-- **The card must stay opaque.** A layered (transparent) window cannot be a
-  child of the desktop host, so the rounded corners are cut out of the opaque
-  window with `SetWindowRgn` (`CreateRoundRectRgn`) instead of a transparency
-  hint. The window region also makes the corners click-through.
+- **There is no card.** The window is **transparent** (`TransparencyLevelHint=
+  "Transparent"`, `Background="Transparent"`), there is no fill, no border and
+  no rounded corner. Every run is drawn with `Views/OutlinedText`, which puts
+  a hard outline around the glyphs — the wallpaper shows through everywhere
+  else, and the text stays readable without an opaque plate behind it (the
+  same technique as the chip's graph labels).
+- **Desktop layer** (`Services/DesktopLayer.cs`): the card is **pinned in the
+  z-order directly above the desktop** — `SetWindowPos(hwnd, host, …)` with
+  the shell's `Progman` (or the `WorkerW` that owns the icons) as the window to
+  sit above. It is therefore behind every application window.
+  **Do not re-parent the card into the desktop host** (`SetParent` to
+  `Progman`/`WorkerW`): Avalonia renders a transparent window without a
+  redirection bitmap (DirectComposition) or with DWM blur-behind, and neither
+  survives being made a child of the shell's desktop — the card would simply
+  not be drawn. Pinning the z-order needs no re-parenting, so the per-pixel
+  transparency keeps working.
 - **`WS_EX_NOACTIVATE`** is added to the card: clicking it never activates it
   and never raises it above the app the user is in.
-- **Fallback**: no host (or a failed attach) → the card becomes a normal
-  always-on-top window (`Topmost`) and the log says why. The widget is never
-  lost. `DesktopLayer.Attach` retry runs on a 2 s timer (bounded to ~60 s),
-  because a shell restart kills the host — and the card with it.
-- **Drag**: a child window is not moved by the window manager, so the card
-  follows the cursor itself (`GetCursorPos` + `SetWindowPos` in host
-  coordinates); the fallback path uses `BeginMoveDrag` like the chip. The
-  position is stored in physical screen pixels.
+- **Win+D** minimizes every top-level window, so the card restores itself when
+  `WindowState` flips to `Minimized` (it belongs to the desktop, not to the
+  taskbar).
+- **The pin is re-asserted** on every sample (`EnsureDesktopPin`): cheap, and
+  it puts the card back after a shell restart, a show or a new window. When
+  the desktop window cannot be found, the card keeps its normal z-order and
+  the log says why — the widget is never lost.
+- **Drag**: the card is an ordinary top-level window again, so the drag is the
+  chip's: `BeginMoveDrag` past a 4 px threshold. The position is stored in
+  physical screen pixels and clamped to the work area.
 - **Lock**: the header control and the *Lock position* menu item toggle
   `Settings.DesktopWidgetLocked`. It freezes the **position only** — the
   rates, the graph, the double-click and the menu keep working. The lock is
-  checked before *both* drag paths, so a locked card cannot be moved.
+  checked before the drag starts, so a locked card cannot be moved.
 - **Gestures**: double-click (hand-rolled, like the chip) opens the first
   enabled server's web console; right-click opens a menu built in code
   (open web console / lock or unlock / hide / quit).
@@ -217,8 +223,7 @@ untouched by it.
   while the chip is in graph mode **or** the widget is visible, and each sink
   decides whether it needs a sample.
 - `Topmost="False"`, `ShowActivated="False"`, `ShowInTaskbar="False"`,
-  `SystemDecorations="None"`, an opaque `Background` and a fixed size — the
-  window is a child of the desktop host, so it must not be layered.
+  `SystemDecorations="None"`, a transparent `Background` and a fixed size.
 
 ## Tray presentation
 

@@ -19,12 +19,6 @@ public sealed class AppServices
 {
     public static AppServices Instance { get; private set; } = null!;
 
-    /// <summary>
-    /// How often the desktop attach is retried (every two seconds) before the
-    /// widget gives up and stays an always-on-top window.
-    /// </summary>
-    private const int DesktopAttachAttempts = 30;
-
     /// <summary>The last certificate thumbprint logged per server, so a steady handshake is not re-logged.</summary>
     private static readonly Dictionary<Guid, string> LoggedCertificates = [];
 
@@ -34,15 +28,12 @@ public sealed class AppServices
 
     private readonly TrayIcon _trayIcon;
     private readonly DispatcherTimer _ticker;
-    private readonly DispatcherTimer _desktopAttachTimer;
     private MainPanelWindow? _panel;
     private PreferencesWindow? _preferences;
     private FloatingSpeedWindow? _floating;
     private DesktopWidgetWindow? _desktopWidget;
     private MenuBarState? _trayState;
     private bool _quitRequested;
-    // How many times the desktop attach was retried after a shell restart.
-    private int _desktopAttachAttempts;
 
     private AppServices()
     {
@@ -60,12 +51,6 @@ public sealed class AppServices
         // Shared by the floating chip and the desktop widget.
         _ticker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _ticker.Tick += (_, _) => PushSamples();
-
-        // The shell can restart and take the desktop host (and the card that
-        // lives in it) down with it. The card is then put back into the
-        // desktop layer as soon as the host is there again.
-        _desktopAttachTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _desktopAttachTimer.Tick += (_, _) => RetryDesktopAttach();
 
         // The tray icon is the app, so it gets set before everything that can
         // block (DPAPI) or paint (windows). That is the whole launch target.
@@ -344,19 +329,16 @@ public sealed class AppServices
         _desktopWidget.SetLocked(Settings.DesktopWidgetLocked);
         UpdateDesktopWidget();
         SyncTicker();
-        SyncDesktopAttach();
     }
 
     /// <summary>
     /// The card's window was closed — the shell restarted and took the desktop
-    /// host (and the card with it) down. The setting is still on, so the card
-    /// comes back and is attached to the new host.
+    /// host with it. The setting is still on, so the card comes back and is
+    /// pinned to the desktop again.
     /// </summary>
     private void OnDesktopWidgetClosed()
     {
         _desktopWidget = null;
-        _desktopAttachTimer.Stop();
-        _desktopAttachAttempts = 0;
         // The ticker may have been running for the card alone.
         SyncTicker();
         if (_quitRequested || !Settings.ShowDesktopWidget) return;
@@ -367,56 +349,6 @@ public sealed class AppServices
             if (_quitRequested || !Settings.ShowDesktopWidget) return;
             SyncDesktopWidget();
         }, DispatcherPriority.Background);
-    }
-
-    /// <summary>
-    /// Puts the card back into the desktop layer when the shell came back
-    /// without it. The attempt is bounded: a machine without a desktop host
-    /// must not spin on it.
-    /// </summary>
-    private void RetryDesktopAttach()
-    {
-        if (_desktopWidget is not { IsVisible: true } widget || widget.IsInDesktopLayer)
-        {
-            _desktopAttachTimer.Stop();
-            _desktopAttachAttempts = 0;
-            return;
-        }
-
-        _desktopAttachAttempts++;
-        if (widget.TryAttachToDesktop())
-        {
-            _desktopAttachTimer.Stop();
-            _desktopAttachAttempts = 0;
-            return;
-        }
-        if (_desktopAttachAttempts >= DesktopAttachAttempts)
-        {
-            _desktopAttachTimer.Stop();
-            Log.Warn("widget", "the desktop host stayed away; the widget stays on top of other windows");
-        }
-    }
-
-    /// <summary>
-    /// Starts the attach retry when the card is on screen but not in the
-    /// desktop layer (a shell restart, or a host that was not there yet).
-    /// </summary>
-    private void SyncDesktopAttach()
-    {
-        var needsRetry = DesktopLayer.IsSupported
-            && _desktopWidget is { IsVisible: true } widget
-            && !widget.IsInDesktopLayer;
-        if (!needsRetry)
-        {
-            _desktopAttachTimer.Stop();
-            _desktopAttachAttempts = 0;
-            return;
-        }
-        if (!_desktopAttachTimer.IsEnabled)
-        {
-            _desktopAttachAttempts = 0;
-            _desktopAttachTimer.Start();
-        }
     }
 
     private void UpdateDesktopWidget()
@@ -432,6 +364,9 @@ public sealed class AppServices
         if (_desktopWidget is not { IsVisible: true } widget) return;
         var aggregate = Monitor.Aggregate;
         widget.PushSample(aggregate.DownSpeed, aggregate.UpSpeed);
+        // The card is pinned above the desktop; a sample is a cheap moment to
+        // put it back there (a shell restart, a show, a new window).
+        widget.EnsureDesktopPin();
     }
 
     /// <summary>
@@ -527,7 +462,6 @@ public sealed class AppServices
     {
         _quitRequested = true;
         _ticker.Stop();
-        _desktopAttachTimer.Stop();
         Monitor.StopAsync();
         if (GetApp().ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

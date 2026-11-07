@@ -6,47 +6,51 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         Topmost="False"
-        Background="#F0202023"
-        Width="248" Height="152"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Width="250" Height="150"
         CanResize="False"
         WindowStartupLocation="Manual">
 
-    <!-- The card: an opaque window with a hairline border, the same look as
-         the dropdown panel. Background="Transparent" is a hit-test surface,
-         not window transparency: without it the empty parts of the card do
-         not receive pointer events, so only the digits would drag. The
-         rounded corners are cut out of the window itself (SetWindowRgn),
-         because a layered window cannot be a child of the desktop host. -->
-    <Border x:Name="Card" Classes="widgetCard" Background="Transparent" Padding="12"
-            PointerPressed="OnPointerPressed"
-            PointerMoved="OnPointerMoved"
-            PointerReleased="OnPointerReleased">
-        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <!-- There is no card: square corners, no fill, no border — the wallpaper
+         shows through everywhere except the glyphs and the graph. Every run
+         carries a hard outline instead (the same technique as the chip's graph
+         labels), so the card stays readable on a busy wallpaper without an
+         opaque plate behind it.
+         Background="Transparent" is a hit-test surface, not a fill: without a
+         non-null brush the empty parts of the window do not receive pointer
+         events, so only the glyphs would drag. -->
+    <Grid x:Name="Card" Background="Transparent" Margin="8"
+          RowDefinitions="Auto,Auto,Auto,*,Auto"
+          PointerPressed="OnPointerPressed"
+          PointerMoved="OnPointerMoved"
+          PointerReleased="OnPointerReleased">
 
-            <!-- Header: the product name and the lock control. -->
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="PT Monitor" FontSize="12" FontWeight="SemiBold"
-                           VerticalAlignment="Center" />
-                <Button Grid.Column="1" x:Name="LockButton" Classes="link" FontSize="10"
-                        VerticalAlignment="Center" Click="OnLockClicked" />
-            </Grid>
-
-            <!-- Aggregate rates. -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,6,0,0">
-                <TextBlock x:Name="DownArrow" Classes="statLabel" FontSize="13" VerticalAlignment="Center" />
-                <TextBlock x:Name="DownText" Classes="statValue" VerticalAlignment="Center" />
-            </StackPanel>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="4" Margin="0,2,0,0">
-                <TextBlock x:Name="UpArrow" Classes="statLabel" FontSize="13" VerticalAlignment="Center" />
-                <TextBlock x:Name="UpText" Classes="statValue" VerticalAlignment="Center" />
-            </StackPanel>
-
-            <!-- The rolling graph: one sample per second, 60 samples. -->
-            <views:SpeedGraph Grid.Row="3" x:Name="Graph" Margin="0,6,0,0" />
-
-            <!-- Summary: servers configured / online and active torrents. -->
-            <TextBlock Grid.Row="4" x:Name="SummaryText" FontSize="9.5" Opacity="0.6"
-                       Margin="0,6,0,0" TextTrimming="CharacterEllipsis" />
+        <!-- Header: the product name and the lock control. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <views:OutlinedText Grid.Column="0" x:Name="TitleText" Classes="widgetTitle"
+                                VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="LockButton" Classes="widgetButton" Click="OnLockClicked"
+                    VerticalAlignment="Center">
+                <views:OutlinedText x:Name="LockText" Classes="widgetSummary" />
+            </Button>
         </Grid>
-    </Border>
+
+        <!-- Aggregate rates. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5" Margin="0,4,0,0">
+            <views:OutlinedText x:Name="DownArrow" Classes="widgetArrow" VerticalAlignment="Center" />
+            <views:OutlinedText x:Name="DownText" Classes="widgetRate" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="5" Margin="0,1,0,0">
+            <views:OutlinedText x:Name="UpArrow" Classes="widgetArrow" VerticalAlignment="Center" />
+            <views:OutlinedText x:Name="UpText" Classes="widgetRate" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- The rolling graph: one sample per second, 60 samples. -->
+        <views:SpeedGraph Grid.Row="3" x:Name="Graph" Margin="0,4,0,0" />
+
+        <!-- Summary: servers configured / online and active torrents. -->
+        <views:OutlinedText Grid.Row="4" x:Name="SummaryText" Classes="widgetSummary"
+                            Margin="0,4,0,0" VerticalAlignment="Bottom" />
+    </Grid>
 </Window>

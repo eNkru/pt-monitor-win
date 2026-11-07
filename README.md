@@ -53,13 +53,13 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   upload). It can be dragged anywhere and the position is remembered across
   restarts; double-click it to open the server's web console in the default
   browser. Off by default; enable it from the tray menu or Preferences.
-- **Desktop widget (opt-in)** — a small card that lives on the Windows
-  desktop, *behind* every application window: it survives **Win+D** and never
-  steals the keyboard focus. It shows the aggregate `↓ / ↑` rates, the same
-  rolling graph and a summary line (`N servers · M online · K active`). Drag
-  it anywhere (the position is remembered), or **lock** it so it cannot be
-  moved by accident. Off by default; enable it from the tray menu or
-  Preferences.
+- **Desktop widget (opt-in)** — a transparent readout that lives on the
+  Windows desktop, *behind* every application window: it survives **Win+D** and
+  never steals the keyboard focus. It shows the aggregate `↓ / ↑` rates, the
+  same rolling graph and a summary line (`N servers · M online · K active`),
+  drawn straight on the wallpaper — no card, no plate, square corners. Drag it
+  anywhere (the position is remembered), or **lock** it so it cannot be moved
+  by accident. Off by default; enable it from the tray menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -251,10 +251,14 @@ layer is composited, which keeps a permanently-on-top 56 px window cheap.
 
 ### Desktop widget
 
-A 248×152 card that lives on the **desktop**, not above your windows: every
-application window covers it, **Win+D** does not hide it, and clicking it never
-takes the focus away from the app you are working in. It shows the same
-aggregate rates as the panel and `—` when no server is online.
+A 250×150 **transparent** readout that lives on the **desktop**, not above your
+windows: every application window covers it, **Win+D** does not hide it, and
+clicking it never takes the focus away from the app you are working in.
+
+There is no card: no fill, no border, square corners. The rates, the graph and
+the summary line are drawn straight on the wallpaper, and every run carries a
+hard outline (the same technique as the chip's graph labels) so it stays
+readable on a busy background without an opaque plate behind it.
 
 - **Content** — the aggregate `↓` and `↑` rates, the rolling one-minute graph
   (the same control as the chip), and a summary line (`3 servers · 2 online ·
@@ -272,10 +276,18 @@ aggregate rates as the panel and `—` when no server is online.
 - **Toggle** — tray menu → *Show desktop widget*, or the matching Preferences
   checkbox. Off by default.
 
-On Windows the card is a **child of the shell's desktop host window**
-(`Progman` / `WorkerW`), the technique desktop widgets and wallpapers use. If
-that host cannot be found — or on a non-Windows build — the card degrades to a
-normal always-on-top window and the log says so; the widget is never lost.
+On Windows the card is **pinned in the z-order directly above the desktop**
+(`Progman` / the `WorkerW` that owns the icons) and below every application
+window, and it is never activated by a click (`WS_EX_NOACTIVATE`). It is
+deliberately **not** re-parented into the desktop host: Avalonia renders a
+transparent window without a redirection bitmap (DirectComposition) or with DWM
+blur-behind, and neither survives being made a child of the shell's desktop —
+the card would simply not be drawn. Pinning the z-order needs no re-parenting,
+so the per-pixel transparency keeps working.
+
+If the desktop window cannot be found (a shell restart, or a non-Windows
+build), the card keeps its normal z-order and the log says so; the widget is
+never lost, and the pin is retried on the next sample.
 
 ### Preferences
 
@@ -827,7 +839,7 @@ Exact values, so you do not have to read the source:
 | Visible torrent rows per server | 100 (rest → "+ N more torrents") |
 | Panel width | 400 px; height content-driven, list capped at 420 px |
 | Panel position | bottom-right of the primary screen's work area |
-| Desktop widget size | 248 × 152 px, fixed |
+| Desktop widget size | 250 × 150 px, fixed, transparent |
 | Desktop widget position | saved position, else bottom-right of the primary screen's work area |
 | Default ports | qBittorrent 8080, Transmission 9091 |
 | HTTP timeouts | 15 s per request |

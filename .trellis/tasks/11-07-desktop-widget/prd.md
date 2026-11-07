@@ -16,15 +16,22 @@ drag/edit/resize until the user unlocks it). Nexus is AGPL-3.0, so only the
 
 ### R1 — A desktop-level widget window
 
-- A new frameless card window (`DesktopWidgetWindow`) that is **part of the
-  desktop layer**: it is behind every application window, it survives
+- A new frameless, **transparent** readout (`DesktopWidgetWindow`) that lives
+  in the **desktop layer**: it is behind every application window, it survives
   "Show desktop" (Win+D), and it never steals keyboard focus from the app the
   user is working in.
-- On Windows the window is attached to the shell's desktop host window
-  (`Progman` / `WorkerW`) — the same technique desktop widgets and wallpapers
-  use. Where that is not possible (non-Windows builds, or the host cannot be
-  found), the window degrades to a normal always-on-top window and says so in
-  the log.
+- **No card**: no fill, no border, square corners — the wallpaper shows
+  through everywhere except the glyphs and the graph, and every run carries a
+  hard outline so it stays readable on any background.
+- On Windows the window is **pinned in the z-order directly above the shell's
+  desktop window** (`Progman` / the `WorkerW` that owns the icons), below every
+  application window, with `WS_EX_NOACTIVATE` so a click never activates it.
+  It is deliberately **not** re-parented into the desktop host: Avalonia
+  renders a transparent window without a redirection bitmap (DirectComposition)
+  or with DWM blur-behind, and neither survives being made a child of the
+  shell's desktop — the card would simply not be drawn.
+- Where the desktop window cannot be found (non-Windows builds, or a shell
+  restart) the card keeps its normal z-order and says so in the log.
 
 ### R2 — Content (simple first)
 

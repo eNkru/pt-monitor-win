@@ -30,108 +30,90 @@ booleans/ints in `SettingsStore`; everything Win32 lives in the App layer.
 | `ShowActivated` | `False` | it must not steal focus |
 | `Topmost` | `False` | desktop level, not always-on-top |
 | `CanResize` | `False` | fixed size |
-| `Background` | opaque `#F0202023` | same rule as the chip: no alpha layer |
+| `Background` | transparent | the wallpaper shows through |
+| `TransparencyLevelHint` | `Transparent` | per-pixel alpha |
 
-Size: fixed logical size (`Width=248`, `Height=152`), no `SizeToContent` — the
+Size: fixed logical size (`Width=250`, `Height=150`), no `SizeToContent` — the
 card must not resize when the content changes.
 
-Layout (a `Border` with `CornerRadius="14"`, `Padding="12"`, one hairline
-border — the same `card` look as the dropdown panel):
+Layout — **no card**: no fill, no border, square corners. Every run is drawn
+with `Views/OutlinedText`, which puts a hard outline around the glyphs, so the
+text stays readable on the wallpaper without an opaque plate behind it:
 
 ```
-┌──────────────────────────────────────┐
-│ PT Monitor                     [🔒]  │  header: title + lock button
-│ ↓ 1.2 MB/s                           │  aggregate download (statValue)
-│ ↑ 340 KB/s                           │  aggregate upload (statValue)
-│ ▁▂▃▅▇▅▃▂  (SpeedGraph)              │  rolling graph, 60 samples
-│ 3 servers · 2 online · 12 active     │  summary line
-└──────────────────────────────────────┘
+ PT Monitor                   Lock position
+ ↓ 1.2 MB/s
+ ↑ 340 KB/s
+ ▁▂▃▅▇▅▃▂  (SpeedGraph)
+ 3 servers · 2 online · 12 active
 ```
 
 `SpeedGraph` is reused as-is (it draws two overlaid series and needs no
-assets). The card is opaque, so the graph needs no outlined text — the plain
-`TextBlock` rows sit on the card, not on the graph.
+assets).
 
 ## 3. Desktop layer (the interesting part)
 
 Goal: the card belongs to the **desktop**, not to the app's z-order.
 
-### 3.1 Primary mechanism — attach to the shell's desktop host
+### 3.1 Mechanism — pin the z-order above the desktop
 
 Windows keeps the wallpaper and the desktop icons in special top-level
-windows: `Progman` and one or more `WorkerW` windows. A window that is made a
-**child** of the desktop host is painted in the desktop layer:
+windows: `Progman` and one or more `WorkerW` windows. A window that is
+**pinned directly above** one of them is painted in the desktop layer: every
+application window covers it, and it is never activated by a click.
 
-* every application window covers it,
-* it is not minimized by Win+D ("Show desktop"),
-* it cannot take keyboard focus away from the foreground app.
-
-`Services/DesktopLayer.cs` does this with `user32`/`shell32`:
+`Services/DesktopLayer.cs` does this with `user32`:
 
 ```csharp
-IntPtr FindDesktopHost();          // Progman -> WorkerW behind the icons
-bool  Attach(IntPtr hwnd);         // style swap + SetParent + verify
-void  Detach(IntPtr hwnd);         // undo, used when the widget is hidden
-bool  Place(IntPtr hwnd, int x, int y, int w, int h);  // parent-relative
+bool PinAboveDesktop(IntPtr hwnd);   // SetWindowPos(hwnd, host, …)
+bool MakeNonActivating(IntPtr hwnd); // WS_EX_NOACTIVATE
 ```
 
 Host discovery (the canonical recipe):
 
 1. `progman = FindWindow("Progman", null)`.
 2. `defView = FindWindowEx(progman, 0, "SHELLDLL_DefView", null)` — the icon
-   view. If it is a child of `Progman`, the `WorkerW` **behind** the icons is
-   found with `FindWindowEx(0, defView, "WorkerW", null)`; that is the host we
-   want (the card then sits above the wallpaper and below the icons).
+   view. If it is a child of `Progman`, that is the host.
 3. On Windows 11 builds where `SHELLDLL_DefView` is not under `Progman`, the
    `WorkerW` windows are enumerated and the one that owns the icon view wins;
    if none has it, `Progman` itself is the host.
-4. No host at all → the widget stays a normal window (fallback, below).
+4. No host at all → the card keeps its normal z-order (see 3.2).
 
-`Attach` performs the documented dance (`SetParent` does not change the window
-styles itself):
+`WS_EX_NOACTIVATE` is added to the window's extended style, so clicking the
+card never activates it and never raises it above the app the user is in.
 
-```
-style = GetWindowLongPtr(hwnd, GWL_STYLE)
-SetWindowLongPtr(hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_CHILD)
-SetParent(hwnd, host)
-```
+**Why not `SetParent` into the desktop host?** The first version of this
+design did that (the technique desktop widgets and wallpapers use) and it
+worked — but it forced the card to stay **opaque**, because Avalonia renders a
+transparent window without a redirection bitmap (DirectComposition) or with
+DWM blur-behind, and neither survives being made a child of the shell's
+desktop: the card would simply not be drawn. The user asked for a transparent
+widget, so the z-order pin replaces the re-parenting. It needs no
+re-parenting, keeps the per-pixel transparency, and still puts the card behind
+every application window.
 
-and then **verifies** the result: the parent must be the host and the window
-rect must match the requested rect. If it does not, the window is detached
-again and the widget falls back to the plain always-on-top window.
+### 3.2 Fallback — the normal z-order
 
-`WS_EX_NOACTIVATE` is added to the window's extended style in both cases, so
-clicking the card never activates it and never raises it above the app the
-user is in.
-
-### 3.2 Fallback — a normal always-on-top window
-
-When the platform is not Windows, or the host cannot be found, or the attach
-verification fails: the card behaves like the floating chip
-(`Topmost=True`, positioned by Avalonia). The user still gets a usable widget;
-the log records why the desktop layer was not used.
+When the platform is not Windows, or the desktop window cannot be found, the
+card keeps its normal z-order and the log records why. The pin is re-asserted
+on every sample, so a shell restart heals itself.
 
 ### 3.3 Position and coordinates
 
 The position is stored in **physical screen pixels** (like the chip's
-`FloatingPositionX/Y`). Once the window is a child of the desktop host, the
-coordinates are relative to the host's client area, so `ScreenToClient` is used
-to convert. The host covers the whole virtual desktop, so the conversion is a
-constant offset in practice.
+`FloatingPositionX/Y`), and Avalonia's own `Position` moves the card — the
+card is an ordinary top-level window again, so the drag is the chip's
+(`BeginMoveDrag`).
 
-Because the card is a child window, Avalonia's `Position` property is not used
-after the attach — the placement is done with `SetWindowPos`.
-
-**DPI caveat (documented, accepted):** a child window inherits its parent's
-DPI context, so on a secondary monitor with a different scale the card is
-rendered at the host's scale and looks physically smaller there. The default
-placement is the primary monitor's bottom-right corner.
+**Win+D** ("Show desktop") minimizes every top-level window, so the card
+restores itself when `WindowState` flips to `Minimized`: it belongs to the
+desktop, not to the taskbar.
 
 ### 3.4 Explorer restarts
 
-If the shell restarts, the host window dies and the child window with it. The
-widget window's `Closed` handler tells `AppServices`, which recreates the
-window (the setting is still on) and re-attaches it to the new host.
+If the shell restarts, the desktop window changes identity. The pin is
+re-asserted on every sample, so the card lands on the new desktop window
+without any special handling.
 
 ## 4. Data flow
 
@@ -196,18 +178,19 @@ New keys (English key = the English text, Chinese value in `L10n.Zh`):
 | `Lock position` | `锁定位置` |
 | `Unlock position` | `解锁位置` |
 | `Desktop widget` | `桌面挂件` |
-| `%lld active` | `%lld 个活动` |
+| `%lld server · %lld online · %lld active` | `%lld 台服务器 · %lld 台在线 · %lld 个活动` |
+| `%lld servers · %lld online · %lld active` | `%lld 台服务器 · %lld 台在线 · %lld 个活动` |
 
-The summary line reuses the existing helpers: `L10n.ServerCount(total,
-online)` ("3 servers · 2 online") and `L10n.ActiveTorrents(active, total)`.
+The summary line is **one** templated key (`L10n.WidgetSummary`), never
+glued-together fragments.
 
 ## 8. Risks
 
 | Risk | Mitigation |
 |---|---|
-| The desktop host cannot be found (Explorer variant) | fallback to an always-on-top window; the widget is never lost |
-| `SetParent` leaves the card in a wrong rect | verify after attach, detach + fall back |
-| Avalonia fights the child-window placement | placement is done through `SetWindowPos` only; Avalonia's `Position` is not used after the attach |
+| The desktop window cannot be found (Explorer variant) | the card keeps its normal z-order; the pin is retried on every sample |
+| A transparent window cannot be a child of the desktop host | the z-order pin replaces the re-parenting (see 3.1) |
 | The card steals focus | `WS_EX_NOACTIVATE` on the card |
-| Explorer restarts kill the card | `Closed` → recreate + re-attach |
-| The Windows path cannot be exercised on a Linux dev box | the fallback path is the one under test locally; the Windows path is small, guarded and logged |
+| Win+D minimizes the card | it restores itself from `WindowState.Minimized` |
+| Explorer restarts change the desktop window | the pin is re-asserted on every sample |
+| The Windows path cannot be exercised on a Linux dev box | the transparency was verified on X11 (91 % of the pixels are fully transparent); the Win32 z-order pin is small, guarded and logged |
