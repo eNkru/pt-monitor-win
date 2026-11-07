@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "spec context for the desktop widget"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "spec context for the desktop widget"}

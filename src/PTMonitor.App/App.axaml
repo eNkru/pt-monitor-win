@@ -16,6 +16,16 @@
             <Setter Property="BoxShadow" Value="0 12 40 12 #66000000" />
         </Style>
 
+        <!-- Desktop widget card: the dropdown panel's card without the shadow
+             and without a fill of its own (the opaque window is the fill, and
+             it has to stay opaque: a layered window cannot be a child of the
+             desktop host — the rounded corners are cut out of it instead). -->
+        <Style Selector="Border.widgetCard">
+            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+        </Style>
+
         <!-- Floating speed chip: small, opaque, no rounded corners, so the
              window needs no transparency/compositing layer. -->
         <Style Selector="TextBlock.floatingRate">

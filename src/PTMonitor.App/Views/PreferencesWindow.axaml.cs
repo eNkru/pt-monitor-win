@@ -46,6 +46,7 @@ public partial class PreferencesWindow : Window
             AddServerButton.Content = L10n.S("Add Server…");
             ShowSpeedsToggle.Content = L10n.S("Show speeds in the tray tooltip");
             FloatingSpeedsToggle.Content = L10n.S("Show floating speed window");
+            DesktopWidgetToggle.Content = L10n.S("Show desktop widget");
             FloatingDisplayLabel.Text = L10n.S("Floating display");
             FloatingNumbers.Content = L10n.S("Numbers");
             FloatingGraph.Content = L10n.S("Graph");
@@ -101,6 +102,7 @@ public partial class PreferencesWindow : Window
         PollInterval.Value = (int)services.Settings.PollInterval;
         ShowSpeedsToggle.IsChecked = services.Settings.ShowSpeedsInMenuBar;
         FloatingSpeedsToggle.IsChecked = services.Settings.ShowFloatingSpeeds;
+        DesktopWidgetToggle.IsChecked = services.Settings.ShowDesktopWidget;
         var display = services.Settings.FloatingDisplay;
         FloatingNumbers.IsChecked = display == FloatingDisplayMode.Numbers;
         FloatingGraph.IsChecked = display == FloatingDisplayMode.Graph;
@@ -160,6 +162,11 @@ public partial class PreferencesWindow : Window
     private void OnFloatingSpeedsToggled(object? sender, RoutedEventArgs e)
     {
         AppServices.Instance.Settings.SetShowFloatingSpeeds(FloatingSpeedsToggle.IsChecked == true);
+    }
+
+    private void OnDesktopWidgetToggled(object? sender, RoutedEventArgs e)
+    {
+        AppServices.Instance.Settings.SetShowDesktopWidget(DesktopWidgetToggle.IsChecked == true);
     }
 
     private void OnFloatingDisplayClicked(object? sender, RoutedEventArgs e)

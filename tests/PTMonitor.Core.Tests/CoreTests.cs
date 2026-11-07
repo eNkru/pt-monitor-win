@@ -1204,6 +1204,9 @@ public class SettingsStoreTests
             settings.SetShowFloatingSpeeds(true);
             settings.SetFloatingDisplayMode(FloatingDisplayMode.Graph);
             settings.SetFloatingPosition(640, 480);
+            settings.SetShowDesktopWidget(true);
+            settings.SetDesktopWidgetPosition(120, 80);
+            settings.SetDesktopWidgetLocked(true);
 
             var reloaded = new SettingsStore(path);
             Assert.Single(reloaded.Servers);
@@ -1214,6 +1217,10 @@ public class SettingsStoreTests
             Assert.Equal(FloatingDisplayMode.Graph, reloaded.FloatingDisplay);
             Assert.Equal(640, reloaded.FloatingPositionX);
             Assert.Equal(480, reloaded.FloatingPositionY);
+            Assert.True(reloaded.ShowDesktopWidget);
+            Assert.Equal(120, reloaded.DesktopWidgetPositionX);
+            Assert.Equal(80, reloaded.DesktopWidgetPositionY);
+            Assert.True(reloaded.DesktopWidgetLocked);
         }
         finally
         {
@@ -1229,6 +1236,16 @@ public class SettingsStoreTests
         Assert.Equal(FloatingDisplayMode.Numbers, settings.FloatingDisplay);
         Assert.Null(settings.FloatingPositionX);
         Assert.Null(settings.FloatingPositionY);
+    }
+
+    [Fact]
+    public void DesktopWidgetIsOffWithoutAFile()
+    {
+        var settings = new SettingsStore(TempFile());
+        Assert.False(settings.ShowDesktopWidget);
+        Assert.Null(settings.DesktopWidgetPositionX);
+        Assert.Null(settings.DesktopWidgetPositionY);
+        Assert.False(settings.DesktopWidgetLocked);
     }
 
     [Fact]
