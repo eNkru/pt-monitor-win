@@ -864,3 +864,32 @@ window manager**, so the drag follows the cursor itself
 
 - Check the widget on Windows, then merge PR #17 and archive the task
 - Follow-up (not in this task): per-server rows / top torrents inside the card
+
+### Update (same day, later): transparent and square
+
+The user looked at the first build and asked for two changes: **no rounded
+corner** and **transparent**. That reversed the desktop-layer mechanism.
+
+The first version re-parented the card into the shell's desktop host
+(`SetParent` to `Progman`/`WorkerW`). That worked, but it forced the card to
+stay **opaque**: Avalonia renders a transparent window without a redirection
+bitmap (DirectComposition) or with DWM blur-behind, and neither survives being
+made a child of the shell's desktop — the card would simply not be drawn.
+
+So the card is now pinned in the **z-order** directly above the desktop window
+(`SetWindowPos(hwnd, host, …)`), below every application window, with
+`WS_EX_NOACTIVATE` so a click never activates it. The pin is re-asserted on
+every sample, so a shell restart heals itself. The card is an ordinary
+top-level window again: the drag is the chip's `BeginMoveDrag`, and Win+D is
+undone by restoring it from `WindowState.Minimized`.
+
+The card has no card: no fill, no border, square corners, and every run is
+drawn with `OutlinedText` (a hard outline around the glyphs) so it stays
+readable on the wallpaper.
+
+**Verified on the X11 display**: the card was captured with `xwd`, converted
+to a PNG and inspected — 91 % of its pixels are fully transparent (1 % opaque:
+the glyph cores; 8 % partial: the outlines and the anti-aliased graph).
+
+The lesson worth keeping: *a transparent Avalonia window and a desktop-host
+child window are mutually exclusive on Windows.* Choose one.
