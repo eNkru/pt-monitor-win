@@ -139,31 +139,66 @@ if (-not $SkipZip) {
         Write-Host "==> installer (Inno Setup)" -ForegroundColor Cyan
         $numericVersion = ConvertTo-NumericVersion -Version $Version
 
-        # Get-Command first (the CI runner image ships iscc on PATH), then the
-        # default install location. 6.3 is the floor: the `x64compatible`
+        # iscc discovery: Get-Command first (the CI runner image ships a
+        # Chocolatey *shim* named iscc on PATH), then the default install
+        # locations. A shim is a tiny launcher with no version resource of its
+        # own -- its FileVersion reads 0.0.0.0 -- so the version comes from the
+        # real ISCC.exe it launches: named in the shim's .shim file, or one of
+        # the install directories. 6.3 is the floor: the `x64compatible`
         # architecture token and the modern wizard used by PTMonitor.iss do not
-        # exist before it. A missing or too-old iscc fails the build -- never a
-        # silent skip.
-        $iscc = $null
+        # exist before it. A *missing* iscc fails the build -- never a silent
+        # skip. An *unreadable* version only warns: a launcher in front of a
+        # good compiler is legitimate, and the compile below is the real check.
+        $isccCandidates = @()
         $isccCommand = Get-Command iscc -ErrorAction SilentlyContinue
-        if ($isccCommand) {
-            $iscc = $isccCommand.Source
-        } elseif (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") {
-            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        if ($isccCommand) { $isccCandidates += $isccCommand.Source }
+        $isccCandidates += @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+        )
+        $isccCandidates = @($isccCandidates | Where-Object { $_ -and (Test-Path $_) } |
+            Select-Object -Unique)
+        if (-not $isccCandidates) {
+            throw "Inno Setup 6 (iscc) was not found on PATH, in ${env:ProgramFiles(x86)}\Inno Setup 6 or in ${env:ProgramFiles}\Inno Setup 6. Install it from https://jrsoftware.org/isdl.php, or pass -SkipInstaller to build only the zip."
+        }
+
+        # Resolve to whatever reports a real version: the candidate itself, or
+        # the target a Chocolatey shim names in `<candidate>.shim` (XML).
+        $iscc = $null
+        $isccVersion = $null
+        foreach ($candidate in $isccCandidates) {
+            $version = [string](Get-Item $candidate).VersionInfo.FileVersion
+            if ($version -match '^(\d+)\.(\d+)' -and [int]$Matches[1] -gt 0) {
+                $iscc = $candidate
+                $isccVersion = $version
+                break
+            }
+            $shim = "$candidate.shim"
+            if (-not (Test-Path $shim)) { continue }
+            $shimText = Get-Content -Raw $shim
+            if ($shimText -notmatch '<(?:path|target)>([^<]+)</(?:path|target)>') { continue }
+            $target = $Matches[1]
+            if (-not (Test-Path $target)) { continue }
+            $iscc = $target
+            $isccVersion = [string](Get-Item $target).VersionInfo.FileVersion
+            break
         }
         if (-not $iscc) {
-            throw "Inno Setup 6 (iscc) was not found on PATH or in ${env:ProgramFiles(x86)}\Inno Setup 6. Install it from https://jrsoftware.org/isdl.php, or pass -SkipInstaller to build only the zip."
+            # No version anywhere (a shim in front of an unreadable target): use
+            # the first candidate and let the compile speak for itself.
+            $iscc = $isccCandidates[0]
+            $isccVersion = $null
         }
-        $isccVersion = (Get-Item $iscc).VersionInfo.FileVersion
-        if (-not ($isccVersion -match '^(\d+)\.(\d+)')) {
-            throw "cannot parse the Inno Setup version '$isccVersion' of $iscc"
+        if ($isccVersion -notmatch '^(\d+)\.(\d+)') {
+            Write-Host "==> warning: the Inno Setup version at $iscc could not be read; assuming 6.3 or newer" -ForegroundColor Yellow
+        } else {
+            $isccMajor = [int]$Matches[1]
+            $isccMinor = [int]$Matches[2]
+            if ($isccMajor -lt 6 -or ($isccMajor -eq 6 -and $isccMinor -lt 3)) {
+                throw "Inno Setup $isccVersion at $iscc is too old; 6.3 or newer is required (https://jrsoftware.org/isdl.php)"
+            }
+            Write-Host "==> iscc $isccVersion ($iscc)"
         }
-        $isccMajor = [int]$Matches[1]
-        $isccMinor = [int]$Matches[2]
-        if ($isccMajor -lt 6 -or ($isccMajor -eq 6 -and $isccMinor -lt 3)) {
-            throw "Inno Setup $isccVersion at $iscc is too old; 6.3 or newer is required (https://jrsoftware.org/isdl.php)"
-        }
-        Write-Host "==> iscc $isccVersion ($iscc)"
 
         & $iscc /Qp "/DAppVersion=$Version" "/DAppVersionNumeric=$numericVersion" "/DRid=$Rid" "scripts/installer/PTMonitor.iss"
         if ($LASTEXITCODE -ne 0) { throw "installer build failed" }

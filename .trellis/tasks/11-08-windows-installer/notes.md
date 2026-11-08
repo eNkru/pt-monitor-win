@@ -53,3 +53,39 @@ that probe.
 - `ConvertTo-NumericVersion` accepts 5-digit components (`99999` > 65535), so
   `1.0.99999` would pass the helper and then fail inside `iscc`. Matches design
   §3 and is unreachable from a real tag/branch version; not worth a guard.
+
+## The first CI run (2026-11-08) — what only real execution could find
+
+Pushed `feat/windows-installer`; `branch-release.yml` ran on `windows-latest`.
+The gate job passed (build + `--selftest` 698 + 151 tests) and `build.ps1` got
+all the way to `==> installer (Inno Setup)`, then failed at the version assertion:
+
+```
+Inno Setup 0.0.0.0 at C:\ProgramData\Chocolatey\bin\ISCC.exe is too old;
+6.3 or newer is required
+```
+
+**The compiler was fine; the guard was reading the wrong file.** `iscc` on PATH
+on that image is a **Chocolatey shim** — a ~20 KB launcher with no version
+resource, so `VersionInfo.FileVersion` is `0.0.0.0` for every choco-installed
+tool. The `>= 6.3` assertion therefore failed on a good Inno Setup 6.7.1, and
+would have failed on every future run.
+
+Fix in `build.ps1`: build a candidate list (`Get-Command iscc`, then
+`%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe`, then `%ProgramFiles%\…`), and
+resolve the **version** from the first candidate that reports a real one — the
+exe itself, or the target named in `<candidate>.shim` (XML, `<path>`/`<target>`).
+Only when no candidate reports a version does it warn and continue instead of
+throwing, because a wrapper in front of a working compiler is legitimate and the
+compile is the real check. Verified the pieces on a Windows PowerShell: a
+versionless file reports `FileVersion=""` (not `0.0.0.0`), the `.shim` regex
+captures the target for both element spellings, and a real version string can
+carry trailing build text (`10.0.26100.9818 (WinBuild.160101.0800)`) which the
+anchored `^(\d+)\.(\d+)` parse tolerates.
+
+`build.ps1` is also the only file in this task that had never executed anywhere
+— dotnet publish, zip, sums and selftest all ran green in that CI job, so only
+this block was unproven.
+
+Recorded in `.trellis/spec/guides/ci-pipeline.md`: never read `VersionInfo` off
+the PATH entry alone on a runner image, because the entry is a shim.

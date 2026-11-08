@@ -142,7 +142,13 @@ Both run the same gates in the same order and package both architectures through
       job, with the `iscc` the Windows runner image ships — no new action, no
       `choco install`. The script asserts `iscc >= 6.3` and logs its version, so
       a runner image that drops or downgrades Inno Setup fails the package job
-      loudly instead of shipping a broken installer;
+      loudly instead of shipping a broken installer. **`iscc` on PATH on the
+      runner is a Chocolatey shim, and a shim has no version resource of its
+      own** (`FileVersion` reads `0.0.0.0`), so the script resolves the version
+      through the shim's `.shim` file (or the `Program Files` install
+      directory) before asserting. Never read `VersionInfo` off the PATH entry
+      alone: that guards a number the wrapper does not carry and fails the
+      package job on a perfectly good compiler;
     - **Windows only.** `scripts/build.sh` never builds one: it prints
       "installers are built on Windows only (CI or a Windows box)" and still
       lists pre-existing `*-setup.exe` files when it rewrites `SHA256SUMS.txt`,
