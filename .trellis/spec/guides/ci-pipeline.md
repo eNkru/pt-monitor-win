@@ -149,6 +149,11 @@ Both run the same gates in the same order and package both architectures through
       directory) before asserting. Never read `VersionInfo` off the PATH entry
       alone: that guards a number the wrapper does not carry and fails the
       package job on a perfectly good compiler;
+    - **PowerShell variables are case-insensitive**, so a build-script local
+      named `$version`/`$rid`/`$zip` silently reassigns a `param([string]$Version)`.
+      That is how an installer once shipped as `…-0.0.0.0-setup.exe` while the
+      zip beside it was named correctly. Name locals after what they hold
+      (`$candidateFileVersion`), not after the concept;
     - **Windows only.** `scripts/build.sh` never builds one: it prints
       "installers are built on Windows only (CI or a Windows box)" and still
       lists pre-existing `*-setup.exe` files when it rewrites `SHA256SUMS.txt`,

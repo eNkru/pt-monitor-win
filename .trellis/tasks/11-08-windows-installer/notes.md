@@ -89,3 +89,44 @@ this block was unproven.
 
 Recorded in `.trellis/spec/guides/ci-pipeline.md`: never read `VersionInfo` off
 the PATH entry alone on a runner image, because the entry is a shim.
+
+## Follow-up: the `0.0.0.0` installer version (2026-11-08, later)
+
+After the shim fix the installer finally compiled — but every setup exe came out
+as `PTMonitor-0.0.0.0-<rid>-setup.exe` while the zip beside it carried the
+correct version, and the release step then failed looking for the asset name it
+had computed.
+
+Two wrong theories were chased first (an ISPP symbol collision with the
+`[Setup] AppVersion` directive, then the `/D` value being parsed as an
+expression). Both were cheap to disprove with a temporary diagnostic in the
+package step, which printed the truth:
+
+```
+==> diag: Version=[0.0.0.0] numeric=[1.0.0.0] rid=[win-x64]
+```
+
+The `$Version` **inside `build.ps1`** had already been overwritten by the time
+the installer step ran — even though the zip name, one line earlier, was correct.
+
+**Root cause: PowerShell variable names are case-INsensitive.** The shim
+discovery loop I had just added used
+
+```powershell
+$version = [string](Get-Item $candidate).VersionInfo.FileVersion
+```
+
+which *is* the script's `[string]$Version` parameter. Reading the 0.0.0.0
+"version" of the Chocolatey shim therefore rewrote the release version. The
+numeric version had been computed a moment earlier, which is why it survived
+and why `{#AppVersionNumeric}` was fine while `{#AppVersion}` was not.
+
+Fix: rename the loop locals to `$candidateFileVersion` / `$shimTarget`, and
+keep the note in the script so nobody reintroduces `$version`. The `.iss` was
+restored to the original `AppVersion` / `AppVersionNumeric` / `Rid` define
+names (the `Ptm`-prefixed rename was a wrong-theory change).
+
+**The lesson:** in a PowerShell build script, a short lowercase local (`$version`,
+`$rid`, `$zip`) can silently reassign a `param([string]$Version)`. Name loop
+variables after what they hold (`$candidateFileVersion`), never after the
+concept.

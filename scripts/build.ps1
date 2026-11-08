@@ -164,23 +164,27 @@ if (-not $SkipZip) {
 
         # Resolve to whatever reports a real version: the candidate itself, or
         # the target a Chocolatey shim names in `<candidate>.shim` (XML).
+        # NOTE the local variable names: PowerShell variable names are
+        # case-INsensitive, so a loop variable called `$version` silently
+        # clobbers the `$Version` parameter -- the installer then shipped a
+        # version of 0.0.0.0 while the zip was named correctly.
         $iscc = $null
         $isccVersion = $null
         foreach ($candidate in $isccCandidates) {
-            $version = [string](Get-Item $candidate).VersionInfo.FileVersion
-            if ($version -match '^(\d+)\.(\d+)' -and [int]$Matches[1] -gt 0) {
+            $candidateFileVersion = [string](Get-Item $candidate).VersionInfo.FileVersion
+            if ($candidateFileVersion -match '^(\d+)\.(\d+)' -and [int]$Matches[1] -gt 0) {
                 $iscc = $candidate
-                $isccVersion = $version
+                $isccVersion = $candidateFileVersion
                 break
             }
             $shim = "$candidate.shim"
             if (-not (Test-Path $shim)) { continue }
             $shimText = Get-Content -Raw $shim
             if ($shimText -notmatch '<(?:path|target)>([^<]+)</(?:path|target)>') { continue }
-            $target = $Matches[1]
-            if (-not (Test-Path $target)) { continue }
-            $iscc = $target
-            $isccVersion = [string](Get-Item $target).VersionInfo.FileVersion
+            $shimTarget = $Matches[1]
+            if (-not (Test-Path $shimTarget)) { continue }
+            $iscc = $shimTarget
+            $isccVersion = [string](Get-Item $shimTarget).VersionInfo.FileVersion
             break
         }
         if (-not $iscc) {
@@ -200,16 +204,7 @@ if (-not $SkipZip) {
             Write-Host "==> iscc $isccVersion ($iscc)"
         }
 
-        # TEMP DIAGNOSTIC (revert): what the build sees and what ISPP expands it to.
-        Write-Host "==> diag: Version=[$Version] numeric=[$numericVersion] rid=[$Rid] iscc=[$iscc]"
-        Get-Content scripts/installer/PTMonitor.iss |
-            Select-String -Pattern 'OutputBaseFilename|^AppVersion|VersionInfoVersion' |
-            ForEach-Object { Write-Host "==> diag: src: $_" }
-        & $iscc /E "/DPtmVersion=$Version" "/DPtmVersionNumeric=$numericVersion" "/DPtmRid=$Rid" "scripts/installer/PTMonitor.iss" 2>&1 |
-            Select-String -Pattern 'OutputBaseFilename|^AppVersion|VersionInfoVersion|error' |
-            ForEach-Object { Write-Host "==> diag: pp: $_" }
-
-        & $iscc /Qp "/DPtmVersion=$Version" "/DPtmVersionNumeric=$numericVersion" "/DPtmRid=$Rid" "scripts/installer/PTMonitor.iss"
+        & $iscc /Qp "/DAppVersion=$Version" "/DAppVersionNumeric=$numericVersion" "/DRid=$Rid" "scripts/installer/PTMonitor.iss"
         if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
         Write-Host "==> built artifacts/PTMonitor-$Version-$Rid-setup.exe"
     }
