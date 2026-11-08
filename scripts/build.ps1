@@ -200,7 +200,7 @@ if (-not $SkipZip) {
             Write-Host "==> iscc $isccVersion ($iscc)"
         }
 
-        & $iscc /Qp "/DAppVersion=$Version" "/DAppVersionNumeric=$numericVersion" "/DRid=$Rid" "scripts/installer/PTMonitor.iss"
+        & $iscc /Qp "/DPtmVersion=$Version" "/DPtmVersionNumeric=$numericVersion" "/DPtmRid=$Rid" "scripts/installer/PTMonitor.iss"
         if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
         Write-Host "==> built artifacts/PTMonitor-$Version-$Rid-setup.exe"
     }

@@ -3,10 +3,10 @@
 ;
 ; Built by scripts/build.ps1 (and by the CI package jobs) with:
 ;
-;   iscc /Qp /DAppVersion=<display version> /DAppVersionNumeric=<x.y.z.w> \
-;        /DRid=<win-x64|win-arm64> scripts\installer\PTMonitor.iss
+;   iscc /Qp /DPtmVersion=<display version> /DPtmVersionNumeric=<x.y.z.w> \
+;        /DPtmRid=<win-x64|win-arm64> scripts\installer\PTMonitor.iss
 ;
-; It packages publish\<Rid>\PTMonitor.exe and publish\<Rid>\cli\PTMonitor.Cli.exe
+; It packages publish\<PtmRid>\PTMonitor.exe and publish\<PtmRid>\cli\PTMonitor.Cli.exe
 ; into artifacts\PTMonitor-<version>-<rid>-setup.exe.
 ;
 ; Install mode is chosen in the wizard:
@@ -31,24 +31,28 @@
 
 ; The three values below come from the build script. Fail with a readable
 ; message instead of producing PTMonitor--win--setup.exe from an empty define.
-#ifndef AppVersion
-  #error AppVersion is not defined. Use scripts\build.ps1, or pass /DAppVersion=<version> to iscc.
+; The names are deliberately prefixed: an ISPP define called `AppVersion` came
+; back as 0.0.0.0 in a real compile, apparently shadowed by the [Setup]
+; directive / compiler symbol of the same name. Keep the `Ptm` prefix -- a
+; plain `Rid`/`Version` symbol is asking for the same collision.
+#ifndef PtmVersion
+#error PtmVersion is not defined. Use scripts\build.ps1, or pass /DPtmVersion=<version> to iscc.
 #endif
-#ifndef AppVersionNumeric
-  #error AppVersionNumeric is not defined. Use scripts\build.ps1, or pass /DAppVersionNumeric=<x.y.z.w> to iscc.
+#ifndef PtmVersionNumeric
+#error PtmVersionNumeric is not defined. Use scripts\build.ps1, or pass /DPtmVersionNumeric=<x.y.z.w> to iscc.
 #endif
-#ifndef Rid
-  #error Rid is not defined. Use scripts\build.ps1, or pass /DRid=win-x64 or /DRid=win-arm64 to iscc.
+#ifndef PtmRid
+#error PtmRid is not defined. Use scripts\build.ps1, or pass /DPtmRid=win-x64 or /DPtmRid=win-arm64 to iscc.
 #endif
 
-#if Rid == "win-x64"
+#if PtmRid == "win-x64"
   ; x64compatible also runs on Arm64 Windows through x64 emulation, which is
   ; what the portable win-x64 exe does today.
   #define Arch "x64compatible"
-#elif Rid == "win-arm64"
+#elif PtmRid == "win-arm64"
   #define Arch "arm64"
 #else
-  #error Unsupported Rid. Use win-x64 or win-arm64.
+#error Unsupported PtmRid. Use win-x64 or win-arm64.
 #endif
 
 [Setup]
@@ -56,8 +60,8 @@ AppId={{41E97050-0E4C-4F6E-B0F2-00318AD6F145}
 AppName=PTMonitor
 ; The exact release string (1.0.0, 1.0.0-dev.<sha7>, ...), so a dev build is
 ; identifiable in Installed apps.
-AppVersion={#AppVersion}
-AppVerName=PTMonitor {#AppVersion}
+AppVersion={#PtmVersion}
+AppVerName=PTMonitor {#PtmVersion}
 AppPublisher=eNkru
 AppPublisherURL=https://github.com/eNkru/pt-monitor-win
 AppSupportURL=https://github.com/eNkru/pt-monitor-win
@@ -77,14 +81,14 @@ ArchitecturesAllowed={#Arch}
 ArchitecturesInstallIn64BitMode={#Arch}
 MinVersion=10.0.14393
 OutputDir={#Root}artifacts
-OutputBaseFilename=PTMonitor-{#AppVersion}-{#Rid}-setup
+OutputBaseFilename=PTMonitor-{#PtmVersion}-{#PtmRid}-setup
 SetupIconFile={#Root}src\PTMonitor.App\app.ico
 UninstallDisplayIcon={app}\PTMonitor.exe
 ; VersionInfo* must be numeric a.b.c.d; VersionInfoVersion is the file version,
 ; VersionInfoProductVersion the product version. build.ps1 derives both from
 ; the display version.
-VersionInfoVersion={#AppVersionNumeric}
-VersionInfoProductVersion={#AppVersionNumeric}
+VersionInfoVersion={#PtmVersionNumeric}
+VersionInfoProductVersion={#PtmVersionNumeric}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -97,8 +101,8 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#Root}publish\{#Rid}\PTMonitor.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Root}publish\{#Rid}\cli\PTMonitor.Cli.exe"; DestDir: "{app}\cli"; Flags: ignoreversion
+Source: "{#Root}publish\{#PtmRid}\PTMonitor.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Root}publish\{#PtmRid}\cli\PTMonitor.Cli.exe"; DestDir: "{app}\cli"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\PTMonitor"; Filename: "{app}\PTMonitor.exe"; WorkingDir: "{app}"
