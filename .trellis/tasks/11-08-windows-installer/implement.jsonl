@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/index.md", "reason": "layer map and non-negotiables; installer work must not break the one-way dependency or read-only contract"}
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "the two lanes, duplicated blocks, pinned actions, SHA256SUMS rules — the file this task edits"}
+{"file": ".trellis/spec/backend/persistence-guidelines.md", "reason": "%APPDATA%\\PTMonitor is the only user data; uninstall must keep it"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "tray app lifecycle: CloseApplications on upgrade, no autostart mechanism today"}

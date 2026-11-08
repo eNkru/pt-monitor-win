@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/guides/ci-pipeline.md", "reason": "verify both lanes stayed identical, actions pinned, sums format and count"}
+{"file": ".trellis/spec/index.md", "reason": "verification contract: build + selftest + dotnet test must stay green"}
