@@ -200,6 +200,15 @@ if (-not $SkipZip) {
             Write-Host "==> iscc $isccVersion ($iscc)"
         }
 
+        # TEMP DIAGNOSTIC (revert): what the build sees and what ISPP expands it to.
+        Write-Host "==> diag: Version=[$Version] numeric=[$numericVersion] rid=[$Rid] iscc=[$iscc]"
+        Get-Content scripts/installer/PTMonitor.iss |
+            Select-String -Pattern 'OutputBaseFilename|^AppVersion|VersionInfoVersion' |
+            ForEach-Object { Write-Host "==> diag: src: $_" }
+        & $iscc /E "/DPtmVersion=$Version" "/DPtmVersionNumeric=$numericVersion" "/DPtmRid=$Rid" "scripts/installer/PTMonitor.iss" 2>&1 |
+            Select-String -Pattern 'OutputBaseFilename|^AppVersion|VersionInfoVersion|error' |
+            ForEach-Object { Write-Host "==> diag: pp: $_" }
+
         & $iscc /Qp "/DPtmVersion=$Version" "/DPtmVersionNumeric=$numericVersion" "/DPtmRid=$Rid" "scripts/installer/PTMonitor.iss"
         if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
         Write-Host "==> built artifacts/PTMonitor-$Version-$Rid-setup.exe"
