@@ -9,10 +9,11 @@
 #   - packaging: scripts/build.ps1 — self-contained single-file PTMonitor.exe for
 #     both win-x64 and win-arm64 (ARM64 is cross-compiled on the x64 runner; its
 #     packaged-CLI selftest is skipped because the binary cannot execute there —
-#     the architecture-independent --selftest gate still runs).
-#   - provenance: `SHA256SUMS.txt` next to the two zips plus a GitHub build
-#     provenance attestation, both produced before the release is touched, so a
-#     binary is never published without them.
+#     the architecture-independent --selftest gate still runs), plus an Inno
+#     Setup installer per architecture (`iscc` comes from the runner image).
+#   - provenance: `SHA256SUMS.txt` next to the two zips and the two installers,
+#     plus a GitHub build provenance attestation for all four, both produced
+#     before the release is touched, so a binary is never published without them.
 #   - release: ONE rolling prerelease per branch, tag `branch-build/<slug>-<refhash>`,
 #     version `1.0.0-<slug>-<refhash>.<sha7>`, assets replaced on every push.
 #     Slugs are lowercase `[a-z0-9-]` with a 6-hex digest of the raw ref appended:
@@ -21,7 +22,7 @@
 #     so the tag is a legal git ref. `--prerelease --latest=false`: these never
 #     become the repository's Latest. Assets from the previous commit are deleted
 #     after upload — their names embed the version (hence the SHA), so `--clobber`
-#     alone never replaces them and each push would strand another 2 x ~70 MB.
+#     alone never replaces them and each push would strand another 4 x ~70 MB.
 #   - cleanup: deleting a branch deletes its release and tag. Deleting a `v*` tag
 #     also queues a run, but the cleanup job's `ref_type` guard skips it.
 #
@@ -133,7 +134,8 @@ jobs:
           "APP_VERSION=1.0.0-$slug.$sha" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       # Gates ran in `gate`; each package step publishes one architecture. Both
-      # zips must exist before the release step uploads anything.
+      # zips and both installers must exist before the release step uploads
+      # anything.
       - name: Package x64
         shell: pwsh
         run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-x64 -SkipGates
@@ -156,17 +158,18 @@ jobs:
           path: publish/win-arm64/PTMonitor.exe
           if-no-files-found: error
 
-      # build.ps1 rewrote artifacts/SHA256SUMS.txt from the zips it just built;
-      # re-derive every line here and compare, so a format slip (wrong separator,
-      # uppercase hex, a missing zip) fails before anything is published. The
-      # same block exists in build.yml — keep the two identical.
+      # build.ps1 rewrote artifacts/SHA256SUMS.txt from the artifacts it just
+      # built; re-derive every line here and compare, so a format slip (wrong
+      # separator, uppercase hex, a missing file) fails before anything is
+      # published. Four lines: two zips + two installers. The same block exists
+      # in build.yml — keep the two identical.
       - name: Verify checksums
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $sums = @(Get-Content artifacts/SHA256SUMS.txt | Where-Object { $_.Trim() })
-          if ($sums.Count -ne 2) {
-            throw "SHA256SUMS.txt should list 2 zips, found $($sums.Count)"
+          if ($sums.Count -ne 4) {
+            throw "SHA256SUMS.txt should list 4 artifacts: 2 zips + 2 installers, found $($sums.Count)"
           }
           foreach ($line in $sums) {
             $parts = $line -split '  ', 2
@@ -176,8 +179,11 @@ jobs:
             if ($expected -cnotmatch '^[0-9a-f]{64}$') {
               throw "checksum is not 64 lowercase hex chars: $name"
             }
+            if ($name -cnotmatch '^PTMonitor-.*(\.zip|-setup\.exe)$') {
+              throw "checksum names an unexpected artifact: $name"
+            }
             if (-not (Test-Path "artifacts/$name")) {
-              throw "checksum names a missing zip: $name"
+              throw "checksum names a missing artifact: $name"
             }
             $actual = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $expected) { throw "checksum mismatch for $name" }
@@ -185,11 +191,13 @@ jobs:
           }
 
       # Before the release is touched: a branch binary must never be published
-      # unattested. `subject-path` covers both zips.
+      # unattested. `subject-path` covers both zips and both installers.
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: artifacts/*.zip
+          subject-path: |
+            artifacts/*.zip
+            artifacts/*-setup.exe
 
       - name: Upsert rolling prerelease
         shell: pwsh
@@ -201,6 +209,8 @@ jobs:
           $sha = $env:GITHUB_SHA
           $x64 = "artifacts/PTMonitor-$env:APP_VERSION-win-x64.zip"
           $arm64 = "artifacts/PTMonitor-$env:APP_VERSION-win-arm64.zip"
+          $x64setup = "artifacts/PTMonitor-$env:APP_VERSION-win-x64-setup.exe"
+          $arm64setup = "artifacts/PTMonitor-$env:APP_VERSION-win-arm64-setup.exe"
           $sums = "artifacts/SHA256SUMS.txt"
           $title = "PTMonitor $env:APP_VERSION (branch build)"
           $notes = Join-Path $env:RUNNER_TEMP 'branch-release-notes.md'
@@ -213,7 +223,7 @@ jobs:
             "- Commit: ``$($sha.Substring(0, 7))``"
             "- Subject: $subject"
             ""
-            "Download the zip for your architecture (``win-x64`` or ``win-arm64``), unzip it, and run ``PTMonitor.exe`` — no .NET runtime install needed."
+            "Download the installer (``-setup.exe``) for your architecture (``win-x64`` or ``win-arm64``), or the zip if you prefer no install — no .NET runtime install needed either way."
             ""
             "Verify the download against ``SHA256SUMS.txt`` or with ``gh attestation verify`` — see the README."
             ""
@@ -245,7 +255,7 @@ jobs:
           if (-not $exists) {
             # `--prerelease` carries R6; `--latest=false` is belt-and-braces and,
             # like the one on `release edit` below, needs gh >= 2.39.
-            gh release create "$tag" $x64 $arm64 $sums `
+            gh release create "$tag" $x64 $arm64 $x64setup $arm64setup $sums `
               --target "$sha" `
               --prerelease `
               --latest=false `
@@ -255,15 +265,15 @@ jobs:
             exit 0
           }
 
-          gh release upload "$tag" $x64 $arm64 $sums --clobber
+          gh release upload "$tag" $x64 $arm64 $x64setup $arm64setup $sums --clobber
           if ($LASTEXITCODE -ne 0) { throw "release upload failed" }
 
           # Asset names carry the version, which carries the SHA, so --clobber
           # alone never overwrites anything: without this, a branch that is
-          # pushed ten times keeps ~20 zips (about 1.4 GB) on its release. Drop
-          # every asset that is not the set just uploaded — `SHA256SUMS.txt` is
-          # in `$keep` because its name does not change.
-          $keep = @($x64, $arm64, $sums) | ForEach-Object { Split-Path $_ -Leaf }
+          # pushed ten times keeps ~40 artifacts (about 2.8 GB) on its release.
+          # Drop every asset that is not the set just uploaded — `SHA256SUMS.txt`
+          # is in `$keep` because its name does not change.
+          $keep = @($x64, $x64setup, $arm64, $arm64setup, $sums) | ForEach-Object { Split-Path $_ -Leaf }
           $stale = gh release view "$tag" --json assets --jq '.assets[].name'
           foreach ($name in $stale) {
             if ($name -and $name -notin $keep) {

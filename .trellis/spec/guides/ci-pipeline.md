@@ -67,9 +67,9 @@ Both run the same gates in the same order and package both architectures through
    run only executes `gate`.
 9. **Asset names that embed a version are never replaced by `--clobber`** — the
    name changes with every commit, so a rolling release must delete the previous
-   assets explicitly or it grows by two build zips per push. The one asset whose
-   name is stable, `SHA256SUMS.txt`, belongs in the keep-list so the stale-asset
-   sweep does not delete it.
+   assets explicitly or it grows by two zips + two installers per push. The one
+   asset whose name is stable, `SHA256SUMS.txt`, belongs in the keep-list so the
+   stale-asset sweep does not delete it.
 10. **Every `uses:` is pinned to a full 40-character commit SHA** with the
     human-readable release in a trailing comment:
 
@@ -115,24 +115,54 @@ Both run the same gates in the same order and package both architectures through
     It does **not** replace `branch-release.yml`: a same-repo branch push still
     publishes a rolling prerelease, and only a fork PR is invisible to that lane.
 13. **`SHA256SUMS.txt` is `sha256sum`-compatible**: `<64 lowercase hex><two
-    spaces><basename>`, one line per zip, sorted by name. Two producers, both
-    required:
+    spaces><basename>`, one line per published artifact (two zips + two
+    installers, four lines), sorted by name. Two producers, both required:
 
     | Producer | Why |
     |---|---|
-    | `scripts/build.ps1` / `scripts/build.sh` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` it can see, so running it once per `-Rid` converges instead of appending |
-    | the `release`/`publish` job | re-derives the sums from the bytes that job is about to ship, so a format slip or a workspace leftover cannot reach the release. In `build.yml` the zips arrive through the `PTMonitor-release` artifact, so the round-trip is a real re-verification; in `branch-release.yml` they are the files just built in the same job, so the block catches format slips and a stale third zip rather than a corrupted transfer |
+    | `scripts/build.ps1` / `scripts/build.sh` (after the zip step) | a self-built binary must be comparable with a released one; also covers local runs with no CI. Rewrites the file from every `artifacts/PTMonitor-*.zip` and `artifacts/PTMonitor-*-setup.exe` it can see, so running it once per `-Rid` converges instead of appending. `build.sh` never builds an installer, so its rewrite must keep setup-exe lines an earlier Windows run wrote |
+    | the `release`/`publish` job | re-derives the sums from the bytes that job is about to ship, so a format slip or a workspace leftover cannot reach the release. In `build.yml` the artifacts arrive through the `PTMonitor-release` artifact, so the round-trip is a real re-verification; in `branch-release.yml` they are the files just built in the same job, so the block catches format slips and a stale extra file rather than a corrupted transfer |
 
     The workflow block re-derives every line with `Get-FileHash` and fails on a
-    count mismatch, a malformed line, uppercase hex, a missing zip or a hash
-    disagreement. Two spaces, not one: `sha256sum -c` splits on exactly two and
-    a wrong separator silently breaks every downstream check.
+    count mismatch (anything but 4), a malformed line, a name outside
+    `^PTMonitor-.*(\.zip|-setup\.exe)$`, uppercase hex, a missing artifact or a
+    hash disagreement. Two spaces, not one: `sha256sum -c` splits on exactly two
+    and a wrong separator silently breaks every downstream check.
 14. **Attestation happens before publishing.** `actions/attest-build-provenance`
-    with `subject-path: artifacts/*.zip` runs after the artifacts are in place
-    (downloaded in `release`, freshly built in `publish`) and before the release
-    is created or updated — so a failed attestation fails the job while the
-    previous release is still intact. **Never publish an unattested binary**, and
-    never reorder the attest step after `gh release create`/`gh release upload`.
+    with `subject-path` covering `artifacts/*.zip` **and** `artifacts/*-setup.exe`
+    (two glob lines) runs after the artifacts are in place (downloaded in
+    `release`, freshly built in `publish`) and before the release is created or
+    updated — so a failed attestation fails the job while the previous release
+    is still intact. **Never publish an unattested binary**, and never reorder
+    the attest step after `gh release create`/`gh release upload`.
+15. **The installer is a third asset class.** `PTMonitor-<version>-<rid>-setup.exe`
+    is published next to the zips and obeys the same rules:
+
+    - built by `scripts/build.ps1` after the zip step, inside the gated package
+      job, with the `iscc` the Windows runner image ships — no new action, no
+      `choco install`. The script asserts `iscc >= 6.3` and logs its version, so
+      a runner image that drops or downgrades Inno Setup fails the package job
+      loudly instead of shipping a broken installer;
+    - **Windows only.** `scripts/build.sh` never builds one: it prints
+      "installers are built on Windows only (CI or a Windows box)" and still
+      lists pre-existing `*-setup.exe` files when it rewrites `SHA256SUMS.txt`,
+      so a Linux run cannot drop checksums it is unable to rebuild;
+    - in `SHA256SUMS.txt` (four lines), in the attestation `subject-path`, in the
+      `PTMonitor-release` artifact upload path, in both release asset lists and
+      in the branch lane's `$keep` set — all of those move together, exactly
+      like the zips;
+    - `scripts/installer/PTMonitor.iss` is **ASCII with no BOM** (Inno reads a
+      BOM-less script as the ANSI code page, so a stray non-ASCII byte corrupts
+      a message) and its `AppId` GUID is **immutable**: Inno matches upgrades and
+      the uninstall key on it, so changing it installs side by side instead of
+      upgrading;
+    - `UsePreviousPrivileges=yes` is load-bearing, together with
+      `PrivilegesRequiredOverridesAllowed=dialog`: an upgrade reuses the detected
+      per-user/per-machine mode and never asks again, which is what keeps one
+      Installed-apps entry instead of a per-user copy of a per-machine install;
+    - rollback is `-SkipInstaller` on the two package calls plus removing the
+      setup exes from the sums/attest/release lists — the pipeline returns to
+      the two-zip shape without touching product code.
 
 ---
 
@@ -160,5 +190,5 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 PATH=<stub-bin>:$PATH pwsh -File step.ps
 
 `dotnet build`/`--selftest`/`test` still need a .NET SDK; they cannot be faked.
 The checksum step is the exception — it needs no network and no stub, so extract
-it, point it at a directory with two dummy zips plus a `SHA256SUMS.txt`, and run
-it under `pwsh`.
+it, point it at a directory with two dummy zips, two dummy `-setup.exe` files
+and a `SHA256SUMS.txt`, and run it under `pwsh`.

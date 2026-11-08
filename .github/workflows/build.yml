@@ -6,20 +6,24 @@
 #   - packaging: scripts/build.ps1 — self-contained single-file PTMonitor.exe
 #     for both win-x64 and win-arm64 (ARM64 is cross-compiled on the x64
 #     runner; its packaged-CLI selftest is skipped because the binary cannot
-#     execute there — the architecture-independent --selftest gate still runs)
-#   - provenance: a `SHA256SUMS.txt` next to the two zips plus a GitHub build
-#     provenance attestation, both produced by the release job from the
-#     artifacts it downloaded — never from a workspace leftover.
+#     execute there — the architecture-independent --selftest gate still runs),
+#     plus an Inno Setup installer per architecture. `iscc` comes from the
+#     runner image — no extra action is installed for it.
+#   - provenance: a `SHA256SUMS.txt` next to the two zips and the two installers,
+#     plus a GitHub build provenance attestation for all four, both produced by
+#     the release job from the artifacts it downloaded — never from a workspace
+#     leftover.
 #
 # Three jobs in this file (the fourth lane, branch prereleases, lives in
 # branch-release.yml):
 #   gate     — build + --selftest + dotnet test. The ONLY job a pull request
 #              runs: no packaging, no release, read-only token.
-#   package  — both architectures via build.ps1 -SkipGates + SHA256SUMS.txt,
-#              uploaded as workflow artifacts. Skipped on pull_request.
+#   package  — both architectures via build.ps1 -SkipGates (exe, zip and
+#              setup.exe) + SHA256SUMS.txt, uploaded as workflow artifacts.
+#              Skipped on pull_request.
 #   release  — download the artifacts, re-verify the sums, attest provenance,
-#              then `gh release create` with both zips + SHA256SUMS.txt.
-#              Tag pushes only.
+#              then `gh release create` with both zips, both installers and
+#              SHA256SUMS.txt. Tag pushes only.
 #
 # Events:
 #   - merge to main      -> gate + package (artifacts only)
@@ -114,14 +118,16 @@ jobs:
         shell: pwsh
         run: .\scripts\build.ps1 -Version $env:APP_VERSION -Rid win-arm64 -SkipGates
 
-      # build.ps1 rewrites artifacts/SHA256SUMS.txt from every zip it can see,
-      # so the second call above leaves one file listing both architectures.
-      - name: Upload checksums and zips
+      # build.ps1 rewrites artifacts/SHA256SUMS.txt from every published
+      # artifact it can see (zips + installers), so the second call above leaves
+      # one file listing both architectures' zip and setup exe.
+      - name: Upload checksums, zips and installers
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: PTMonitor-release
           path: |
             artifacts/PTMonitor-*.zip
+            artifacts/PTMonitor-*-setup.exe
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -165,17 +171,18 @@ jobs:
           $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      # The sums published next to the zips must describe the bytes that
+      # The sums published next to the artifacts must describe the bytes that
       # travelled through the artifacts, so they are recomputed here rather
-      # than trusted from the packaging job. The same block exists in
-      # branch-release.yml — keep the two identical.
+      # than trusted from the packaging job. Four lines: two zips + two
+      # installers. The same block exists in branch-release.yml — keep the two
+      # identical.
       - name: Verify checksums
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $sums = @(Get-Content artifacts/SHA256SUMS.txt | Where-Object { $_.Trim() })
-          if ($sums.Count -ne 2) {
-            throw "SHA256SUMS.txt should list 2 zips, found $($sums.Count)"
+          if ($sums.Count -ne 4) {
+            throw "SHA256SUMS.txt should list 4 artifacts: 2 zips + 2 installers, found $($sums.Count)"
           }
           foreach ($line in $sums) {
             $parts = $line -split '  ', 2
@@ -185,8 +192,11 @@ jobs:
             if ($expected -cnotmatch '^[0-9a-f]{64}$') {
               throw "checksum is not 64 lowercase hex chars: $name"
             }
+            if ($name -cnotmatch '^PTMonitor-.*(\.zip|-setup\.exe)$') {
+              throw "checksum names an unexpected artifact: $name"
+            }
             if (-not (Test-Path "artifacts/$name")) {
-              throw "checksum names a missing zip: $name"
+              throw "checksum names a missing artifact: $name"
             }
             $actual = (Get-FileHash "artifacts/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $expected) { throw "checksum mismatch for $name" }
@@ -194,12 +204,14 @@ jobs:
           }
 
       # Before anything is published: an unattested binary must never reach a
-      # release. `subject-path` covers both zips, which is what `gh attestation
-      # verify <zip>` checks against.
+      # release. `subject-path` covers both zips and both installers, which is
+      # what `gh attestation verify <file>` checks against.
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: artifacts/*.zip
+          subject-path: |
+            artifacts/*.zip
+            artifacts/*-setup.exe
 
       - name: Create GitHub Release (tag builds only)
         shell: pwsh
@@ -212,7 +224,9 @@ jobs:
           gh release create "$env:GITHUB_REF_NAME" `
             "artifacts/PTMonitor-$env:APP_VERSION-win-x64.zip" `
             "artifacts/PTMonitor-$env:APP_VERSION-win-arm64.zip" `
+            "artifacts/PTMonitor-$env:APP_VERSION-win-x64-setup.exe" `
+            "artifacts/PTMonitor-$env:APP_VERSION-win-arm64-setup.exe" `
             "artifacts/SHA256SUMS.txt" `
             --title "PTMonitor $env:APP_VERSION" `
-            --notes "Self-contained builds for Windows x64 and ARM64. Download the zip for your machine's architecture, unzip, and run PTMonitor.exe — no .NET runtime install needed. Verify the download against SHA256SUMS.txt or with ``gh attestation verify``; see the README." `
+            --notes "Self-contained builds for Windows x64 and ARM64. Download the installer (``-setup.exe``) for your machine's architecture, or the zip if you prefer no install — no .NET runtime install needed either way. Verify the download against SHA256SUMS.txt or with ``gh attestation verify``; see the README." `
             --generate-notes
