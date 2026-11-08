@@ -1065,9 +1065,11 @@ Deliberate scope decisions for the first release:
 - **Tray panel position is approximated** at the bottom-right of the primary
   screen, because Avalonia does not expose the tray icon's screen coordinates.
   A secondary monitor with its own taskbar is not handled.
-- **The desktop widget inherits the desktop host's DPI context.** On a
-  secondary monitor with a different scale it is rendered at the host's scale,
-  so it looks physically smaller there.
+- **Desktop widget placement is not multi-monitor aware on a scale change.**
+  The card restores its saved position only when it still lands on a screen's
+  work area; otherwise it docks bottom-right on the primary. The card is an
+  ordinary top-level window — it no longer inherits the desktop host's DPI
+  context — so it scales with the monitor it is on.
 - **No notifications / no sound** — the app is observational.
 - **No torrent actions** (add, pause, remove, set category) and no per-torrent
   deep link — neither upstream web UI supports one. Use the `↗` button.

@@ -225,7 +225,12 @@ untouched by it.
   while the chip is in graph mode **or** the widget is visible, and each sink
   decides whether it needs a sample.
 - `Topmost="False"`, `ShowActivated="False"`, `ShowInTaskbar="False"`,
-  `SystemDecorations="None"`, a transparent `Background` and a fixed size.
+  `SystemDecorations="None"`, the translucent mask `Background` and a fixed size.
+- **DPI**: because the card is a normal top-level window (see *Desktop layer*
+  above), it takes its own monitor's scale instead of the desktop host's. Do
+  not reintroduce `SetParent` to "fix" placement — that trades this for a card
+  that is not drawn at all. Position restore is per work area: a saved position
+  that no longer lands on any screen falls back to the bottom-right dock.
 
 ## Tray presentation
 

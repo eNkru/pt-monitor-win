@@ -14,7 +14,7 @@
 
     <!-- A soft mask, not a card: no border, square corners, and the mask
          itself is translucent, so the wallpaper still shows through it (the
-         window is per-pixel alpha, so the 40 % black plate is composited over
+         window is per-pixel alpha, so the 50 % black mask is composited over
          the desktop). Every run carries a hard outline as well, so the text
          stays readable on a bright wallpaper too.
          Background="Transparent" on the Grid is a hit-test surface, not a
