@@ -56,3 +56,34 @@ The user asked for a **transparent** card, so the re-parenting was replaced by
 a z-order pin (`SetWindowPos` with the desktop window as the window to sit
 above). The card keeps the per-pixel transparency and is still behind every
 application window.
+
+## Close-out (2026-11-08)
+
+Merged as PR #17 (`1997d24`) without a Windows box to check on. Closed out with a
+final full-scope re-verification on the Linux development machine:
+
+- `dotnet build PTMonitor.sln -c Release` — 0 errors.
+- `dotnet test PTMonitor.sln` — 151 passed.
+- `dotnet run --project src/PTMonitor.Cli -- --selftest` — 698 checks passed.
+- All 23 `L10n.S` keys the widget uses exist in the `Zh` table, plus
+  `L10n.WidgetSummary`; no key silently falls back to English.
+
+Two stale-text defects from the transparent/mask rework were fixed in this pass
+(the code was right, the prose was not):
+
+- `README.md` *Known limitations* still claimed the widget *"inherits the
+  desktop host's DPI context"* — that was true of the **reverted** `SetParent`
+  design and became false once the card went back to being a top-level window.
+  Replaced with the actual current limitation: placement is not multi-monitor
+  aware (a saved position that no longer lands on any screen docks bottom-right
+  on the primary).
+- `DesktopWidgetWindow.axaml` header comment said *"40 % black plate"*; the
+  mask is `#80000000` (50 %). Also dropped the word "plate" — there is no plate,
+  the mask is the window background.
+
+`.trellis/spec/frontend/lifecycle-and-tray.md` gained the matching DPI bullet
+under *Desktop widget*, and an explicit "do not reintroduce `SetParent` to
+'fix' placement" warning.
+
+The Windows-only checklist above is **unverified and deferred**; it is recorded
+in `prd.md` under *Deferred — Windows-only verification*.

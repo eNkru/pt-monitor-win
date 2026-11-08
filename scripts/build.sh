@@ -10,6 +10,8 @@ usage() {
         '  --version VERSION        Package version (default: 1.0.0)' \
         '  --skip-gates             Skip build/selftest/unit tests (already verified only)' \
         '  --skip-zip               Publish app and CLI without ZIP/checksums' \
+        '  --skip-installer         Accepted for parity with build.ps1; a no-op here' \
+        '                           (installers are Windows-only, see below)' \
         '  --invariant              Use invariant globalization for Linux tests only' \
         '  -h, --help               Show this help' \
         '' \
@@ -20,6 +22,8 @@ usage() {
         '' \
         'Outputs: publish/<rid>/PTMonitor.exe, publish/<rid>/cli/PTMonitor.Cli.exe,' \
         '         artifacts/PTMonitor-<version>-<rid>.zip, artifacts/SHA256SUMS.txt' \
+        'Installers (artifacts/PTMonitor-<version>-<rid>-setup.exe) need Inno Setup,' \
+        'so they are built on Windows only: use build.ps1, CI, or a Windows box.' \
         'Run the published EXE on Windows, preferably copied to a local C: folder.'
 }
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -29,6 +33,7 @@ rid=win-x64
 version=1.0.0
 skip_gates=false
 skip_zip=false
+skip_installer=false
 invariant=false
 while (($#)); do
     case "$1" in
@@ -38,6 +43,7 @@ while (($#)); do
             shift 2 ;;
         --skip-gates) skip_gates=true; shift ;;
         --skip-zip) skip_zip=true; shift ;;
+        --skip-installer) skip_installer=true; shift ;;
         --invariant) invariant=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) fail "Unknown option: $1 (use --help)" ;;
@@ -132,7 +138,10 @@ mv -- "$out" "publish/$rid"
 if [[ "$skip_zip" == false ]]; then
     step 'ZIP and SHA256SUMS.txt'
     # Python is available on Debian; no separate zip utility is needed. Match
-    # build.ps1: one RID directory at the ZIP root, all PTMonitor ZIPs in sums.
+    # build.ps1: one RID directory at the ZIP root, and sums for every published
+    # artifact -- both RIDs' zips plus any setup exes an earlier Windows run
+    # left behind, so this Linux run cannot silently drop a checksum it cannot
+    # rebuild. (No glob match is an empty list, never a literal '*.exe' line.)
     python3 - "$rid" "$version" <<'PY'
 import hashlib
 from pathlib import Path
@@ -155,7 +164,12 @@ finally:
     temporary.unlink(missing_ok=True)
 
 lines = []
-for file in sorted(artifacts.glob('PTMonitor-*.zip')):
+published = sorted(
+    [p for p in artifacts.iterdir()
+     if p.is_file() and p.name.startswith('PTMonitor-')
+     and (p.name.endswith('.zip') or p.name.endswith('-setup.exe'))],
+    key=lambda p: p.name)
+for file in published:
     digest = hashlib.sha256()
     with file.open('rb') as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b''):
@@ -170,5 +184,13 @@ finally:
     temporary_sums.unlink(missing_ok=True)
 print(f'Built {archive}\nBuilt {sums}')
 PY
+
+    # Inno Setup is a Windows compiler, and running it under Wine is not a
+    # dependency this project wants. Say so instead of pretending.
+    if [[ "$skip_installer" == true ]]; then
+        step 'Installer skipped by request; installers are built on Windows only (CI or a Windows box)'
+    else
+        step 'Installers are built on Windows only (CI or a Windows box); skipped here'
+    fi
 fi
 step "Done. Windows executable: $root/publish/$rid/PTMonitor.exe"

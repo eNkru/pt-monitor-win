@@ -4,7 +4,7 @@
 
 ### 1. Core: settings
 
-- [ ] `src/PTMonitor.Core/Store/SettingsStore.cs`
+- [x] `src/PTMonitor.Core/Store/SettingsStore.cs`
   - fields `_showDesktopWidget`, `_desktopWidgetPositionX`, `_desktopWidgetPositionY`,
     `_desktopWidgetLocked`; public getters; setters
     `SetShowDesktopWidget(bool)`, `SetDesktopWidgetPosition(int x, int y)`,
@@ -14,12 +14,12 @@
 
 ### 2. Core: self-test
 
-- [ ] `src/PTMonitor.Core/Diagnostics/SelfTest.cs` — in `StoreChecks`:
+- [x] `src/PTMonitor.Core/Diagnostics/SelfTest.cs` — in `StoreChecks`:
   default (off / no position / unlocked), set → reload → assert.
 
 ### 3. App: the desktop layer helper
 
-- [ ] `src/PTMonitor.App/Services/DesktopLayer.cs` (new)
+- [x] `src/PTMonitor.App/Services/DesktopLayer.cs` (new)
   - `IsSupported`, `PinAboveDesktop(hwnd)` (the z-order pin above the shell's
     desktop window), `MakeNonActivating(hwnd)` (`WS_EX_NOACTIVATE`),
     `CursorPosition()`.
@@ -30,9 +30,9 @@
 
 ### 4. App: the card
 
-- [ ] `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml` (new) — the card
+- [x] `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml` (new) — the card
       described in `design.md` §2 (`x:Name` on every text element).
-- [ ] `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml.cs` (new)
+- [x] `src/PTMonitor.App/Views/DesktopWidgetWindow.axaml.cs` (new)
   - `ShowRates(down, up, online)`, `ShowSummary(servers, online, active)`,
     `PushSample(down, up)`, `SetLocked(bool)`, `RefreshLocalization()`;
   - drag / double-click / lock / context menu (mirroring `FloatingSpeedWindow`);
@@ -44,7 +44,7 @@
 
 ### 5. App: wiring
 
-- [ ] `src/PTMonitor.App/Services/AppServices.cs`
+- [x] `src/PTMonitor.App/Services/AppServices.cs`
   - `_desktopWidget` field, `SyncDesktopWidget()`, `UpdateDesktopWidget()`,
     `PushDesktopSample()`, `HideDesktopWidget()`, `OnDesktopWidgetClosed()`;
   - tray menu item "Show desktop widget" (check box);
@@ -55,16 +55,16 @@
 
 ### 6. App: preferences
 
-- [ ] `src/PTMonitor.App/Views/PreferencesWindow.axaml(.cs)` — a "Desktop widget"
+- [x] `src/PTMonitor.App/Views/PreferencesWindow.axaml(.cs)` — a "Desktop widget"
       check box next to the floating-speed toggle.
 
 ### 7. Localization
 
-- [ ] `src/PTMonitor.App/Services/L10n.cs` — the new keys, English + zh-Hans.
+- [x] `src/PTMonitor.App/Services/L10n.cs` — the new keys, English + zh-Hans.
 
 ### 8. Docs
 
-- [ ] `README.md` — the feature bullet, the behaviour reference and the
+- [x] `README.md` — the feature bullet, the behaviour reference and the
       settings table.
 
 ## Validation

@@ -911,3 +911,39 @@ inside it: with `TransparencyLevelHint="Transparent"` the window is per-pixel
 alpha, so the background is composited over the desktop. A plate inside the
 window would have needed rounded corners to look right, and the user does not
 want those.
+
+### Close-out (2026-11-08): merged and archived
+
+PR #17 merged into `main` as `1997d24`. The task stayed `in_progress` only
+because the checkboxes were never flipped — the code had already shipped two
+commits earlier.
+
+Re-verified before archiving (Linux box, `$HOME/.dotnet`):
+
+- [OK] `dotnet build PTMonitor.sln -c Release` — 0 errors
+- [OK] `dotnet test PTMonitor.sln` — 151 passed
+- [OK] `PTMonitor.Cli --selftest` — 698 checks passed
+- [OK] every `L10n.S` key the widget uses exists in `Zh` (23 keys + `WidgetSummary`)
+
+Two pieces of prose had gone stale during the transparent → mask rework, and
+both were fixed here (the code was right, the text was not):
+
+- `README.md` *Known limitations* still described the **reverted** `SetParent`
+  design ("the widget inherits the desktop host's DPI context"). Replaced with
+  the real current limitation (placement is not multi-monitor aware; a saved
+  position off every screen docks bottom-right on the primary).
+- `DesktopWidgetWindow.axaml` said "40 % black plate" for a `#80000000` mask —
+  now "50 % black mask", and no longer calls it a plate.
+
+`.trellis/spec/frontend/lifecycle-and-tray.md` carries the DPI bullet now, plus
+"do not reintroduce `SetParent` to fix placement".
+
+**Windows-only items are deferred, not verified**: behind app windows, Win+D,
+`WS_EX_NOACTIVATE` focus, a hand drag, a shell restart, a mixed-DPI monitor.
+They are listed in `prd.md` → *Deferred — Windows-only verification* and
+`notes.md`, so they are not quietly forgotten.
+
+### Status
+
+[OK] **Merged (PR #17) and archived.** Windows-only behaviour remains
+unverified by design of the environment, recorded as a deferred checklist.

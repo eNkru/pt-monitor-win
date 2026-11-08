@@ -101,20 +101,43 @@ the rest of the app.
 
 ## Acceptance Criteria
 
-- [ ] The tray menu and Preferences both show a "Show desktop widget" toggle,
-      and the widget appears/disappears with it.
-- [ ] The widget shows the aggregate ↓/↑ rates, the rolling graph and the
-      summary line; all three update live while it is visible.
+- [x] The tray menu and Preferences both show a "Show desktop widget" toggle,
+      and the widget appears/disappears with it. *(code: the `UpdateTray` check
+      box and `PreferencesWindow.DesktopWidgetToggle`, both writing
+      `Settings.SetShowDesktopWidget`; the app starts with the card created and
+      placed when the flag is on.)*
+- [x] The widget shows the aggregate ↓/↑ rates, the rolling graph and the
+      summary line; all three update live while it is visible. *(the shared 1 s
+      `SyncTicker` drives `ShowRates` / `PushSample` / `ShowSummary` from
+      `Monitor.Aggregate`; the card was captured on the X11 display over a light
+      and a dark wallpaper.)*
+- [ ] The widget can be dragged, and the position survives a restart.
+      *(position persistence is covered by the `StoreChecks` self-test
+      (set → reload); the **drag itself** is Windows/mouse-only — see `notes.md`)*
+- [x] With the lock on, dragging the card does not move it; the rates, the
+      graph, the console shortcut and the right-click menu still work. *(the drag
+      handler returns early when `_locked`; every other sink is untouched)*
+- [x] The lock state survives a restart. *(self-test: set → reload asserts
+      `DesktopWidgetLocked`)*
+- [x] Double-click opens the web console of the first enabled server. *(same
+      target and hand-rolled detection as the chip: `L10n.OpenInWebUi` on the
+      first enabled server; opening a live server needs Windows + a server)*
+- [x] Every new string is translated in Simplified Chinese. *(all 23 `L10n.S`
+      keys the widget uses are in `Zh`, plus `L10n.WidgetSummary`)*
+- [x] `dotnet build`, the built-in check suite (`PTMonitor.Cli --selftest`) and
+      `dotnet test` all pass. *(Release build 0 errors · 698 self-test checks ·
+      151 tests)*
+
+### Deferred — Windows-only verification
+
+Merged with PR #17 without being exercised on Windows (this box is Linux). The
+manual checklist lives in `notes.md`:
+
 - [ ] On Windows the widget renders **behind** application windows and stays
       visible after Win+D.
-- [ ] The widget can be dragged, and the position survives a restart.
-- [ ] With the lock on, dragging the card does not move it; the rates, the
-      graph, the console shortcut and the right-click menu still work.
-- [ ] The lock state survives a restart.
-- [ ] Double-click opens the web console of the first enabled server.
-- [ ] Every new string is translated in Simplified Chinese.
-- [ ] `dotnet build`, the built-in check suite (`PTMonitor.Cli --selftest`) and
-      `dotnet test` all pass.
+- [ ] A click on the card does not steal focus (`WS_EX_NOACTIVATE`).
+- [ ] Dragging the card by hand moves it; a shell restart re-pins it.
+- [ ] A secondary monitor with a different scale renders the card correctly.
 
 ## Out of scope (follow-ups, deliberately)
 

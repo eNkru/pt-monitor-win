@@ -105,6 +105,7 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 | **To run** | Windows 10 (1607+) or Windows 11, x64 or ARM64. Nothing else — the published build is self-contained. |
 | **To build** | [.NET SDK 8.0](https://dotnet.microsoft.com/download/dotnet/8.0) (8.0.x is what CI uses). |
 | **To build** (optional) | Node.js 18+ — only for the stub test server. |
+| **To build the installer** (optional) | [Inno Setup 6.3+](https://jrsoftware.org/isdl.php) on Windows — only for the `setup.exe` step; `-SkipInstaller` builds without it, and CI's runner image already ships it. |
 | **IDE** (optional) | Visual Studio 2022 (17.8+) or JetBrains Rider. |
 
 The app targets `net8.0` and uses **Avalonia 11.3.2** for the UI. It builds and
@@ -115,35 +116,80 @@ runs on Windows, and also builds/runs on Linux and macOS for development
 
 ## Quick start (no build needed)
 
-1. Download `PTMonitor.exe` from the
-   [Releases](https://github.com/eNkru/pt-monitor-win/releases) page — take the
-   `win-x64` zip, or the `win-arm64` zip on an ARM64 Windows machine (or the
-   `PTMonitor-win-x64` / `PTMonitor-win-arm64` artifacts of the latest CI run).
-   Stable builds are the entries **without** a Pre-release badge; anything
-   named `branch-build/…` is an unreviewed branch snapshot.
-2. Put it anywhere you like — a conventional spot for a per-user single-file
-   app is `%LOCALAPPDATA%\PTMonitor` (no admin rights needed), e.g.
-   `C:\Tools\PTMonitor\`.
-3. Run it. **Preferences open automatically on first launch.**
+Everything is on the [Releases](https://github.com/eNkru/pt-monitor-win/releases)
+page. Take the `win-x64` build, or `win-arm64` on an ARM64 Windows machine (both
+installers work there — `win-x64` runs under Windows' x64 emulation, `win-arm64`
+is native; the installers declare `x64compatible` and `arm64` respectively). The
+latest CI run exposes the same files as the `PTMonitor-win-x64`,
+`PTMonitor-win-arm64` and `PTMonitor-release` workflow artifacts. Stable builds
+are the entries **without** a Pre-release badge; anything named
+`branch-build/…` is an unreviewed branch snapshot.
+
+### Installer (recommended)
+
+1. Download `PTMonitor-<version>-win-x64-setup.exe` (or
+   `PTMonitor-<version>-win-arm64-setup.exe`).
+2. Run it. Setup asks who the install is for — **Install for me only** (the
+   default: no administrator prompt, files in
+   `%LOCALAPPDATA%\Programs\PTMonitor`, a **PTMonitor** shortcut in your own
+   Start Menu) or **Install for all users** (one UAC prompt, files in
+   `%ProgramFiles%\PTMonitor`, a shortcut every user sees). Silent installs
+   choose the same way: `/VERYSILENT /CURRENTUSER` or `/VERYSILENT /ALLUSERS`.
+3. Launch **PTMonitor** from the Start Menu. **Preferences open automatically on
+   first launch.**
 4. Add a server, hit **Test Connection**, then **Save**.
 5. Close Preferences — the app is now in your tray, polling.
 
+**Upgrades** replace the previous version in place and keep the same install
+mode: Setup detects the existing install, does not ask again, and leaves exactly
+one entry in Settings → Apps. To switch between per-user and per-machine,
+uninstall and then install again — Setup never offers the switch on an existing
+install.
+
+**Uninstall** from **Settings → Apps → Installed apps** (or *Apps & features*):
+the program files and the Start Menu shortcut go, **`%APPDATA%\PTMonitor\` —
+your server list and DPAPI secrets — stays**, so a reinstall brings your servers
+back. Delete that folder yourself to remove everything. A per-machine install is
+listed for every user; a per-user install only for the user who installed it.
+
+**Settings stay per-user in both modes.** `%APPDATA%\PTMonitor\` is per Windows
+account, so "install for all users" only changes where the exe lives: each user
+gets their own server list on first launch.
+
+### Portable zip
+
+1. Download `PTMonitor-<version>-win-x64.zip` (or `…-win-arm64.zip`).
+2. Unzip it anywhere you like — a conventional spot for a per-user single-file
+   app is `%LOCALAPPDATA%\PTMonitor` (no admin rights needed), e.g.
+   `C:\Tools\PTMonitor\`.
+3. Run `PTMonitor.exe`. **Preferences open automatically on first launch.**
+4. Add a server, hit **Test Connection**, then **Save**.
+5. Close Preferences — the app is now in your tray, polling.
+
+The app itself writes nothing outside `%APPDATA%\PTMonitor\`; the installer adds
+only its files, the Start Menu shortcut and the Installed-apps entry. With the
+zip, uninstall is: quit from the tray menu, delete the exe, and delete that
+folder if you want the settings gone too.
+
 > **Tip:** because it is a single-file app, it self-extracts to a temp folder on
 > first run. Running it from a local disk (`C:\…`) is noticeably faster than
-> from a network share or a `\\wsl$` path.
+> from a network share or a `\\wsl$` path. The installed copy behaves the same
+> way (it unpacks under `%TEMP%`); the uninstaller does not remove that folder.
 
-There is no installer and nothing is written outside `%APPDATA%\PTMonitor\`.
-To uninstall: quit from the tray menu and delete the exe plus that folder.
+> **SmartScreen:** neither the setup exe nor the app exe is code-signed, so
+> Windows may warn when you run the setup exe or start the installed app —
+> unchanged from the zip. "More info" → "Run anyway", or check the download
+> first (below).
 
 ### Verifying a download
 
-The exe is not code-signed, so a release ships two independent proofs of what it
-is instead: a `SHA256SUMS.txt` next to the two zips, and a GitHub
-build-provenance attestation for both zips.
+The binaries are not code-signed, so a release ships two independent proofs of
+what it is instead: a `SHA256SUMS.txt` next to the four artifacts (two zips, two
+installers), and a GitHub build-provenance attestation for all four.
 
 ```bash
-# provenance: proves the zip came out of this repo's workflow, from that commit
-gh attestation verify PTMonitor-1.0.0-win-x64.zip --repo eNkru/pt-monitor-win
+# provenance: proves the file came out of this repo's workflow, from that commit
+gh attestation verify PTMonitor-1.0.0-win-x64-setup.exe --repo eNkru/pt-monitor-win
 
 # checksum: proves the bytes you hold are the bytes that were released
 sha256sum -c SHA256SUMS.txt
@@ -154,12 +200,12 @@ sha256sum -c SHA256SUMS.txt
 matching line of `SHA256SUMS.txt`:
 
 ```powershell
-(Get-FileHash .\PTMonitor-1.0.0-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+(Get-FileHash .\PTMonitor-1.0.0-win-x64-setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
 ```
 
 If you built the app yourself, `scripts\build.ps1` (or `scripts/build.sh`)
 writes the same `artifacts\SHA256SUMS.txt` for your own binaries, so a
-self-built zip can be compared line by line with a released one.
+self-built artifact can be compared line by line with a released one.
 
 ---
 
@@ -344,9 +390,12 @@ problem:
 5. `dotnet publish src/PTMonitor.App -r win-x64 --self-contained -p:PublishSingleFile=true`
 6. Re-runs `--selftest` **on the packaged CLI exe**, not just the build output
 7. Zips everything into `artifacts\PTMonitor-<version>-win-x64.zip`
-8. Writes `artifacts\SHA256SUMS.txt` — `sha256sum`-format sums of **every** zip in
-   `artifacts\`, rewritten rather than appended, so running the script once per
-   `-Rid` leaves one file listing both architectures
+8. Compiles the Inno Setup installer
+   `artifacts\PTMonitor-<version>-win-x64-setup.exe` from the same publish output
+9. Writes `artifacts\SHA256SUMS.txt` — `sha256sum`-format sums of **every**
+   published artifact in `artifacts\` (zips and installers), rewritten rather
+   than appended, so running the script once per `-Rid` leaves one file listing
+   both architectures
 
 Outputs:
 
@@ -354,6 +403,7 @@ Outputs:
 publish\win-x64\PTMonitor.exe          ~90 MB, self-contained, single file
 publish\win-x64\cli\PTMonitor.Cli.exe  headless selftest / probe
 artifacts\PTMonitor-1.0.0-win-x64.zip
+artifacts\PTMonitor-1.0.0-win-x64-setup.exe
 artifacts\SHA256SUMS.txt
 ```
 
@@ -363,8 +413,21 @@ Options:
 .\scripts\build.ps1 -Version 1.2.3        # stamp a version
 .\scripts\build.ps1 -Rid win-arm64        # build the ARM64 exe instead
 .\scripts\build.ps1 -SkipZip              # skip the zip (and the checksum) step
+.\scripts\build.ps1 -SkipInstaller        # zip but no setup.exe
 .\scripts\build.ps1 -SkipGates            # publish only (CI reuse)
 ```
+
+The installer step needs [Inno Setup 6.3+](https://jrsoftware.org/isdl.php)
+(`iscc` on `PATH`, or in `%ProgramFiles(x86)%\Inno Setup 6`). When it is missing
+the script **fails with that download link** rather than silently producing only
+a zip; `-SkipInstaller` is how you build without it. `-SkipZip` skips the
+installer too: an installer without the zip beside it is a debugging mode nobody
+wants, and the checksum step lives with the zip. The `windows-latest` CI image
+already ships Inno Setup, so CI needs no extra step.
+
+One `iscc` invocation, two architectures and two install modes: `-Rid` selects
+the architecture (`x64compatible` or `arm64`), and the mode is chosen in the
+wizard at run time, not at build time.
 
 The packaged-CLI selftest step runs only when the published exe matches the
 machine running the script (an ARM64 exe cannot run on an x64 host); the
@@ -397,12 +460,21 @@ Options:
 ./scripts/build.sh --rid win-arm64     # build the ARM64 exe instead
 ./scripts/build.sh --version 1.2.3     # stamp a version
 ./scripts/build.sh --skip-zip          # no zip (and no checksum) step
+./scripts/build.sh --skip-installer    # accepted for parity; installers are Windows-only
 ./scripts/build.sh --skip-gates        # publish only (CI reuse)
 ./scripts/build.sh --help              # full usage
 ```
 
 Details worth knowing:
 
+- **It cannot build the installer.** Inno Setup is a Windows compiler; on Linux
+  the script prints `installers are built on Windows only (CI or a Windows box)`
+  and moves on instead of pretending. `--skip-installer` is accepted for
+  command-line parity with `build.ps1`; there is nothing to skip on this host, so
+  it only changes the log line.
+- It still rewrites `artifacts/SHA256SUMS.txt` from **every** published artifact
+  it can see, including `*-setup.exe` files an earlier Windows run left there, so
+  a Linux run cannot silently drop checksums it is unable to rebuild.
 - It finds the SDK on `PATH` or in `~/.dotnet` and refuses a Windows
   `dotnet.exe` reached through WSL interop. Only a **Linux** SDK builds this.
 - If the distro has no ICU (`libicu`), the script switches the *host* build and
@@ -678,7 +750,11 @@ folder, full disk) is swallowed — it never interrupts polling.
 There is no log level to configure and no toggle: a log the user has to enable
 beforehand cannot explain a crash that already happened.
 
-To wipe everything: quit the app and delete `%APPDATA%\PTMonitor\`.
+To wipe everything: quit the app and delete `%APPDATA%\PTMonitor\`. The
+installer's uninstaller deliberately does **not** touch that folder — it holds
+your server list and your DPAPI secrets, and an uninstall should not silently
+destroy them. Settings are per Windows user in both install modes, so a
+per-machine install gives each user their own server list, not a shared one.
 
 ---
 
@@ -816,8 +892,9 @@ src/
 tests/
   PTMonitor.Core.Tests/          xUnit suite (121 tests, mirrors the selftest)
 scripts/
-  build.ps1                      restore → build → selftest → test → publish → zip (Windows)
-  build.sh                       the same pipeline on WSL/Linux, needing only a Linux SDK
+  build.ps1                      restore → build → selftest → test → publish → zip → installer (Windows)
+  build.sh                       the same pipeline on WSL/Linux minus the installer (Linux SDK only)
+  installer/PTMonitor.iss        Inno Setup script: per-user or per-machine, x64 or ARM64
   make-app-icon.py               draw + encode app.ico (flat Windows style)
   fake-qbittorrent.mjs           stub qBittorrent WebUI (4.6 and 5.2 shapes)
 .github/workflows/build.yml      windows-latest CI: PR → gate, main → artifacts, tag → release
@@ -938,8 +1015,10 @@ the ban logic without a real NAS.
 ## Continuous integration & releases
 
 Two workflows, both building the two architectures on the same `windows-latest`
-x64 runner (ARM64 is cross-compiled). The branch lane adds an `ubuntu-latest`
-cleanup job.
+x64 runner (ARM64 is cross-compiled). Both also compile the Inno Setup
+installer with the `iscc` that ships on that image — the workflows install
+nothing extra, and the package step fails loudly if `iscc` is absent or too old.
+The branch lane adds an `ubuntu-latest` cleanup job.
 
 Both lanes are split into jobs, because the job that compiles does not need to
 write to the repository: the workflow is `contents: read` and only the job that
@@ -952,8 +1031,8 @@ so a repointed `vN` tag cannot change what runs here.
 
 ```
 gate     checkout → setup .NET 8 → build → selftest → test
-package  resolve version → package x64 → package ARM64 → SHA256SUMS.txt
-         → upload artifacts
+package  resolve version → package x64 → package ARM64 (exe + zip + setup.exe)
+         → SHA256SUMS.txt → upload artifacts
 release  download → verify sums → attest provenance → create Release
 ```
 
@@ -965,7 +1044,8 @@ pushes are handled by `branch-release.yml` below.
   artifacts.
 - **Every push of a tag `v*`** additionally runs the release job: it re-verifies
   the checksums from the downloaded artifacts, attests build provenance for both
-  zips, and creates a GitHub Release with **both zips plus `SHA256SUMS.txt`**.
+  zips and both installers, and creates a GitHub Release with **both zips, both
+  installers and `SHA256SUMS.txt`**.
   The tag (minus the leading `v`) becomes the app version. This is the only lane
   that produces a stable, non-prerelease release. A failed attestation fails the
   job before the release is created, so an unattested binary is never published.
@@ -982,8 +1062,9 @@ pushes are handled by `branch-release.yml` below.
 
 ```
 gate     checkout → setup .NET 8 → build → selftest → test
-publish  resolve slug/version → package x64 → package ARM64 → SHA256SUMS.txt
-         → verify sums → attest provenance → move tag → upsert prerelease
+publish  resolve slug/version → package x64 → package ARM64 (exe + zip + setup.exe)
+         → SHA256SUMS.txt → verify sums → attest provenance → move tag
+         → upsert prerelease
 cleanup  (branch delete) delete release + tag
 ```
 
@@ -999,8 +1080,8 @@ cleanup  (branch delete) delete release + tag
   in tags.
 - Repeated pushes update the **same** release, replace its assets (including
   `SHA256SUMS.txt`) and re-point its tag — no release per commit, and the
-  previous commit's zips are deleted after the new ones upload. A newer push
-  cancels the older run, and a failing gate leaves the previous release
+  previous commit's zips and installers are deleted after the new ones upload. A
+  newer push cancels the older run, and a failing gate leaves the previous release
   untouched.
 - **Deleting a branch** deletes its release and its tag.
 - `workflow_dispatch` can run this lane for a chosen ref, including `main` — such
@@ -1042,7 +1123,7 @@ git push origin v1.0.0
 | **The tray icon still looks like the old one** | The exe you started predates the change, or the previous instance is still running. Quit from the tray menu (`tasklist \| findstr PTMonitor` must be empty), compare `Get-FileHash PTMonitor.exe -Algorithm SHA256` against the build you mean to run, then start it. If the hash is right and the icon is still old, the shell is holding its cached tray entry: restart Explorer. |
 | **App starts twice** | There is no single-instance guard; two copies poll independently. Quit one from its tray menu. |
 | **The app takes a second or more to show its tray icon** | Read the first `startup: timeline` line of the log and paste it into a performance report. The target is `total` ≤ 1500 ms; a healthy Windows 10 run reads `entry → log-ready` ≈ 12 ms, `tray-set` ≈ 420 ms, `total` ≈ 575 ms. A large `entry → log-ready` (bundle load) points at antivirus or SmartScreen scanning the exe; large `avalonia` or `windows` offsets point at JIT on a cold start; a large `glyph` offset is Skia starting up. |
-| **Antivirus / SmartScreen warning** | The exe is unsigned — there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
+| **Antivirus / SmartScreen warning** | The binaries — setup exe and app exe alike — are unsigned; there is no code-signing certificate. "More info" → "Run anyway", or build it yourself. Every release carries `SHA256SUMS.txt` and a build-provenance attestation if you want to confirm what you downloaded ([Verifying a download](#verifying-a-download)). |
 
 Logs: the app writes `%APPDATA%\PTMonitor\ptmonitor.log` (see
 [Data, settings and secrets](#data-settings-and-secrets)) — start there when the
@@ -1065,9 +1146,11 @@ Deliberate scope decisions for the first release:
 - **Tray panel position is approximated** at the bottom-right of the primary
   screen, because Avalonia does not expose the tray icon's screen coordinates.
   A secondary monitor with its own taskbar is not handled.
-- **The desktop widget inherits the desktop host's DPI context.** On a
-  secondary monitor with a different scale it is rendered at the host's scale,
-  so it looks physically smaller there.
+- **Desktop widget placement is not multi-monitor aware on a scale change.**
+  The card restores its saved position only when it still lands on a screen's
+  work area; otherwise it docks bottom-right on the primary. The card is an
+  ordinary top-level window — it no longer inherits the desktop host's DPI
+  context — so it scales with the monitor it is on.
 - **No notifications / no sound** — the app is observational.
 - **No torrent actions** (add, pause, remove, set category) and no per-torrent
   deep link — neither upstream web UI supports one. Use the `↗` button.
