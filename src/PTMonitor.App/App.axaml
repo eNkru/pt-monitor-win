@@ -52,6 +52,27 @@
             <Setter Property="OutlineThickness" Value="1" />
         </Style>
 
+        <!-- The status dot in front of the status line: a single glyph, so it
+             is outlined like the text and readable on a bright wallpaper. The
+             colour is a decision and is set from code-behind. -->
+        <Style Selector="views|OutlinedText.widgetDot">
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="Fill" Value="#B3FFFFFF" />
+            <Setter Property="Outline" Value="#8C000000" />
+            <Setter Property="OutlineThickness" Value="1" />
+        </Style>
+
+        <!-- The header fades in while the pointer is over the card and out
+             again after it leaves. A transition runs from the current value,
+             so re-entering mid-fade reverses instead of snapping. -->
+        <Style Selector="Grid.widgetHeader">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
         <!-- The widget's lock control: text on the desktop, so the button
              itself has no fill or border of its own. -->
         <Style Selector="Button.widgetButton">

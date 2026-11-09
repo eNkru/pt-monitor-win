@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "check the new style class is a class and not inline styling, and that no binding was added without an x:DataType"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "verify every new string exists in both languages and is applied from ApplyLocalization, not baked at construction"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "the hand-check list (both languages, 100/150 % scaling, empty and offline states) is the acceptance gate to walk"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "confirm the header hover did not change hide/close, activation or the tray/menu entry points"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "confirm Core stayed string-free and no presentation decision was re-derived in XAML"}

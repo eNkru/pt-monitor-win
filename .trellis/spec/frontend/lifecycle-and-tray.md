@@ -181,9 +181,33 @@ to the chip (both may be on screen at the same time); the chip's behaviour is
 untouched by it.
 
 - **Content**: the aggregate `↓`/`↑` rates, the same `SpeedGraph` control, and
-  a summary line (`L10n.WidgetSummary` — one templated key, never glued
-  fragments). Aggregate only: the widget does not need the torrent list, so
+  a status line — one **dot plus one number** (`L10n.WidgetStatus`: `Not
+  configured` / `%lld active` / `%lld/%lld online`, one templated key and never
+  glued fragments). The dot colour is a decision made in code-behind
+  (`#B3FFFFFF` neutral, `#2D7D46` success, `#E5484D` danger), so the `widgetDot`
+  style carries only the look. The server count is **enabled servers only**
+  (`Settings.Servers.Count(s => IsEnabled)`): a disabled server is never
+  contacted, so counting it would pin the line to `M/N online` forever.
+  Aggregate only: the widget does not need the torrent list, so
   `MonitorStore.ListDemand` stays driven by the panel alone.
+- **The header is hover-only.** Row 0 holds the product name and the lock
+  control, keeps its **height at all times** (the card is 250 × 150 and the
+  placement math assumes it), and only its `Opacity` moves: a `DoubleTransition`
+  (160 ms, `CubicEaseOut`) fades it in on `Card.PointerEntered` and out 250 ms
+  after `Card.PointerExited`. A `Transition` animates from the *current* value,
+  so re-entering mid-fade reverses instead of snapping — do not "improve" this
+  into per-direction `Transitions` swapping.
+  - The hidden header sets `IsHitTestVisible = false`. `OnPointerPressed`
+    deliberately ignores presses on the lock button, so an invisible-but-live
+    button would swallow drags in the top-right corner; hidden, the press falls
+    through to `Card` and drags.
+  - `PointerExited` does **not** fire when the pointer moves onto a child
+    (`IsPointerOver` stays true for ancestors), so moving between the digits,
+    the graph and the lock never starts the exit timer.
+  - `OnOpened` resets the header without animating (local `Transitions` cleared,
+    then `ClearValue(Animatable.TransitionsProperty)`), so a re-shown card never
+    opens with a visible header. `Avalonia.Animation` is what supplies
+    `Animatable`.
 - **There is no card, but there is a mask.** The window is per-pixel alpha
   (`TransparencyLevelHint="Transparent"`) with a **50 % black background**
   (`#80000000`): the wallpaper still shows through, the way a Nexus glass
@@ -214,10 +238,11 @@ untouched by it.
 - **Drag**: the card is an ordinary top-level window again, so the drag is the
   chip's: `BeginMoveDrag` past a 4 px threshold. The position is stored in
   physical screen pixels and clamped to the work area.
-- **Lock**: the header control and the *Lock position* menu item toggle
-  `Settings.DesktopWidgetLocked`. It freezes the **position only** — the
-  rates, the graph, the double-click and the menu keep working. The lock is
-  checked before the drag starts, so a locked card cannot be moved.
+- **Lock**: the header control (hover-only, see above) and the *Lock position*
+  menu item toggle `Settings.DesktopWidgetLocked`. It freezes the **position
+  only** — the rates, the graph, the double-click and the menu keep working, so
+  hiding the header never hides the capability. The lock is checked before the
+  drag starts, so a locked card cannot be moved.
 - **Gestures**: double-click (hand-rolled, like the chip) opens the first
   enabled server's web console; right-click opens a menu built in code
   (open web console / lock or unlock / hide / quit).

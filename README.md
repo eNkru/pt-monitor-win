@@ -56,10 +56,11 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
 - **Desktop widget (opt-in)** — a translucent readout that lives on the
   Windows desktop, *behind* every application window: it survives **Win+D** and
   never steals the keyboard focus. It shows the aggregate `↓ / ↑` rates, the
-  same rolling graph and a summary line (`N servers · M online · K active`) on
-  a soft, square-cornered mask — the wallpaper still shows through it. Drag it
-  anywhere (the position is remembered), or **lock** it so it cannot be moved
-  by accident. Off by default; enable it from the tray menu or Preferences.
+  same rolling graph and a status line (a dot plus `N active`, or `N/M online`
+  when a server is unreachable) on a soft, square-cornered mask — the wallpaper
+  still shows through it. Drag it anywhere (the position is remembered), or
+  **lock** it so it cannot be moved by accident. Off by default; enable it from
+  the tray menu or Preferences.
 - **Multiple servers** — any number of qBittorrent WebUI or Transmission RPC
   endpoints, mixed freely. Each gets its own section in the dropdown panel.
 - **Per-torrent rows** — name, full-width progress bar, percentage, speeds + ETA,
@@ -307,14 +308,18 @@ the way a Nexus glass plate does — and every run carries a hard outline as
 well, so the text stays readable on a bright wallpaper too.
 
 - **Content** — the aggregate `↓` and `↑` rates, the rolling one-minute graph
-  (the same control as the chip), and a summary line (`3 servers · 2 online ·
-  12 active`).
+  (the same control as the chip), and a status line: a dot plus one number
+  (`Not configured`, `12 active`, or `2/3 online` in red when a server is not
+  reachable).
+- **Header** — the product name and the lock control fade in while the pointer
+  is over the card and out again after it leaves. The row keeps its height, so
+  nothing moves, and an invisible header does not get in the way of a drag.
 - **Drag** — moves the card; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed.
-- **Lock** — the header control (or *Lock position* in the right-click menu)
-  freezes the **position only**. The rates, the graph, the double-click and
-  the menu keep working; the card simply cannot be moved by accident. The
-  state survives a restart.
+- **Lock** — the lock control in the header (shown on hover) or *Lock position*
+  in the right-click menu freezes the **position only**. The rates, the graph,
+  the double-click and the menu keep working; the card simply cannot be moved
+  by accident. The state survives a restart.
 - **Double-click** — opens the web console of the first enabled server in the
   default browser (the same target as the *Open &lt;server&gt; web UI* item).
 - **Right-click** — a small menu: open web console / lock (unlock) position /
@@ -788,7 +793,7 @@ Three projects, strictly layered — the same split as the macOS original.
 | `Client/` | `ITorrentClient`; `QBittorrentClient`, `TransmissionClient`, `HttpTransport`, `HostFieldParser`, `ServerConfigValidator`, pure parsers |
 | `Store/` | `SettingsStore` (JSON), `DpapiSecretStore` / `InMemorySecretStore`, `MonitorStore` (polling loops, aggregation) |
 | `Format/` | `ByteRateFormatter` (rates, byte counts, tray text ladder) |
-| `Diagnostics/` | `SelfTest` (the 296-check suite), `ProbeRunner`, `Log` (the file sink) |
+| `Diagnostics/` | `SelfTest` (the 698-check suite), `ProbeRunner`, `Log` (the file sink) |
 
 **Key design rules** (kept from the macOS original, and enforced by the check
 suite):
@@ -974,7 +979,7 @@ Two gates, both run by the build scripts and by CI.
 
 ### 1. In-binary check suite — `--selftest`
 
-296 assertions, no network, no fixtures on disk. It covers:
+698 assertions, no network, no fixtures on disk. It covers:
 
 - host-field parsing (`host:port`, IPv6 literals, pasted URLs, scheme
   rejection) and config validation/normalisation;
@@ -996,7 +1001,7 @@ instead of relying only on unit tests.
 
 ### 2. xUnit suite
 
-84 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
+151 tests in `tests/PTMonitor.Core.Tests`, including a test that runs the whole
 `SelfTest` suite, so the two can never drift apart.
 
 ```powershell

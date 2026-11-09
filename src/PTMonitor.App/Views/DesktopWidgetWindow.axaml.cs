@@ -1,7 +1,9 @@
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using PTMonitor.App.Services;
@@ -30,6 +32,34 @@ public partial class DesktopWidgetWindow : Window
     // The card's logical size; the window is fixed to it.
     private const double CardWidth = 250;
     private const double CardHeight = 150;
+    // The header fades out this long after the pointer leaves, so merely
+    // grazing the card does not flash it.
+    private const int HeaderExitGraceMs = 250;
+    // The fade-in itself. The header only starts taking hits when it has
+    // finished fading in, so a press that lands in the corner while the
+    // header is still invisible drags the card instead of toggling the lock.
+    private const int HeaderFadeInMs = 170;
+
+    // The status dot's colours: neutral when nothing is configured, success
+    // while every server is online, danger otherwise.
+    private static readonly IBrush NeutralDot = new SolidColorBrush(Color.Parse("#B3FFFFFF"));
+    private static readonly IBrush OnlineDot = new SolidColorBrush(Color.Parse("#2D7D46"));
+    private static readonly IBrush OfflineDot = new SolidColorBrush(Color.Parse("#E5484D"));
+
+    // The last status counters, so a language change can re-derive the line
+    // instead of leaving a stale one behind.
+    private int _servers;
+    private int _online;
+    private int _active;
+
+    // Hides the header after the exit grace; created once, stopped on enter
+    // and on the tick.
+    private readonly DispatcherTimer _exitTimer;
+    // Arms the header's hit testing once the fade-in has finished.
+    private readonly DispatcherTimer _revealTimer;
+    // Whether the header is supposed to be shown right now: the pointer is
+    // over the card and no fade-out is pending.
+    private bool _headerShown;
 
     private PointerPressedEventArgs? _pressArgs;
     private Point _pressPoint;
@@ -60,6 +90,27 @@ public partial class DesktopWidgetWindow : Window
         InitializeComponent();
         // The system hand cursor: the OS owns the shape, the app does not.
         Cursor = new Cursor(StandardCursorType.Hand);
+        _exitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HeaderExitGraceMs) };
+        _exitTimer.Tick += (_, _) =>
+        {
+            _exitTimer.Stop();
+            if (IsVisible) HideHeader();
+        };
+        _revealTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HeaderFadeInMs) };
+        _revealTimer.Tick += (_, _) =>
+        {
+            _revealTimer.Stop();
+            // The pointer may have left again during the fade-in; then the
+            // header stays inert.
+            if (_headerShown && IsVisible) Header.IsHitTestVisible = true;
+        };
+        Card.PointerEntered += (_, _) => ShowHeader();
+        Card.PointerExited += (_, _) =>
+        {
+            _headerShown = false;
+            _exitTimer.Stop();
+            _exitTimer.Start();
+        };
         BuildMenu();
     }
 
@@ -81,6 +132,8 @@ public partial class DesktopWidgetWindow : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        // A re-shown card opens bare, without a fade from the last value.
+        ResetHeader();
         ApplyLocalization();
         SetLocked(AppServices.Instance.Settings.DesktopWidgetLocked);
         Place();
@@ -102,11 +155,27 @@ public partial class DesktopWidgetWindow : Window
     }
 
     /// <summary>
-    /// Writes the summary line: how many servers are configured and online,
-    /// and how many torrents are active.
+    /// Writes the status line: a dot and one number — not configured, the
+    /// active count, or <c>M/N online</c>. The counters are cached so a
+    /// language change can re-derive the line.
     /// </summary>
-    public void ShowSummary(int servers, int online, int active) =>
-        SummaryText.Text = L10n.WidgetSummary(servers, online, active);
+    public void ShowStatus(int servers, int online, int active)
+    {
+        _servers = servers;
+        _online = online;
+        _active = active;
+        ApplyStatus();
+    }
+
+    private void ApplyStatus()
+    {
+        StatusText.Text = L10n.WidgetStatus(_servers, _online, _active);
+        StatusDot.Fill = _servers <= 0
+            ? NeutralDot
+            : _online >= _servers
+                ? OnlineDot
+                : OfflineDot;
+    }
 
     /// <summary>Appends one sample to the rolling graph.</summary>
     public void PushSample(long down, long up) => Graph.Push(down, up);
@@ -352,11 +421,54 @@ public partial class DesktopWidgetWindow : Window
         ToolTip.SetTip(Card, L10n.S("Double-click to open the web console"));
         // The product name is intentionally not localized.
         TitleText.Text = "PT Monitor";
+        // The dot colour follows the counters, so a language change cannot
+        // leave the line mismatched.
+        ApplyStatus();
         // Glyphs, not words — taken from the formatter so they cannot drift
         // from the panel's arrows.
         DownArrow.Text = ByteRateFormatter.DownArrow;
         UpArrow.Text = ByteRateFormatter.UpArrow;
         RefreshMenu();
+    }
+
+    // MARK: - Header
+
+    /// <summary>
+    /// Fades the header in and makes it clickable. Hovering the card is
+    /// tracked by <c>Card</c>, which keeps its hit surface at all times.
+    /// </summary>
+    private void ShowHeader()
+    {
+        _exitTimer.Stop();
+        _headerShown = true;
+        Header.Opacity = 1;
+        // The header is not hit-testable yet: it is still fading in, and an
+        // invisible lock button must not swallow a drag.
+        Header.IsHitTestVisible = false;
+        _revealTimer.Stop();
+        _revealTimer.Start();
+    }
+
+    /// <summary>
+    /// Fades the header out and lets presses fall through to the card, so an
+    /// invisible header never swallows a drag.
+    /// </summary>
+    private void HideHeader()
+    {
+        _exitTimer.Stop();
+        _revealTimer.Stop();
+        _headerShown = false;
+        Header.Opacity = 0;
+        Header.IsHitTestVisible = false;
+    }
+
+    /// <summary>Hides the header without animating: the style's transition is
+    /// dropped for the reset and put back afterwards.</summary>
+    private void ResetHeader()
+    {
+        Header.Transitions = null;
+        HideHeader();
+        Header.ClearValue(Animatable.TransitionsProperty);
     }
 
     /// <summary>

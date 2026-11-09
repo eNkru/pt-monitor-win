@@ -356,7 +356,12 @@ public sealed class AppServices
         if (_desktopWidget is not { IsVisible: true } widget) return;
         var aggregate = Monitor.Aggregate;
         widget.ShowRates(aggregate.DownSpeed, aggregate.UpSpeed, aggregate.OnlineServers > 0);
-        widget.ShowSummary(Settings.Servers.Count, aggregate.OnlineServers, aggregate.ActiveTorrents);
+        // Enabled servers only: a disabled one is never contacted, so it can
+        // never be online and would pin the line to "M/N online" forever.
+        widget.ShowStatus(
+            Settings.Servers.Count(server => server.IsEnabled),
+            aggregate.OnlineServers,
+            aggregate.ActiveTorrents);
     }
 
     private void PushDesktopSample()

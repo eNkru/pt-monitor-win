@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "golden split — which decision belongs in Core, which in the App layer; the status line and dot colour choice must not leak into Core"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "style classes instead of inline styling, window conventions for the borderless widget, no reflection bindings"}
+{"file": ".trellis/spec/frontend/localization.md", "reason": "keys are English strings, both languages required, ApplyLocalization wiring for the header and the two new status strings"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "the widget is a non-activating, hide-not-close window; hover must work without focus and the tray/menu entry points stay as they are"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "the App layer has no automated gate — the manual build/selftest/test/hand-check list is the gate for this task"}
+{"file": ".trellis/spec/frontend/viewmodel-guidelines.md", "reason": "the card is driven by direct method calls from AppServices on every poll; ShowStatus must stay cheap and not rebuild anything"}
