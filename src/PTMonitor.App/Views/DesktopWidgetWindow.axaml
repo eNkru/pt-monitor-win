@@ -26,8 +26,12 @@
           PointerMoved="OnPointerMoved"
           PointerReleased="OnPointerReleased">
 
-        <!-- Header: the product name and the lock control. -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+        <!-- Header: the product name and the lock control. It is invisible
+             (row 0 keeps its height, so nothing moves) until the pointer is
+             over the card; while hidden it does not hit-test, so a press in
+             its corner still drags. -->
+        <Grid Grid.Row="0" x:Name="Header" Classes="widgetHeader"
+              Opacity="0" IsHitTestVisible="False" ColumnDefinitions="*,Auto">
             <views:OutlinedText Grid.Column="0" x:Name="TitleText" Classes="widgetTitle"
                                 VerticalAlignment="Center" />
             <Button Grid.Column="1" x:Name="LockButton" Classes="widgetButton" Click="OnLockClicked"
@@ -49,8 +53,15 @@
         <!-- The rolling graph: one sample per second, 60 samples. -->
         <views:SpeedGraph Grid.Row="3" x:Name="Graph" Margin="0,4,0,0" />
 
-        <!-- Summary: servers configured / online and active torrents. -->
-        <views:OutlinedText Grid.Row="4" x:Name="SummaryText" Classes="widgetSummary"
-                            Margin="0,4,0,0" VerticalAlignment="Bottom" />
+        <!-- Status: one dot plus one number (not configured / N active /
+             N/M online). The dot keeps its place in every form, so the line
+             never re-flows; only its colour changes. -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="5"
+                    Margin="0,4,0,0" VerticalAlignment="Bottom">
+            <views:OutlinedText x:Name="StatusDot" Classes="widgetDot" Text="●"
+                                VerticalAlignment="Center" />
+            <views:OutlinedText x:Name="StatusText" Classes="widgetSummary"
+                                VerticalAlignment="Center" />
+        </StackPanel>
     </Grid>
 </Window>

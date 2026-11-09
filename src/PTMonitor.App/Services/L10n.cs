@@ -93,8 +93,8 @@ public static class L10n
         ["Desktop widget"] = "桌面挂件",
         ["Lock position"] = "锁定位置",
         ["Unlock position"] = "解锁位置",
-        ["%lld server · %lld online · %lld active"] = "%lld 台服务器 · %lld 台在线 · %lld 个活动",
-        ["%lld servers · %lld online · %lld active"] = "%lld 台服务器 · %lld 台在线 · %lld 个活动",
+        ["%lld active"] = "%lld 个活动",
+        ["%lld/%lld online"] = "%lld/%lld 在线",
         ["Open web console"] = "打开网页控制台",
         ["Double-click to open the web console"] = "双击打开网页控制台",
         ["Floating display"] = "悬浮窗显示",
@@ -189,18 +189,17 @@ public static class L10n
     public static string ActiveTorrents(int active, int total) => Format("%lld · %lld total", active, total);
 
     /// <summary>
-    /// The desktop widget's summary line: the configured servers, how many of
-    /// them are online and how many torrents are active. One templated key —
-    /// the fragments are never glued together.
+    /// The desktop widget's status line: <c>Not configured</c> without
+    /// servers, the active count while every server is online, otherwise
+    /// <c>M/N online</c>. One templated key — the fragments are never glued
+    /// together.
     /// </summary>
-    public static string WidgetSummary(int servers, int online, int active) =>
+    public static string WidgetStatus(int servers, int online, int active) =>
         servers <= 0
             ? S("Not configured")
-            : Format(
-                servers == 1
-                    ? "%lld server · %lld online · %lld active"
-                    : "%lld servers · %lld online · %lld active",
-                servers, online, active);
+            : online >= servers
+                ? Format("%lld active", active)
+                : Format("%lld/%lld online", online, servers);
 
     public static string StateWord(TorrentState state) => state switch
     {

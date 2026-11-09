@@ -10,6 +10,7 @@ publish/
 .vs/
 .vscode/
 .idea/
+.openidea/
 *.swp
 
 # OS
