@@ -947,3 +947,53 @@ They are listed in `prd.md` → *Deferred — Windows-only verification* and
 
 [OK] **Merged (PR #17) and archived.** Windows-only behaviour remains
 unverified by design of the environment, recorded as a deferred checklist.
+
+
+## Session 19: Close-out sweep — windows-installer and desktop-widget-hover-header
+<!-- trellis-session: v=2 fp=39c42f3548d0bfc8 -->
+
+**Date**: 2026-11-10
+**Task**: Housekeeping: close the two stale `in_progress` tasks
+**Branch**: `main`
+
+### Summary
+
+Two tasks were still marked `in_progress` even though their PRs had already
+been merged. `11-10-desktop-widget-hover-header` shipped as **PR #19** (merge
+commit `07b1f48`, merged 2026-11-09) and `11-08-windows-installer` as **PR #18**
+(merge commit `d67854b`, merged 2026-11-08); both `task.json` files still had
+`completedAt`, `commit` and `pr_url` set to `null`. This entry bits them
+straight: set `status: completed`, the real `completedAt`/`commit`/`pr_url`, and
+`git mv`-ed both task directories into `.trellis/tasks/archive/2026-11/`.
+
+No source or spec bytes changed — this is task-metadata and journal only.
+
+### Main Changes
+
+- `11-10-desktop-widget-hover-header`: completed 2026-11-09, commit `07b1f48`,
+  PR #19; archived to `archive/2026-11/`.
+- `11-08-windows-installer`: completed 2026-11-08, commit `d67854b`, PR #18;
+  archived to `archive/2026-11/`.
+- `status` set to `completed` (the repo-wide convention — 19 prior tasks use it,
+  not `done`) rather than a literal `done`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| _this_ | chore(task): close out and archive the merged widget and installer tasks |
+
+### Testing
+
+- [OK] metadata + journal only; no code touched, no build/test run
+- [OK] `git status` clean of source changes; only the archived task dirs (renames) and the journal
+
+### Status
+
+[OK] **Completed** — zero active tasks remain; any new work starts from a fresh task.
+
+### Next Steps
+
+- Note the `createdAt` clock quirk on both tasks (dates trail the merge date by
+  up to a day); left untouched, worth fixing at the source (task-creation clock
+  vs. git/PR timestamps).
