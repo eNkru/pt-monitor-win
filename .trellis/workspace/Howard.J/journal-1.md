@@ -1036,3 +1036,41 @@ Session summary was not supplied.
 ### Next Steps
 
 - Eyeball the chip on Windows: round shape, transparent corners, corner click-through, both display modes
+
+
+## Session 22: Floating chip: the TV screen shape, after the review round
+<!-- trellis-session: v=2 fp=77811b79c40fa8d1 -->
+
+**Date**: 2026-11-20
+**Task**: Floating chip: the TV screen shape, after the review round
+**Branch**: `main`
+
+### Summary
+
+Session summary was not supplied.
+
+### Main Changes
+
+- src/PTMonitor.App/Views/FloatingSpeedWindow.axaml,.axaml.cs
+- src/PTMonitor.App/Services/WindowShape.cs
+- src/PTMonitor.App/App.axaml
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ff7285e` | feat(chip): shape the floating chip like a little TV screen |
+| `19f262a` | fix(chip): keep the graph peaks out of the rate readout |
+| `0844ed3` | Merge pull request #20 from eNkru/feat/floating-chip-tv-screen |
+
+### Testing
+
+- [OK] dotnet build -c Release; CLI selftest (700 checks); xUnit (156 tests); CI on PR #20
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- On Windows: check the live corner click-through and the bezel contrast on a bright and a dark desktop

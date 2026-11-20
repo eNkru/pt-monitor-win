@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-11-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1038 | Active |
+| `journal-1.md` | ~1076 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-11-20 | Floating chip: the TV screen shape, after the review round | `ff7285e`, `19f262a`, `0844ed3` | `main` |
 | 21 | 2026-11-20 | Floating chip: a round badge with transparent, click-through corners | `4010dd0`, `9b6d9e3`, `99c54cd` | `main` |
 | 17 | 2026-11-06 | Stale build handed over as the artwork fix | - | `feat/tray-icon-solid-glyph` |
 | 16 | 2026-11-06 | One fixed tray mark in every theme | `ab6e561` | `feat/tray-icon-solid-glyph` |
