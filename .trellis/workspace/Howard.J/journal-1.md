@@ -997,3 +997,42 @@ No source or spec bytes changed — this is task-metadata and journal only.
 - Note the `createdAt` clock quirk on both tasks (dates trail the merge date by
   up to a day); left untouched, worth fixing at the source (task-creation clock
   vs. git/PR timestamps).
+
+
+## Session 21: Floating chip: a round badge with transparent, click-through corners
+<!-- trellis-session: v=2 fp=ffacf3d1b3d536a2 -->
+
+**Date**: 2026-11-20
+**Task**: Floating chip: a round badge with transparent, click-through corners
+**Branch**: `main`
+
+### Summary
+
+Session summary was not supplied.
+
+### Main Changes
+
+- src/PTMonitor.App/Views/FloatingSpeedWindow.axaml,.axaml.cs
+- src/PTMonitor.App/Services/WindowShape.cs (new)
+- src/PTMonitor.App/App.axaml
+- src/PTMonitor.Core/Format/ByteRateFormatter.cs
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4010dd0` | feat(chip): a round floating chip with transparent corners |
+| `9b6d9e3` | feat(core): a compact rate form for the narrow chip surface |
+| `99c54cd` | docs(chip): describe the round chip |
+
+### Testing
+
+- [OK] dotnet build -c Release; CLI selftest (700 checks); xUnit (156 tests)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Eyeball the chip on Windows: round shape, transparent corners, corner click-through, both display modes
