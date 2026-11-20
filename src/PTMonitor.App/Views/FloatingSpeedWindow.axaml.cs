@@ -23,6 +23,13 @@ public partial class FloatingSpeedWindow : Window
     // message cannot be relied on.
     private const ulong DoubleClickIntervalMs = 400;
     private const double DoubleClickRadius = 6;
+    // The body's size and corner radius, and the window it lives in: the 2 px
+    // ring gives the Win32 window region room to clip the corners without
+    // touching the antialiased edge of the body (see WindowShape).
+    private const double ChipWidth = 68;
+    private const double ChipHeight = 52;
+    private const double ChipCornerRadius = 12;
+    private const double WindowMargin = 2;
 
     private PointerPressedEventArgs? _pressArgs;
     private Point _pressPoint;
@@ -44,6 +51,9 @@ public partial class FloatingSpeedWindow : Window
         // The system hand cursor: the OS owns the shape, the app does not.
         Cursor = new Cursor(StandardCursorType.Hand);
         BuildMenu();
+        // The region is in device pixels, so a DPI change (dragging the chip to
+        // another monitor) leaves a stale shape behind unless it is re-applied.
+        ScalingChanged += (_, _) => ApplyShape();
     }
 
     private void BuildMenu()
@@ -62,16 +72,41 @@ public partial class FloatingSpeedWindow : Window
         base.OnOpened(e);
         ApplyLocalization();
         Place();
+        ApplyShape();
+    }
+
+    /// <summary>
+    /// Clips the window to the chip's rounded shape, so the transparent corners
+    /// do not swallow clicks meant for the window underneath. A failure is
+    /// harmless: the chip is then simply a rectangle, as it was before.
+    /// </summary>
+    private void ApplyShape()
+    {
+        if (!WindowShape.IsSupported) return;
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero) return;
+        // The region is the body's shape, one pixel larger on every side: a
+        // region's edge is aliased, so it must stay outside the body's
+        // antialiased edge instead of cutting it.
+        var scaling = RenderScaling;
+        WindowShape.ApplyRoundedRect(
+            handle,
+            (int)Math.Round(ChipWidth * scaling),
+            (int)Math.Round(ChipHeight * scaling),
+            (int)Math.Round(ChipCornerRadius * scaling));
     }
 
     /// <summary>Re-applies the localized title, tooltip and menu after a language change.</summary>
     public void RefreshLocalization() => ApplyLocalization();
 
-    /// <summary>Writes the aggregate rates; an offline aggregate renders a dash.</summary>
+    /// <summary>Writes the aggregate rates; an offline aggregate renders a dash.
+    /// The chip uses the compact form: a circle has far less usable width than
+    /// a square, and the widest long form (<c>1023 B/s</c>) would be clipped by
+    /// the curve.</summary>
     public void ShowRates(long down, long up, bool online)
     {
-        var downText = online ? ByteRateFormatter.Rate(down) : "—";
-        var upText = online ? ByteRateFormatter.Rate(up) : "—";
+        var downText = online ? ByteRateFormatter.RateCompact(down) : "—";
+        var upText = online ? ByteRateFormatter.RateCompact(up) : "—";
         DownText.Text = downText;
         UpText.Text = upText;
         // The graph-mode corner readout mirrors the numbers-mode readout.
@@ -184,8 +219,8 @@ public partial class FloatingSpeedWindow : Window
 
         // SizeToContent leaves Bounds empty until the first layout pass, so use
         // a fallback and scale the logical size to physical pixels.
-        var width = (Bounds.Width > 1 ? Bounds.Width : 56) * scaling;
-        var height = (Bounds.Height > 1 ? Bounds.Height : 56) * scaling;
+        var width = (Bounds.Width > 1 ? Bounds.Width : ChipWidth + WindowMargin * 2) * scaling;
+        var height = (Bounds.Height > 1 ? Bounds.Height : ChipHeight + WindowMargin * 2) * scaling;
 
         double x, y;
         if (settings.FloatingPositionX is { } savedX && settings.FloatingPositionY is { } savedY

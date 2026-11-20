@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "the window conventions for the floating chip (opaque square, no corner radius) are exactly what this task changes; style classes instead of inline styling, and no bindings without x:DataType"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "the App layer has no automated gate — the manual build/selftest/test/hand-check list is the gate for this task (100 % and 150 % scaling, both display modes)"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "the chip is a topmost, hide-not-close window driven from AppServices; the shaping must not change its lifecycle, gestures or tray entry points"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "golden split — Core stays string-free and platform-free; the Win32 window shaping belongs in the App layer, and no rate formatting may be re-derived in the view"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "the chip's look, its window shaping and its persisted position cross the App/platform boundary — check that nothing leaks into Core and no state is duplicated"}

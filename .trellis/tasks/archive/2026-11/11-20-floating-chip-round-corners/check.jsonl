@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "check that the chip's new look is a class in App.axaml (not inline styling), that the window conventions are updated, and that no binding was added without an x:DataType"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "walk the hand-check list: both display modes, the widest rate, 100 % and 150 % scaling, drag / double-click / right-click, and a clean log"}
+{"file": ".trellis/spec/frontend/lifecycle-and-tray.md", "reason": "confirm the shaping did not change hide/close, activation, the topmost behaviour or the tray/Preferences entry points"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "confirm Core stayed untouched and no presentation decision was re-derived in XAML or code-behind"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "the Win32 interop must reuse the existing DesktopLayer-style patterns instead of duplicating P/Invoke helpers"}

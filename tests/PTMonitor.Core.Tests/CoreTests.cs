@@ -1174,6 +1174,15 @@ public class ByteRateFormatterTests
     [InlineData(348_160, "340K")]
     public void Rates(long value, string expected) => Assert.Equal(expected, ByteRateFormatter.Rate(value));
 
+    [Theory]
+    [InlineData(0, "0B")]
+    [InlineData(999, "999B")]
+    [InlineData(1023, "1023B")]
+    [InlineData(1024, "1.0K")]
+    [InlineData(1_258_291, "1.2M")]
+    public void CompactRates(long value, string expected) =>
+        Assert.Equal(expected, ByteRateFormatter.RateCompact(value));
+
     [Fact]
     public void ByteCounts() => Assert.Equal("412 GB", ByteRateFormatter.Bytes(442_918_502_400));
 

@@ -37,7 +37,7 @@ Reusable looks are class selectors in `App.axaml`; XAML applies them with
 <Style Selector="Button.footerRow">…</Style>
 ```
 
-Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
+Existing classes: `card`, `floatingChip`, `statLabel`, `statValue`, `floatingRate`,
 `floatingArrow`, `sectionHeader`, `sectionSpeed`, `segment`, `prefSegment`,
 `torrentBar`, `link`, `footerRow`, `accent`, `danger`, `graphRate`,
 `graphArrow`.
@@ -63,8 +63,20 @@ Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
   `TransparencyLevelHint="Transparent"`, `Background="Transparent"`,
   `SizeToContent="Height"`, `WindowStartupLocation="Manual"`.
 - Floating chip: `Topmost="True"`, `ShowActivated="False"`, `CanResize="False"`,
-  an **opaque** `Background`, no transparency hint / corner radius / shadow, and
-  `SizeToContent="WidthAndHeight"` so the 56 px border is the whole window.
+  `SizeToContent="WidthAndHeight"`, and a **rounded, opaque body on a
+  transparent window** — a little TV screen: a `Border` with a generous
+  `CornerRadius` (not a circle) and a darker inner `Border` as the screen
+  inside the bezel, both with `ClipToBounds="True"`. `Background="Transparent"`
+  + `TransparencyLevelHint="Transparent"` so the corners outside the rounded
+  shape are see-through, and `TransparencyBackgroundFallback` set to the bezel
+  colour (a platform without per-pixel alpha then degrades to the old opaque
+  look, not a white square). The body itself is opaque — do not make it
+  translucent. The window is a few pixels larger than the body and is clipped
+  to the rounded shape by a Win32 window region (`Services/WindowShape`), so
+  the transparent corners do not swallow clicks; without the region the chip is
+  a rectangle again, never broken. The region is drawn one pixel **larger**
+  than the body: a region's edge is aliased and must not cut the body's
+  antialiased edge.
 - Dialogs: `CanResize="False"`, `CenterOwner`/`CenterScreen`, fixed `Width`.
 - Root content is a `StackPanel`/`Grid` with `Margin="16"` in dialogs; the panel
   uses the `card` border with `CornerRadius="14"` and `Padding="14"`.
