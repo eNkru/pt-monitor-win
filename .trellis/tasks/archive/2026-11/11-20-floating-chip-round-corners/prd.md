@@ -1,12 +1,16 @@
-# Floating chip: a round chip with transparent corners
+# Floating chip: a TV-screen chip with transparent corners
 
 ## Goal
 
-Turn the 56 × 56 floating speed chip into a true circle. The **body stays
+Turn the 56 × 56 floating speed chip into a little **TV screen**: a rounded
+rectangle with a bezel and a darker screen inside it. The **body stays
 opaque** — the user was explicit about that: "I don't want the entire widget
-transparent" — but the four corners outside the circle must become
-**transparent**, so the round shape shows the desktop through it instead of the
+transparent" — but the four corners outside the rounded shape must become
+**transparent**, so the screen shows the desktop through it instead of the
 sharp square window background that a plain `CornerRadius` would leave behind.
+
+The shape was iterated on the way there: a full circle first (rejected: "I
+don't really like that full circle"), then the rounded TV screen.
 
 ## Background
 
@@ -30,10 +34,10 @@ Two consequences of that layout:
 
 ## Requirements
 
-1. The chip is a **circle**: the body keeps its current opaque fill and 1 px
-   hairline — only the shape changes. The visible circle grows from 56 px to
-   **60 px**: a circle has only 78 % of a square's area, so the same content
-   needs a little more room to avoid looking cramped.
+1. The chip is a **rounded rectangle** — a little TV screen (68 × 52, corner
+   radius 12) with a bezel and a darker screen inside it. The body keeps its
+   opaque fill and 1 px hairline; only the shape changes. The chip stays
+   compact: a screen, not a badge.
 2. The area **outside** the circle is **fully transparent**: the desktop (or
    any window behind the chip) shows through it, with a smooth, antialiased
    edge. No square background is visible anywhere around the round body.
@@ -45,18 +49,17 @@ Two consequences of that layout:
 5. The visible circle must never be **clipped** by the platform's window
    shaping, so its antialiased edge stays smooth at every display scaling.
 6. Both display modes keep working inside the circle:
-   - **Numbers** — the `↓` / `↑` pair stays centred and fully inside the
-     circle. The chip uses a **compact rate form** (`1023B`, not
-     `1023 B/s`): the widest long form does not fit the chord of any sensible
-     circle. The panel and the tray keep the long form.
-   - **Graph** — the rolling plot is **clipped by the circle** (it reads as a
-     circular gauge), and the pinned rate readout moves to the **top centre**,
-     because the top-left corner of a circle is outside the shape and the
-     current placement would be cut off.
+   - **Numbers** — the `↓` / `↑` pair stays centred on the screen, in the old
+     chip's stacked layout. The chip uses a **compact rate form** (`1023B`, not
+     `1023 B/s`): the long form does not fit a small screen. The panel and the
+     tray keep the long form.
+   - **Graph** — the rolling plot fills the screen and is **clipped by the
+     rounded shape**, and the pinned rate readout stays in the **top-left
+     corner** (a rounded shape has a real corner, unlike a circle).
 7. The chip's gestures are unchanged: drag to move (position still saved and
    restored), double-click opens the web console, right-click opens the menu.
 8. The chip keeps its footprint: the saved position still means the same place
-   on screen, and the chip still reads as a small 60 px badge.
+   on screen, and the chip still reads as a small 68 × 52 screen.
 9. The chip still works off Windows (the app also runs on Linux/macOS for
    development): the shaping degrades to "square chip" rather than breaking.
 10. README and `.trellis/spec/frontend/component-guidelines.md` stop claiming
@@ -76,13 +79,13 @@ Two consequences of that layout:
 
 - The **desktop widget** (the big one) keeps its square-cornered mask.
 - A drop shadow: it would need a larger window and would put a wide
-  invisible dead zone around the circle, which contradicts requirement 4.
+  invisible dead zone around the screen, which contradicts requirement 4.
 - Changing the long rate form used by the panel and the tray.
 
 ## Acceptance Criteria
 
-- [ ] The chip renders as a 60 px circle with an opaque body; the corners
-      around it show the desktop through them.
+- [ ] The chip renders as a 68 × 52 rounded screen with an opaque body and a
+      bezel; the corners around it show the desktop through them.
 - [ ] The circle's edge is smooth (antialiased) and complete — no flat cut, no
       square background behind the curve.
 - [ ] A click in a transparent corner reaches the window underneath the chip;
@@ -106,4 +109,5 @@ Two consequences of that layout:
   *window's* background, not the `Border`'s: the fix is a transparent window
   plus an opaque round body, not a rounded `Border` on an opaque window.
 - The corners only become click-through if the window itself is shaped
-  (Windows: an elliptical window region). Avalonia does not do that for us.
+  (Windows: a rounded-rectangle window region). Avalonia does not do that for
+  us.
