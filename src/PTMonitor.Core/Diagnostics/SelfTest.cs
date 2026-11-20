@@ -573,6 +573,8 @@ public static class SelfTest
     private static void FormatChecks(Checks c)
     {
         c.Expect("format: bytes", ByteRateFormatter.Rate(999), "999 B/s");
+        c.Expect("format: compact bytes", ByteRateFormatter.RateCompact(999), "999B");
+        c.Expect("format: compact k", ByteRateFormatter.RateCompact(1024), "1.0K");
         c.Expect("format: k", ByteRateFormatter.Rate(1024), "1.0K");
         c.Expect("format: m", ByteRateFormatter.Rate(1_258_291), "1.2M");
         c.Expect("format: hundreds", ByteRateFormatter.Rate(348_160), "340K");

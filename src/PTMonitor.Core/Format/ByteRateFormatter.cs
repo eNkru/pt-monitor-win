@@ -29,6 +29,20 @@ public static class ByteRateFormatter
         return number + Units[unitIndex];
     }
 
+    /// <summary>
+    /// The same rate with the unit kept short enough for a narrow surface (the
+    /// round floating chip): below one kilobyte the <c> B/s</c> suffix is
+    /// dropped, so the widest form is <c>1023B</c> instead of <c>1023 B/s</c>.
+    /// A circle has far less usable width than a square of the same size, and
+    /// the long form would be clipped by the curve.
+    /// </summary>
+    public static string RateCompact(long bytesPerSecond)
+    {
+        var bytes = Math.Max(0, bytesPerSecond);
+        if (bytes < BinaryStep) return $"{bytes}B";
+        return Rate(bytes);
+    }
+
     public static string Bytes(long count)
     {
         var bytes = Math.Max(0, count);
