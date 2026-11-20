@@ -37,7 +37,7 @@ Reusable looks are class selectors in `App.axaml`; XAML applies them with
 <Style Selector="Button.footerRow">…</Style>
 ```
 
-Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
+Existing classes: `card`, `floatingChip`, `statLabel`, `statValue`, `floatingRate`,
 `floatingArrow`, `sectionHeader`, `sectionSpeed`, `segment`, `prefSegment`,
 `torrentBar`, `link`, `footerRow`, `accent`, `danger`, `graphRate`,
 `graphArrow`.
@@ -63,8 +63,17 @@ Existing classes: `card`, `statLabel`, `statValue`, `floatingRate`,
   `TransparencyLevelHint="Transparent"`, `Background="Transparent"`,
   `SizeToContent="Height"`, `WindowStartupLocation="Manual"`.
 - Floating chip: `Topmost="True"`, `ShowActivated="False"`, `CanResize="False"`,
-  an **opaque** `Background`, no transparency hint / corner radius / shadow, and
-  `SizeToContent="WidthAndHeight"` so the 56 px border is the whole window.
+  `SizeToContent="WidthAndHeight"`, and a **round, opaque body on a
+  transparent window**: `Background="Transparent"` +
+  `TransparencyLevelHint="Transparent"` so the corners outside the circle are
+  see-through, `TransparencyBackgroundFallback` set to the body colour (a
+  platform without per-pixel alpha then degrades to the old opaque look, not a
+  white square), and a `Border` body with `CornerRadius` = half its side and
+  `ClipToBounds="True"` so the graph is cut by the circle. The body itself is
+  opaque — do not make it translucent. The window is a few pixels larger than
+  the body and is clipped to the circle by a Win32 window region
+  (`Services/WindowShape`), so the transparent corners do not swallow clicks;
+  without the region the chip is a square again, never broken.
 - Dialogs: `CanResize="False"`, `CenterOwner`/`CenterScreen`, fixed `Width`.
 - Root content is a `StackPanel`/`Grid` with `Margin="16"` in dialogs; the panel
   uses the `card` border with `CornerRadius="14"` and `Padding="14"`.

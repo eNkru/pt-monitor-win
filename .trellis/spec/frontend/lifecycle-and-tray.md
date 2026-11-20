@@ -124,13 +124,30 @@ leaked timer keeps the panel alive and updates a header nobody sees.
 
 ## Floating speed chip
 
-`FloatingSpeedWindow` is the optional always-on-top square chip
+`FloatingSpeedWindow` is the optional always-on-top **round** chip
 (`Topmost`, `ShowActivated=False`, `SystemDecorations=None`,
 `ShowInTaskbar=False`, `SizeToContent`), created and cached by `AppServices`.
-It is **opaque** (fixed `Background`, no `TransparencyLevelHint`, no
-`CornerRadius`, no `BoxShadow`): a transparent/topmost window costs an alpha
-composition layer every frame, which is not worth it for a 56 px widget. Keep it
-that way unless the design genuinely needs transparency.
+The body is **opaque** (`#FF202023`) — a translucent chip would wash the rates
+out over a busy desktop — but the window paints nothing
+(`Background="Transparent"` + `TransparencyLevelHint="Transparent"`), so the
+four corners outside the circle are see-through instead of showing a square
+window background. A per-pixel alpha window costs an alpha composition layer
+every frame; that is accepted here because the round shape *is* the design, and
+it is still a 60 px badge.
+
+- **Shape**: the body is a `Border` with `CornerRadius` = half its side (a true
+  circle) and `ClipToBounds="True"`, which is what cuts the graph to the
+  circle. The window is 4 px larger than the body and is clipped to the circle
+  by a Win32 **window region** (`Services/WindowShape.ApplyCircle`): Avalonia 11
+  does no per-pixel hit testing on Win32, so without the region the transparent
+  corners would swallow clicks meant for the window underneath. The region is
+  applied on open, on every re-place and on `ScalingChanged` (it is in device
+  pixels). If it cannot be applied the chip is simply a square — never broken.
+  `TransparencyBackgroundFallback` is the body colour so a platform without
+  per-pixel alpha degrades to the old opaque look instead of a white square.
+- **Foreground**: the numbers and arrows set an explicit light colour in the
+  style. The body is a fixed dark fill, so the text must not follow the OS
+  theme — dark-on-dark in light mode would vanish.
 
 - `SyncFloatingWindow()` (called from the constructor and every
   `Settings.Changed`) shows/hides it to match `Settings.ShowFloatingSpeeds`,
@@ -139,10 +156,15 @@ that way unless the design genuinely needs transparency.
   needed for graph mode, because `StatusesChanged` is suppressed when the rates
   are unchanged — without sampling the line would stop rolling.
 - Display modes (`FloatingDisplayMode`): `Numbers` — `↓ rate` / `↑ rate` with
-  `—` when `Aggregate.OnlineServers == 0`; `Graph` — `SpeedGraph`, a custom
-  control that draws two overlaid series (download green `#35C46F`, upload
-  orange `#F2994A`) over the last 60 one-second samples, scaled to the peak of
-  the visible window. No assets, no chart library.
+  `—` when `Aggregate.OnlineServers == 0`, laid out as one block centred in the
+  circle (a circle is narrowest at the top and bottom, so the outer thirds are
+  the worst place for the widest rate the formatter produces); `Graph` —
+  `SpeedGraph`, a custom control that draws two overlaid series (download
+  green `#35C46F`, upload orange `#F2994A`) over the last 60 one-second
+  samples, scaled to the peak of the visible window. The plot is inset to the
+  square inscribed in the circle so the newest sample and the peak are never
+  cut, and the current rates are pinned to the **top centre** (the top-left
+  corner of a circle is outside the shape). No assets, no chart library.
 - Gesture: a drag (crossing the 4 px threshold) calls `BeginMoveDrag` and
   saves the position; **a single click does nothing** — the chip no longer
   opens the panel. **A double left-click** (two clicks in the same spot within
@@ -151,10 +173,10 @@ that way unless the design genuinely needs transparency.
   same target as the context-menu item. The double click is detected by hand
   (timestamp + distance), **not** by the platform's double-click message: the
   chip captures the pointer while it is pressed, so the native message cannot
-  be relied on. A drag resets the click pair. The chip `Border` sets
-  `Background="Transparent"` purely as a hit-test surface — a `Border`/`Grid`
-  with a null background does not receive pointer events in its empty areas, so
-  without it only the digits would be draggable.
+  be relied on. A drag resets the click pair. The chip `Border` sets a
+  non-null `Background` (the `floatingChip` fill) as its hit-test surface — a
+  `Border`/`Grid` with a null background does not receive pointer events in
+  its empty areas, so without it only the digits would be draggable.
 - Cursor: the **system hand cursor** (`new Cursor(StandardCursorType.Hand)`).
   The app draws no cursor of its own — `Services/CursorFactory.cs` and the
   hand-drawn open hand were removed on purpose (the user asked for the system

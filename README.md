@@ -48,8 +48,8 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   - actively transferring — the mark at full brightness,
   - every enabled server failing — the arrow in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
-- **Floating speed chip (opt-in)** — a small always-on-top readout, either
-  numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
+- **Floating speed chip (opt-in)** — a small always-on-top **round** readout,
+  either numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
   upload). It can be dragged anywhere and the position is remembered across
   restarts; double-click it to open the server's web console in the default
   browser. Off by default; enable it from the tray menu or Preferences.
@@ -265,16 +265,17 @@ self-built artifact can be compared line by line with a released one.
 
 ### Floating speed chip
 
-A 56×56 opaque square that stays on top of other windows. It shows the same
-aggregate rates as the panel and `—` when no server is online.
+A 60×60 **opaque round badge** that stays on top of other windows. It shows the
+same aggregate rates as the panel and `—` when no server is online.
 
 - **Two display modes**, chosen in Preferences:
-  - **Numbers** — `↓ 1.2M` over `↑ 340K`.
+  - **Numbers** — `↓ 1.2M` over `↑ 340K`, centred in the circle.
   - **Graph** — a rolling one-minute plot: download in green, upload in orange,
     both overlaid on one axes and scaled to the peak of the visible window.
-    The current `↓` / `↑` rates are pinned to the top-left corner, drawn on
-    top of the plot with a dark outline around the glyphs, so the numbers stay
-    visible without switching modes and the graph shows through behind them.
+    The plot is cut by the circle, so it reads as a circular gauge, and the
+    current `↓` / `↑` rates are pinned to the top centre, drawn on top of the
+    plot with a dark outline around the glyphs, so the numbers stay visible
+    without switching modes and the graph shows through behind them.
 - **Drag** — moves the chip; the position is saved and restored on the next
   launch, clamped back on-screen if the display layout changed. A single
   click does nothing: the chip is a drag handle, not a panel toggle.
@@ -293,8 +294,13 @@ aggregate rates as the panel and `—` when no server is online.
 - **Toggle** — tray menu → *Show floating speed window*, or the matching
   Preferences checkbox. Off by default.
 
-The window is deliberately opaque, square and shadow-free: no transparency
-layer is composited, which keeps a permanently-on-top 56 px window cheap.
+The body is deliberately **opaque** — a translucent chip would wash the rates
+out over a busy desktop — and shadow-free. Only the corners *outside* the
+circle are transparent: the window itself paints nothing (per-pixel alpha), so
+the desktop shows through around the round body instead of a square window
+background. The window is clipped to the circle by a Win32 window region, so
+the transparent corners do not swallow clicks meant for the window underneath;
+if the region cannot be applied, the chip simply falls back to a square.
 
 ### Desktop widget
 
