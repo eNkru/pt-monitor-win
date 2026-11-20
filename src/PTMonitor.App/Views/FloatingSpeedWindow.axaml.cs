@@ -23,11 +23,13 @@ public partial class FloatingSpeedWindow : Window
     // message cannot be relied on.
     private const ulong DoubleClickIntervalMs = 400;
     private const double DoubleClickRadius = 6;
-    // The round body's diameter and the window it lives in: the 2 px ring gives
-    // the Win32 window region room to clip the corners without touching the
-    // antialiased circle edge (see WindowShape).
-    private const double ChipDiameter = 60;
-    private const double WindowSide = ChipDiameter + 4;
+    // The body's size and corner radius, and the window it lives in: the 2 px
+    // ring gives the Win32 window region room to clip the corners without
+    // touching the antialiased edge of the body (see WindowShape).
+    private const double ChipWidth = 68;
+    private const double ChipHeight = 52;
+    private const double ChipCornerRadius = 12;
+    private const double WindowMargin = 2;
 
     private PointerPressedEventArgs? _pressArgs;
     private Point _pressPoint;
@@ -74,20 +76,24 @@ public partial class FloatingSpeedWindow : Window
     }
 
     /// <summary>
-    /// Clips the window to the chip's circle, so the transparent corners do not
-    /// swallow clicks meant for the window underneath. A failure is harmless:
-    /// the chip is then simply a square, as it was before.
+    /// Clips the window to the chip's rounded shape, so the transparent corners
+    /// do not swallow clicks meant for the window underneath. A failure is
+    /// harmless: the chip is then simply a rectangle, as it was before.
     /// </summary>
     private void ApplyShape()
     {
         if (!WindowShape.IsSupported) return;
         var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (handle == IntPtr.Zero) return;
-        // The window is exactly the body plus the ring, so the region is the
-        // ellipse inscribed in the *window* — its edge stays 2 px outside the
-        // visible circle, and the aliased edge of a region never cuts the
-        // antialiased edge of the body.
-        WindowShape.ApplyCircle(handle, WindowSide * RenderScaling);
+        // The region is the body's shape, one pixel larger on every side: a
+        // region's edge is aliased, so it must stay outside the body's
+        // antialiased edge instead of cutting it.
+        var scaling = RenderScaling;
+        WindowShape.ApplyRoundedRect(
+            handle,
+            (int)Math.Round(ChipWidth * scaling),
+            (int)Math.Round(ChipHeight * scaling),
+            (int)Math.Round(ChipCornerRadius * scaling));
     }
 
     /// <summary>Re-applies the localized title, tooltip and menu after a language change.</summary>
@@ -213,8 +219,8 @@ public partial class FloatingSpeedWindow : Window
 
         // SizeToContent leaves Bounds empty until the first layout pass, so use
         // a fallback and scale the logical size to physical pixels.
-        var width = (Bounds.Width > 1 ? Bounds.Width : WindowSide) * scaling;
-        var height = (Bounds.Height > 1 ? Bounds.Height : WindowSide) * scaling;
+        var width = (Bounds.Width > 1 ? Bounds.Width : ChipWidth + WindowMargin * 2) * scaling;
+        var height = (Bounds.Height > 1 ? Bounds.Height : ChipHeight + WindowMargin * 2) * scaling;
 
         double x, y;
         if (settings.FloatingPositionX is { } savedX && settings.FloatingPositionY is { } savedY

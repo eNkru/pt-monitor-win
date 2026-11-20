@@ -89,14 +89,21 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
 
-        <!-- Floating speed chip: a round, opaque badge. The window is
-             per-pixel transparent so the corners outside the circle are
+        <!-- Floating speed chip: a little TV screen — a rounded rectangle with
+             a bezel and a darker screen inside it. The window is per-pixel
+             transparent so the corners outside the rounded shape are
              see-through, but the body itself is opaque — a translucent chip
              would wash out the rates on a busy desktop. -->
         <Style Selector="Border.floatingChip">
-            <Setter Property="Background" Value="#FF202023" />
-            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="Background" Value="#FF26282D" />
+            <Setter Property="BorderBrush" Value="#33FFFFFF" />
             <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <!-- The screen inside the bezel: a touch darker, so the frame reads as
+             a frame. -->
+        <Style Selector="Border.floatingScreen">
+            <Setter Property="Background" Value="#FF15171B" />
         </Style>
 
         <Style Selector="TextBlock.floatingRate">

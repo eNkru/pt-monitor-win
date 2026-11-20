@@ -8,49 +8,49 @@
         Topmost="True"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
-        TransparencyBackgroundFallback="#FF202023"
+        TransparencyBackgroundFallback="#FF26282D"
         SizeToContent="WidthAndHeight"
         CanResize="False"
         WindowStartupLocation="Manual">
 
-    <!-- A round badge, not a square window: the window itself paints nothing
+    <!-- A little TV screen: a rounded rectangle with a bezel and a darker
+         screen inside it. The window itself paints nothing
          (`Background="Transparent"` + per-pixel alpha), so the four corners
-         outside the circle are see-through instead of showing the window's
-         square background. The body stays opaque — only the corners are
-         transparent.
-         `TransparencyBackgroundFallback` is the chip's own colour: on a
-         platform that cannot do per-pixel alpha the chip degrades to the old
-         opaque look instead of a white square behind the curve.
-         The window is 64 × 64 while the circle is 60: the 2 px ring gives the
-         Win32 window region (see Services/WindowShape) room to clip the
-         corners without touching the antialiased circle edge. -->
+         outside the rounded shape are see-through instead of showing the
+         window's square background. The body stays opaque — only the corners
+         are transparent.
+         `TransparencyBackgroundFallback` is the bezel colour: on a platform
+         that cannot do per-pixel alpha the chip degrades to the old opaque
+         look instead of a white square behind the screen.
+         The window is 4 px larger than the body, so the Win32 window region
+         (see Services/WindowShape) can clip the corners without touching the
+         antialiased edge of the body. -->
     <Border x:Name="Chip" Classes="floatingChip"
-            Width="60" Height="60" Margin="2"
-            CornerRadius="30"
+            Width="68" Height="52" Margin="2"
+            CornerRadius="12"
             ClipToBounds="True"
             PointerPressed="OnPointerPressed"
             PointerMoved="OnPointerMoved"
             PointerReleased="OnPointerReleased">
-        <!-- The content is deliberately not hit-testable: the Border owns all
-             pointer input, so its Hand cursor applies across the whole badge
-             and every press reaches the drag/click handlers. `ClipToBounds`
-             on the Border cuts the graph to the circle (Avalonia clips a
-             Border's children to its rounded rect), so the plot reads as a
-             circular gauge. -->
-        <Grid IsHitTestVisible="False">
-            <!-- Numbers mode: one block, centred in the circle. The rows are
-                 not pinned to the outer thirds — a circle is narrowest at the
-                 top and bottom, and the widest rate the chip can show
-                 ("1023B") only fits near the middle. -->
-            <Grid x:Name="NumbersView">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="2">
+        <!-- The screen itself, inset in the bezel. `ClipToBounds` on a Border
+             cuts its children to its rounded rect, so the graph is clipped by
+             the screen instead of spilling over the bezel. -->
+        <Border Classes="floatingScreen" Margin="3" CornerRadius="10" ClipToBounds="True">
+            <!-- The content is deliberately not hit-testable: the Border owns
+                 all pointer input, so its Hand cursor applies across the whole
+                 badge and every press reaches the drag/click handlers. -->
+            <Grid IsHitTestVisible="False">
+                <!-- Numbers mode: the two rates stacked in the middle of the
+                     screen, the way the old chip showed them. -->
+                <StackPanel x:Name="NumbersView" Spacing="2"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="4"
                                 HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock x:Name="DownArrow" Classes="floatingArrow" VerticalAlignment="Center" />
                         <TextBlock x:Name="DownText" Classes="floatingRate" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <Rectangle Height="1" Width="26" Opacity="0.1" Fill="White"
+                    <Rectangle Height="1" Width="26" Opacity="0.15" Fill="White"
                                HorizontalAlignment="Center" />
 
                     <StackPanel Orientation="Horizontal" Spacing="4"
@@ -59,31 +59,28 @@
                         <TextBlock x:Name="UpText" Classes="floatingRate" VerticalAlignment="Center" />
                     </StackPanel>
                 </StackPanel>
+
+                <!-- Graph mode: down green + up orange overlaid, newest at the
+                     right. The plot fills the screen. -->
+                <views:SpeedGraph x:Name="Graph" Margin="4" IsVisible="False" />
+
+                <!-- Graph mode: the current rates pinned to the top-left
+                     corner, drawn on top of the plot so the numbers are
+                     readable without switching back to Numbers mode. Only the
+                     glyphs carry a dark outline, so the graph behind them is
+                     still visible. -->
+                <StackPanel x:Name="GraphRates" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="4" Spacing="1" IsVisible="False">
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <views:OutlinedText x:Name="GraphDownArrow" Classes="graphArrow" />
+                        <views:OutlinedText x:Name="GraphDownText" Classes="graphRate" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <views:OutlinedText x:Name="GraphUpArrow" Classes="graphArrow" />
+                        <views:OutlinedText x:Name="GraphUpText" Classes="graphRate" />
+                    </StackPanel>
+                </StackPanel>
             </Grid>
-
-            <!-- Graph mode: down green + up orange overlaid, newest at the
-                 right. The plot is inset to the square inscribed in the circle
-                 so the newest sample and the peak are never cut by the curve,
-                 and it starts below the readout band, so a peak never runs
-                 through the numbers. -->
-            <views:SpeedGraph x:Name="Graph" Margin="8,26,8,8" IsVisible="False" />
-
-            <!-- Graph mode: the current rates pinned to the top centre. The
-                 top-left corner of a circle is outside the shape, so the
-                 readout is centred where the chord is wide enough for it; the
-                 glyphs carry a dark outline, so the plot behind them stays
-                 visible. -->
-            <StackPanel x:Name="GraphRates" HorizontalAlignment="Center" VerticalAlignment="Top"
-                        Margin="0,7,0,0" Spacing="1" IsVisible="False">
-                <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
-                    <views:OutlinedText x:Name="GraphDownArrow" Classes="graphArrow" />
-                    <views:OutlinedText x:Name="GraphDownText" Classes="graphRate" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center">
-                    <views:OutlinedText x:Name="GraphUpArrow" Classes="graphArrow" />
-                    <views:OutlinedText x:Name="GraphUpText" Classes="graphRate" />
-                </StackPanel>
-            </StackPanel>
-        </Grid>
+        </Border>
     </Border>
 </Window>

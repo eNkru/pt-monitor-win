@@ -48,9 +48,9 @@ C# / .NET 8 / Avalonia instead of Swift / SwiftUI / AppKit.
   - actively transferring — the mark at full brightness,
   - every enabled server failing — the arrow in red.
   - The tooltip carries live `↓ / ↑` speeds (toggleable).
-- **Floating speed chip (opt-in)** — a small always-on-top **round** readout,
-  either numbers (`↓ / ↑`) or a rolling two-colour graph (green download, orange
-  upload). It can be dragged anywhere and the position is remembered across
+- **Floating speed chip (opt-in)** — a small always-on-top readout shaped like a
+  little **TV screen** (a rounded rectangle with a bezel), either numbers
+  (`↓ / ↑`) or a rolling two-colour graph (green download, orange upload). It can be dragged anywhere and the position is remembered across
   restarts; double-click it to open the server's web console in the default
   browser. Off by default; enable it from the tray menu or Preferences.
 - **Desktop widget (opt-in)** — a translucent readout that lives on the
@@ -265,8 +265,9 @@ self-built artifact can be compared line by line with a released one.
 
 ### Floating speed chip
 
-A 60×60 **opaque round badge** that stays on top of other windows. It shows the
-same aggregate rates as the panel and `—` when no server is online.
+A 68×52 **opaque little TV screen** that stays on top of other windows: a
+rounded rectangle with a bezel and a darker screen inside it. It shows the same
+aggregate rates as the panel and `—` when no server is online.
 
 - **Two display modes**, chosen in Preferences:
   - **Numbers** — `↓ 1.2M` over `↑ 340K`, centred in the circle.
@@ -296,11 +297,12 @@ same aggregate rates as the panel and `—` when no server is online.
 
 The body is deliberately **opaque** — a translucent chip would wash the rates
 out over a busy desktop — and shadow-free. Only the corners *outside* the
-circle are transparent: the window itself paints nothing (per-pixel alpha), so
-the desktop shows through around the round body instead of a square window
-background. The window is clipped to the circle by a Win32 window region, so
-the transparent corners do not swallow clicks meant for the window underneath;
-if the region cannot be applied, the chip simply falls back to a square.
+rounded screen are transparent: the window itself paints nothing (per-pixel
+alpha), so the desktop shows through around the screen instead of a square
+window background. The window is clipped to the rounded shape by a Win32
+window region, so the transparent corners do not swallow clicks meant for the
+window underneath; if the region cannot be applied, the chip simply falls back
+to a rectangle.
 
 ### Desktop widget
 
