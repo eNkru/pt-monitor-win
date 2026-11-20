@@ -89,16 +89,28 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
 
-        <!-- Floating speed chip: small, opaque, no rounded corners, so the
-             window needs no transparency/compositing layer. -->
+        <!-- Floating speed chip: a round, opaque badge. The window is
+             per-pixel transparent so the corners outside the circle are
+             see-through, but the body itself is opaque — a translucent chip
+             would wash out the rates on a busy desktop. -->
+        <Style Selector="Border.floatingChip">
+            <Setter Property="Background" Value="#FF202023" />
+            <Setter Property="BorderBrush" Value="#26FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
         <Style Selector="TextBlock.floatingRate">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontFamily" Value="Consolas,Inter,monospace" />
+            <!-- The body is a fixed dark fill, so the text does not follow the
+                 OS theme: a dark-on-dark label in light mode would vanish. -->
+            <Setter Property="Foreground" Value="#F2F2F2" />
         </Style>
 
         <Style Selector="TextBlock.floatingArrow">
             <Setter Property="FontSize" Value="8.5" />
+            <Setter Property="Foreground" Value="#F2F2F2" />
             <Setter Property="Opacity" Value="0.5" />
         </Style>
 
